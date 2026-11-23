@@ -235,8 +235,13 @@ export interface VehicleHistoryRow {
 // ---- vehicle allotment
 export interface AvailableVehicle { _id: string; vehicleNo: string; make: string | null; model: string | null; type: string | null }
 
+/** A driver that can be assigned right now (Available Now only): what a suggestion shows. */
+export interface AvailableDriver { _id: string; driverNumber: string; driverName: string; driverType: "COMPANY_DRIVER" | "ACTING_DRIVER"; mobileNumber: string }
+/** The driver currently on an allotment (null = Driver Not Assigned). */
+export interface AllotmentDriverRef { driverId: string; driverNumber: string | null; driverName: string | null; driverType: string | null; mobileNumber: string | null; assignedAt: string | null }
 export interface AllotmentRef {
   _id: string; vehicleId: string; vehicleNo: string; allottedAt: string; expectedReleaseAt: string | null; nextAvailableAt: string; remarks: string | null;
+  driver?: AllotmentDriverRef | null; // absent on older API responses
 }
 export interface AllotmentProject {
   trackingProject: string; trackingVehicle: string; budget: string | null; budgetVersion: number | null; budgetNumber?: string;
@@ -251,6 +256,7 @@ export interface Allotment {
   allottedAt: string; expectedReleaseAt?: string | null; nextAvailableAt: string; remarks?: string | null;
   status: "ACTIVE" | "RELEASED" | "CHANGED"; releasedAt?: string; releaseReason?: string; source?: string;
   previousAllotment?: string; changedFromVehicleNo?: string; changeReason?: string; changeRemarks?: string; changeAttachments: Attachment[]; changedAt?: string;
+  driver?: string; driverNumber?: string; driverName?: string; driverType?: string; driverMobile?: string; driverAssignedAt?: string; driverAssignedBy?: string; driverReleasedAt?: string;
   createdBy: string; updatedBy: string; createdAt: string; updatedAt: string;
 }
 export interface AllotmentEventRow { _id: string; action: string; username: string; details: Record<string, unknown> | null; createdAt: string }
@@ -260,6 +266,11 @@ export interface AllotmentDetailData {
   current: { vehicleNo: string; vehicleMake?: string; vehicleModel?: string; status: string } | null;
   chain: Allotment[];
   vehicle: { vehicleNo?: string; make?: string; model?: string; type?: string; availabilityStatus?: string | null } | null;
+  /** The allotment's driver (live status included); null / absent = Driver Not Assigned. */
+  driver?: {
+    driverId: string; active: boolean; driverNumber: string | null; driverName: string | null; driverType: string | null; mobileNumber: string | null;
+    assignedAt: string | null; assignedBy: string | null; releasedAt: string | null; status: string | null;
+  } | null;
   events: AllotmentEventRow[];
 }
 

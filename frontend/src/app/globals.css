@@ -534,3 +534,13 @@ textarea:focus { outline: none; border-color: var(--red); box-shadow: 0 0 0 3px 
 .drv-hist-changes { font-size: .85rem; }
 .drv-filters .search-wide { flex: 1; min-width: 260px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- Driver assignment in Vehicle Allotment ---------- */
+.allot-mode { margin: 4px 0 10px; }
+.drv-pick { display: grid; gap: 10px; margin-bottom: 8px; }
+.drv-pick-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.drv-pick-label { display: block; font-size: .82rem; font-weight: 600; margin-bottom: 4px; }
+.drv-pick-card { padding: 10px 12px; border: 1px solid var(--border); border-left: 4px solid var(--ok); border-radius: 10px; background: var(--bg); }
+.drv-bank { margin: 8px 0 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); display: grid; gap: 8px; }
+.drv-bank-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.drv-bank-head .sub { margin: 0; }

@@ -1,8 +1,12 @@
 "use client";
 
+import { useState } from "react";
+import { AllotmentDriverSection } from "@/components/AllotmentDriver";
+import { AssignDriverModal, ChangeDriverModal } from "@/components/AllotmentModals";
 import { ErrorState, Modal, Skeleton } from "@/components/ui/Ui";
 import { useApi } from "@/hooks/useApi";
 import type { Allotment, AllotmentDetailData } from "@/types/domain";
+import { formatDeduction } from "@/utils/driverBank";
 import { ALLOT_STATUS_LABEL, EVENT_LABEL, fmtInstant, projectPeriod } from "@/utils/allotment";
 import { formatDate } from "@/utils/format";
 
@@ -26,11 +30,36 @@ export function eventText(action: string, d: Record<string, unknown> | null): st
   if (action === "ALLOTTED") return x.replacing ? `${x.vehicleNo} allotted, replacing ${x.replacing}` : `${x.vehicleNo} allotted`;
   if (action === "RELEASED") return String(x.reason ?? "Released");
   if (action === "EXTENDED") return `Schedule changed${x.reason ? `: ${x.reason}` : ""}`;
+  if (action === "DRIVER_ASSIGNED") return `${x.driverNumber} ${x.driverName ?? ""} assigned${x.later ? " (assigned later)" : " with the vehicle"}`.replace("  ", " ");
+  if (action === "DRIVER_CHANGED") {
+    const f = (x.from ?? {}) as Record<string, unknown>;
+    const t = (x.to ?? {}) as Record<string, unknown>;
+    const ded = Number(x.travelAmountDeduction ?? 0);
+    return `${f.driverNumber} → ${t.driverNumber}. Reason: ${x.reason}${ded > 0 ? `. Travel amount deduction: ${formatDeduction(ded)}` : ""}`;
+  }
+  if (action === "DRIVER_BANK_UPDATED") {
+    const fields = ((x.changes ?? []) as { field: string }[]).map((c) => c.field).join(", ");
+    return `${x.driverNumber ?? "Driver"} bank details updated${fields ? ` (${fields})` : ""}`;
+  }
+  if (action === "DRIVER_RELEASED") return `${x.driverNumber ?? "Driver"} released${x.reason ? `. ${x.reason}` : ""}`;
   return EVENT_LABEL[action] ?? action;
 }
 
 export default function AllotmentDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const res = useApi<AllotmentDetailData>(`/vehicle-allotments/${id}`);
+  const [act, setAct] = useState<"assign" | "change" | null>(null);
+  const d = res.data;
+  if (act && d) {
+    const a = d.allotment;
+    const target = { _id: a._id, vehicleNo: a.vehicleNo, trackupNumber: a.trackupNumber, pifNumber: a.pifNumber, projectName: a.projectName };
+    const done = () => { setAct(null); res.reload(); };
+    if (act === "assign") return <AssignDriverModal target={target} onClose={() => setAct(null)} onDone={done} />;
+    if (d.driver?.active)
+      return (
+        <ChangeDriverModal target={target} onClose={() => setAct(null)} onDone={done}
+          current={{ driverId: d.driver.driverId, driverNumber: d.driver.driverNumber, driverName: d.driver.driverName, driverType: d.driver.driverType, mobileNumber: d.driver.mobileNumber, assignedAt: d.driver.assignedAt }} />
+      );
+  }
   return (
     <Modal title="Allotment Details" onClose={onClose} wide>
       {res.loading ? (
@@ -38,13 +67,44 @@ export default function AllotmentDetail({ id, onClose }: { id: string; onClose: 
       ) : res.error || !res.data ? (
         <ErrorState message={res.error ?? "Not found"} onRetry={res.reload} />
       ) : (
-        <Body d={res.data} />
+        <Body d={res.data} onAssign={() => setAct("assign")} onChangeDriver={() => setAct("change")} />
       )}
     </Modal>
   );
 }
 
-export function Body({ d }: { d: AllotmentDetailData }) {
+/** Every driver replacement of this allotment (newest first), with the reason, the Travel Amount Deduction and any attachment. */
+export function DriverChanges({ events }: { events: AllotmentDetailData["events"] }) {
+  const rows = events.filter((e) => e.action === "DRIVER_CHANGED");
+  if (rows.length === 0) return null;
+  return (
+    <>
+      <h4 className="sub">Driver changes</h4>
+      <table className="table" data-section="driver-changes">
+        <thead><tr><th>Changed</th><th>Previous Driver</th><th>Replacement Driver</th><th>Reason</th><th>Travel Amount Deduction</th><th>By</th><th>Attachments</th></tr></thead>
+        <tbody>
+          {rows.map((e) => {
+            const x = (e.details ?? {}) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+            const atts = (x.attachments ?? []) as { key: string; name: string; url?: string }[];
+            return (
+              <tr key={e._id}>
+                <td>{fmtInstant(e.createdAt)}</td>
+                <td>{[x.from?.driverNumber, x.from?.driverName].filter(Boolean).join(" · ") || "—"}</td>
+                <td>{[x.to?.driverNumber, x.to?.driverName].filter(Boolean).join(" · ") || "—"}</td>
+                <td>{x.reason}{x.remarks ? ` — ${x.remarks}` : ""}</td>
+                <td data-deduction>{formatDeduction(Number(x.travelAmountDeduction ?? 0))}</td>
+                <td>{who(e.username)}</td>
+                <td>{atts.length === 0 ? "—" : atts.map((a) => <div key={a.key}>{a.name}</div>)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </>
+  );
+}
+
+export function Body({ d, onAssign, onChangeDriver }: { d: AllotmentDetailData; onAssign?: () => void; onChangeDriver?: () => void }) {
   const a = d.allotment;
   return (
     <div className="allot-detail">
@@ -65,6 +125,7 @@ export function Body({ d }: { d: AllotmentDetailData }) {
         <KV k="This Allotment" v={<>{vname(a)} <AllotStatusBadge status={a.status} /></>} />
         <KV k="Vehicle Now" v={d.vehicle?.availabilityStatus ? d.vehicle.availabilityStatus.replace("_", " ") : null} />
       </dl>
+      <AllotmentDriverSection d={d} onAssign={onAssign} onChange={onChangeDriver} />
       <h4 className="sub">Schedule (IST)</h4>
       <dl className="kv">
         <KV k="Allotted" v={fmtInstant(a.allottedAt)} />
@@ -100,6 +161,8 @@ export function Body({ d }: { d: AllotmentDetailData }) {
           </tbody>
         </table>
       )}
+
+      <DriverChanges events={d.events} />
 
       <h4 className="sub">Activity timeline</h4>
       <ol className="al-timeline">

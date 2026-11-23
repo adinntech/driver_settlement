@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import AppShell from "@/components/AppShell";
-import { AllotModal, ChangeModal, ExtendModal, ReleaseModal } from "@/components/AllotmentModals";
+import { AllotModal, AssignDriverModal, ChangeDriverModal, ChangeModal, ExtendModal, ReleaseModal } from "@/components/AllotmentModals";
+import { AllotmentDriverCell } from "@/components/AllotmentDriver";
 import VehicleTabs from "@/components/VehicleTabs";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/Ui";
 import { useApi } from "@/hooks/useApi";
@@ -12,7 +13,7 @@ import { fmtInstant, projectPeriod } from "@/utils/allotment";
 import { formatDate, formatInr } from "@/utils/format";
 
 interface Page { items: AllotmentProject[]; total: number; page: number; limit: number }
-type Action = { kind: "allot" | "change" | "extend" | "release"; project: AllotmentProject } | null;
+type Action = { kind: "allot" | "change" | "extend" | "release" | "assignDriver" | "changeDriver"; project: AllotmentProject } | null;
 
 export default function AllotmentPage() {
   return (
@@ -63,7 +64,7 @@ function Allotment() {
                 <thead>
                   <tr>
                     <th>Client / Billing</th><th>Type</th><th>Trackup No</th><th>PIF No</th><th>Bill No</th><th>Project</th><th>Period</th>
-                    <th>Vehicles</th><th>Approved Budget</th><th>Approved On</th><th>Budget</th><th>Allotted Vehicle</th><th />
+                    <th>Vehicles</th><th>Approved Budget</th><th>Approved On</th><th>Budget</th><th>Allotted Vehicle</th><th>Driver</th><th />
                   </tr>
                 </thead>
                 <tbody>
@@ -91,11 +92,17 @@ function Allotment() {
                           <span className="muted">Not allotted</span>
                         )}
                       </td>
+                      <td><AllotmentDriverCell allotment={p.allotment} /></td>
                       <td>
                         <div className="inline row-actions">
                           {p.allotment ? (
                             <>
                               <button className="btn btn-outline btn-sm" onClick={() => setAction({ kind: "change", project: p })}>Change Vehicle</button>
+                              {p.allotment.driver ? (
+                                <button className="btn btn-outline btn-sm" onClick={() => setAction({ kind: "changeDriver", project: p })}>Change Driver</button>
+                              ) : (
+                                <button className="btn btn-outline btn-sm" onClick={() => setAction({ kind: "assignDriver", project: p })}>Assign Driver</button>
+                              )}
                               <button className="btn btn-ghost btn-sm" onClick={() => setAction({ kind: "extend", project: p })}>Extend</button>
                               <button className="btn btn-ghost btn-sm" onClick={() => setAction({ kind: "release", project: p })}>Release</button>
                             </>
@@ -129,6 +136,13 @@ function Allotment() {
       {action?.kind === "allot" && <AllotModal project={action.project} onClose={() => setAction(null)} onDone={done} />}
       {action?.kind === "change" && <ChangeModal project={action.project} onClose={() => setAction(null)} onDone={done} />}
       {action?.kind === "extend" && <ExtendModal project={action.project} onClose={() => setAction(null)} onDone={done} />}
+      {action?.kind === "assignDriver" && action.project.allotment && (
+        <AssignDriverModal target={{ _id: action.project.allotment._id, vehicleNo: action.project.allotment.vehicleNo, trackupNumber: action.project.trackupNumber, projectName: action.project.projectName }} onClose={() => setAction(null)} onDone={done} />
+      )}
+      {action?.kind === "changeDriver" && action.project.allotment?.driver && (
+        <ChangeDriverModal target={{ _id: action.project.allotment._id, vehicleNo: action.project.allotment.vehicleNo, trackupNumber: action.project.trackupNumber, projectName: action.project.projectName }}
+          current={action.project.allotment.driver} onClose={() => setAction(null)} onDone={done} />
+      )}
       {action?.kind === "release" && <ReleaseModal project={action.project} onClose={() => setAction(null)} onDone={done} />}
     </>
   );

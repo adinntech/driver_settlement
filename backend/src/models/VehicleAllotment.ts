@@ -3,7 +3,7 @@ import mongoose, { Schema } from "mongoose";
 export const ALLOTMENT_STATUSES = ["ACTIVE", "RELEASED", "CHANGED"] as const;
 export type AllotmentStatus = (typeof ALLOTMENT_STATUSES)[number];
 export const ALLOTMENT_SOURCES = ["ALLOTMENT", "VEHICLE_FORM"] as const; // created from the Allotment tab / synced from the vehicle form
-export const ALLOTMENT_ACTIONS = ["ALLOTTED", "VEHICLE_CHANGED", "RELEASED", "EXTENDED"] as const;
+export const ALLOTMENT_ACTIONS = ["ALLOTTED", "VEHICLE_CHANGED", "RELEASED", "EXTENDED", "DRIVER_ASSIGNED", "DRIVER_CHANGED", "DRIVER_RELEASED", "DRIVER_BANK_UPDATED"] as const;
 
 /**
  * One row per vehicle <-> project-vehicle assignment. A replacement creates a NEW row (linked through previousAllotment)
@@ -44,6 +44,17 @@ const allotmentSchema = new Schema(
     changeAttachments: { type: [Schema.Types.Mixed], default: [] },
     changedAt: Date, // when this allotment replaced the previous vehicle
     replacedBy: { type: Schema.Types.ObjectId, ref: "VehicleAllotment" }, // set on the old row when it becomes CHANGED
+    // optional driver (absent on vehicle-only allotments and on every allotment created before driver assignment existed).
+    // Earlier drivers of this allotment are kept in the immutable allotment events (DRIVER_ASSIGNED / DRIVER_CHANGED / DRIVER_RELEASED).
+    driver: { type: Schema.Types.ObjectId, ref: "Driver" }, // the current (or last) driver
+    activeDriver: { type: Schema.Types.ObjectId, ref: "Driver" }, // set only while the driver holds this allotment; unique guard against double assignment
+    driverNumber: String,
+    driverName: String,
+    driverType: String,
+    driverMobile: String,
+    driverAssignedAt: Date,
+    driverAssignedBy: String,
+    driverReleasedAt: Date,
     createdBy: { type: String, required: true },
     updatedBy: { type: String, required: true },
   },
@@ -52,6 +63,8 @@ const allotmentSchema = new Schema(
 // A project vehicle has at most one active allotment, and a vehicle serves at most one active allotment (race-safe).
 allotmentSchema.index({ trackingVehicle: 1 }, { unique: true, partialFilterExpression: { status: "ACTIVE" } });
 allotmentSchema.index({ vehicle: 1 }, { unique: true, partialFilterExpression: { status: "ACTIVE" } });
+// A driver serves at most one active allotment (race-safe; only allotments that currently hold a driver carry activeDriver).
+allotmentSchema.index({ activeDriver: 1 }, { unique: true, partialFilterExpression: { activeDriver: { $type: "objectId" } } });
 allotmentSchema.index({ createdAt: -1 });
 allotmentSchema.index({ status: 1, createdAt: -1 });
 allotmentSchema.index({ trackupNumber: 1 });

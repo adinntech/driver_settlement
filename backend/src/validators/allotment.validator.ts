@@ -81,6 +81,7 @@ export interface AllotInput {
   trackupNumber: string | null;
   pifNumber: string | null;
   vehicleId: string;
+  driverId: string | null; // optional: null = vehicle-only allotment (a driver can be assigned later)
   allottedAt: Date;
   schedule: Schedule;
   remarks: string | null;
@@ -99,6 +100,11 @@ export function validateAllot(input: unknown, now = new Date()): { errors: strin
   const pifNumber = ref("pifNumber", "PIF number");
   if (!trackupNumber && !pifNumber) errors.push("Project (Trackup Number) is required");
   if (!hex(b.vehicleId)) errors.push("Vehicle is required");
+  let driverId: string | null = null;
+  if (!blank(b.driverId)) {
+    if (hex(b.driverId)) driverId = b.driverId;
+    else errors.push("Driver is invalid; choose a driver from the suggestions");
+  }
 
   // allotment moment: defaults to now; it cannot be in the future
   let allottedAt = now;
@@ -114,7 +120,7 @@ export function validateAllot(input: unknown, now = new Date()): { errors: strin
   const sch = schedule(b, errors, allottedAt);
   const remarks = text(b, "remarks", "Remarks", 300, errors);
   if (errors.length || !sch) return { errors, data: null };
-  return { errors, data: { trackupNumber, pifNumber, vehicleId: b.vehicleId as string, allottedAt, schedule: sch, remarks } };
+  return { errors, data: { trackupNumber, pifNumber, vehicleId: b.vehicleId as string, driverId, allottedAt, schedule: sch, remarks } };
 }
 
 export function validateChange(input: unknown): { errors: string[]; data: { vehicleId: string; reason: string; remarks: string | null; attachments: Attachment[] } | null } {

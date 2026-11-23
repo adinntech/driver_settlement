@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import {
   allotVehicle, allotmentDetail, changeVehicle, extendAllotment, listAllotmentProjects, listAllotments, releaseAllotment, searchAvailableVehicles,
 } from "../services/allotment.service.js";
+import { assignDriver, changeDriver, getDriverBank, lookupAvailableDriver, searchAvailableDrivers, updateDriverBank } from "../services/allotmentDriver.service.js";
 import { sendResponse } from "../utils/sendResponse.js";
 
 const wrap =
@@ -22,6 +23,34 @@ export const vehicles = wrap(async (req, res) => {
   res.status(200).json(sendResponse(true, "Available vehicles fetched successfully", data));
 });
 
+export const drivers = wrap(async (req, res) => {
+  const data = await searchAvailableDrivers(q(req.query.q) ?? "", n(req.query.limit));
+  res.status(200).json(sendResponse(true, "Available drivers fetched successfully", data));
+});
+
+/** Exact Driver Number or Driver Name lookup for the two-way auto mapping (only an Available Now driver resolves). */
+export const driverLookup = wrap(async (req, res) => {
+  const data = await lookupAvailableDriver({ number: q(req.query.number), name: q(req.query.name) });
+  res.status(200).json(sendResponse(true, "Driver fetched successfully", data));
+});
+
+export const driverBank = wrap(async (req, res) => {
+  res.status(200).json(sendResponse(true, "Driver bank details fetched successfully", await getDriverBank(String(req.params.driverId))));
+});
+
+export const saveDriverBank = wrap(async (req, res) => {
+  const data = await updateDriverBank(String(req.params.id), String(req.params.driverId), req.body ?? {}, req.user!.username);
+  res.status(200).json(sendResponse(true, "Driver bank details updated successfully", data));
+});
+
+export const assign = wrap(async (req, res) => {
+  res.status(200).json(sendResponse(true, "Driver assigned successfully", await assignDriver(String(req.params.id), req.body ?? {}, req.user!.username)));
+});
+
+export const changeDrv = wrap(async (req, res) => {
+  res.status(200).json(sendResponse(true, "Driver changed successfully", await changeDriver(String(req.params.id), req.body ?? {}, req.user!.username)));
+});
+
 export const list = wrap(async (req, res) => {
   const data = await listAllotments({
     q: q(req.query.q), vehicleNo: q(req.query.vehicleNo), clientName: q(req.query.clientName), trackupNumber: q(req.query.trackupNumber),
@@ -36,7 +65,8 @@ export const one = wrap(async (req, res) => {
 });
 
 export const allot = wrap(async (req, res) => {
-  res.status(201).json(sendResponse(true, "Vehicle allotted successfully", await allotVehicle(req.body ?? {}, req.user!.username)));
+  const data = await allotVehicle(req.body ?? {}, req.user!.username);
+  res.status(201).json(sendResponse(true, data.driver ? "Vehicle and driver allotted successfully" : "Vehicle allotted successfully", data));
 });
 
 export const change = wrap(async (req, res) => {

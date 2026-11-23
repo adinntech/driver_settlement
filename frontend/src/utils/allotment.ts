@@ -1,10 +1,12 @@
-import type { Attachment } from "@/types/domain";
+import type { Attachment, AvailableDriver } from "@/types/domain";
+import { deductionValue, validateDeduction } from "./driverBank";
 import { formatDateTime } from "./format";
 
 export type AllotStatus = "ACTIVE" | "RELEASED" | "CHANGED";
 export const ALLOT_STATUS_LABEL: Record<AllotStatus, string> = { ACTIVE: "Active", RELEASED: "Released", CHANGED: "Changed" };
 export const EVENT_LABEL: Record<string, string> = {
   ALLOTTED: "Vehicle allotted", VEHICLE_CHANGED: "Vehicle changed", RELEASED: "Vehicle released", EXTENDED: "Project extended / schedule changed",
+  DRIVER_ASSIGNED: "Driver assigned", DRIVER_CHANGED: "Driver changed", DRIVER_RELEASED: "Driver released", DRIVER_BANK_UPDATED: "Driver bank details updated",
 };
 export const MAX_ATTACHMENTS = 5;
 
@@ -28,14 +30,18 @@ const realTime = (v: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
 export interface Schedule {
   expectedReleaseDate: string; expectedReleaseTime: string; nextAvailableDate: string; nextAvailableTime: string;
 }
+/** Allocate Vehicle Only (driver can be assigned later) or Allocate Vehicle with Driver (both saved together). */
+export type AllotMode = "VEHICLE_ONLY" | "VEHICLE_DRIVER";
+export const ALLOT_MODE_LABEL: Record<AllotMode, string> = { VEHICLE_ONLY: "Allocate Vehicle Only", VEHICLE_DRIVER: "Allocate Vehicle with Driver" };
 export interface AllotForm extends Schedule {
   vehicleId: string; vehicleNo: string; vehicleLabel: string; allottedDate: string; allottedTime: string; remarks: string;
+  mode: AllotMode; driverId: string; // driverId only counts in VEHICLE_DRIVER mode
 }
 
 /** Allotment moment defaults to now (IST); everything else starts empty. */
 export const emptyAllotForm = (now = new Date()): AllotForm => ({
   vehicleId: "", vehicleNo: "", vehicleLabel: "", allottedDate: istParts(now).date, allottedTime: istParts(now).time,
-  expectedReleaseDate: "", expectedReleaseTime: "", nextAvailableDate: "", nextAvailableTime: "", remarks: "",
+  expectedReleaseDate: "", expectedReleaseTime: "", nextAvailableDate: "", nextAvailableTime: "", remarks: "", mode: "VEHICLE_ONLY", driverId: "",
 });
 
 /** Date / time rules shared by allot and extend (mirrors the server; the server is the authority). */
@@ -64,6 +70,7 @@ export function validateSchedule(s: Schedule, allotted: Date | null): string[] {
 export function validateAllotForm(f: AllotForm, now = new Date()): string[] {
   const e: string[] = [];
   if (!f.vehicleId) e.push("Select a vehicle");
+  if (f.mode === "VEHICLE_DRIVER" && !f.driverId) e.push("Select an available driver from the suggestions, or choose Allocate Vehicle Only");
   let allotted: Date | null = null;
   if (!f.allottedDate || !f.allottedTime || !realDate(f.allottedDate) || !realTime(f.allottedTime)) e.push("Allotment date & time is invalid");
   else {
@@ -80,8 +87,44 @@ export function toAllotPayload(f: AllotForm, trackupNumber: string) {
     trackupNumber, vehicleId: f.vehicleId, allottedDate: f.allottedDate, allottedTime: f.allottedTime,
     expectedReleaseDate: f.expectedReleaseDate, expectedReleaseTime: f.expectedReleaseTime,
     nextAvailableDate: f.nextAvailableDate, nextAvailableTime: f.nextAvailableTime, remarks: f.remarks,
+    ...(f.mode === "VEHICLE_DRIVER" && f.driverId ? { driverId: f.driverId } : {}), // vehicle-only requests are exactly what they were before
   };
 }
+
+// ---- driver selection: Driver Number and Driver Name always refer to one database record
+export interface DriverPick { number: string; name: string; driver: AvailableDriver | null }
+export const emptyDriverPick = (): DriverPick => ({ number: "", name: "", driver: null });
+/** Typing in the number box drops the selection and the name that belonged to it (no stale dependent values). */
+export const typeDriverNumber = (text: string): DriverPick => ({ number: text.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 12), name: "", driver: null });
+/** Typing in the name box drops the selection and the number that belonged to it. */
+export const typeDriverName = (text: string): DriverPick => ({ number: "", name: text.replace(/[^\p{L} .'-]/gu, "").slice(0, 80), driver: null });
+/** Choosing a suggestion (or a successful exact lookup) fills both boxes from the same record. */
+export const selectDriver = (d: AvailableDriver): DriverPick => ({ number: d.driverNumber, name: d.driverName, driver: d });
+export const DRIVER_TYPE_TEXT: Record<string, string> = { COMPANY_DRIVER: "Company Driver", ACTING_DRIVER: "Acting Driver" };
+export const driverLabel = (d: { driverNumber?: string | null; driverName?: string | null }) => [d.driverNumber, d.driverName].filter(Boolean).join(" · ");
+
+// ---- assign driver later / change driver
+export function validateAssignDriverForm(driverId: string): string[] {
+  return driverId ? [] : ["Select an available driver"];
+}
+export interface ChangeDriverForm { driverId: string; reason: string; remarks: string; attachments: Attachment[]; travelAmountDeduction: string }
+export const emptyChangeDriverForm = (): ChangeDriverForm => ({ driverId: "", reason: "", remarks: "", attachments: [], travelAmountDeduction: "" });
+export function validateChangeDriverForm(f: ChangeDriverForm, currentDriverId?: string): string[] {
+  const e: string[] = [];
+  if (!f.driverId) e.push("Select the replacement driver");
+  else if (currentDriverId && f.driverId === currentDriverId) e.push("Choose a different driver as the replacement");
+  if (!f.reason.trim()) e.push("Change reason is required");
+  else if (f.reason.trim().length > 300) e.push("Change reason is too long (max 300)");
+  if (f.attachments.length > MAX_ATTACHMENTS) e.push(`Too many attachments (max ${MAX_ATTACHMENTS})`);
+  const ded = validateDeduction(f.travelAmountDeduction ?? "");
+  if (ded) e.push(ded);
+  return e;
+}
+/** The url is computed by the server and never sent back. */
+export const toChangeDriverPayload = (f: ChangeDriverForm) => ({
+  driverId: f.driverId, reason: f.reason.trim(), remarks: f.remarks, travelAmountDeduction: deductionValue(f.travelAmountDeduction ?? ""),
+  attachments: f.attachments.map((a) => ({ storage: a.storage, key: a.key, name: a.name, size: a.size, mimeType: a.mimeType })),
+});
 
 export interface ChangeForm { vehicleId: string; vehicleNo: string; reason: string; remarks: string; attachments: Attachment[] }
 export const emptyChangeForm = (): ChangeForm => ({ vehicleId: "", vehicleNo: "", reason: "", remarks: "", attachments: [] });

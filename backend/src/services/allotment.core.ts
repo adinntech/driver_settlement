@@ -29,6 +29,8 @@ export async function releaseActiveAllotments(vehicleId: unknown, o: { username:
     if (!done) continue;
     n++;
     await logAllotment(a._id, "RELEASED", o.username, { reason: o.reason, vehicleNo: a.vehicleNo, trackupNumber: a.trackupNumber, releasedAt: at });
+    // the allotment's driver (if any) ends together with it; loaded lazily to keep this module free of service imports
+    if (a.activeDriver) await (await import("./allotmentDriver.service.js")).releaseAllotmentDriver(a, { username: o.username, reason: o.reason, at });
   }
   return n;
 }
@@ -75,5 +77,6 @@ export async function syncAllotmentFromVehicle(vehicle: any, prev: any, username
       from: { expectedReleaseAt: active.expectedReleaseAt ?? null, nextAvailableAt: active.nextAvailableAt },
       to: { expectedReleaseAt: expected, nextAvailableAt: next }, source: "VEHICLE_FORM",
     });
+    if (active.activeDriver) await (await import("./allotmentDriver.service.js")).syncDriverSchedule({ ...active, expectedReleaseAt: expected, nextAvailableAt: next }, username);
   }
 }

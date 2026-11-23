@@ -27,6 +27,10 @@ const availabilitySchema = new Schema(
       startDate: String, // Project From Date
       endDate: String, // Project To Date: the driver is released automatically once this date has passed (IST)
       remarks: String,
+      // set when the driver was assigned through a Vehicle Allotment (links the driver's allocation to that allotment)
+      allotment: { type: Schema.Types.ObjectId },
+      vehicle: { type: Schema.Types.ObjectId },
+      vehicleNo: String,
     },
     notAvailable: {
       reason: String,
@@ -78,7 +82,7 @@ driverSchema.index({ "availability.project.trackupNumber": 1 });
 
 export const DRIVER_HISTORY_ACTIONS = [
   "CREATED", "UPDATED", "STATUS_CHANGED", "PROJECT_ASSIGNED", "PROJECT_EXTENDED", "PROJECT_UPDATED", "MARKED_NOT_AVAILABLE",
-  "NOT_AVAILABLE_UPDATED", "AVAILABILITY_CONFIRMED", "AVAILABILITY_UPDATED", "AUTO_AVAILABILITY_UPDATE",
+  "NOT_AVAILABLE_UPDATED", "AVAILABILITY_CONFIRMED", "AVAILABILITY_UPDATED", "AUTO_AVAILABILITY_UPDATE", "BANK_UPDATED",
 ] as const;
 
 // Append-only audit trail of a driver (details + availability).

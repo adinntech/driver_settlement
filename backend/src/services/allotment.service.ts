@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import mongoose from "mongoose";
 import { Vehicle, VehicleHistory } from "../models/Vehicle.js";
+import { Driver, DriverHistory } from "../models/Driver.js";
 import { AllotmentEvent, VehicleAllotment } from "../models/VehicleAllotment.js";
 import { Budget } from "../models/Budget.js";
 import { TrackingProject } from "../models/TrackingProject.js";
@@ -9,6 +11,10 @@ import {
 import { validateAllot, validateChange, validateRelease, validateSchedule, type Schedule } from "../validators/allotment.validator.js";
 import { allocationConflict, availabilityHistory, projectFromTracking, resolveApprovedProject, searchApprovedProjects } from "./availability.service.js";
 import { dateToIst, istToDate, logAllotment } from "./allotment.core.js";
+import {
+  allotmentDriverView, driverFields, driverInUseBlock, driverUnavailableReason, releaseAllotmentDriver, reserveDriver, restoreDriver, syncDriverSchedule,
+} from "./allotmentDriver.service.js";
+import { driverAvailabilityHistory } from "./driverAvailability.service.js";
 import { attachmentUrl } from "./storage.service.js";
 import { AppError } from "../utils/AppError.js";
 
@@ -129,6 +135,8 @@ export async function listAllotmentProjects(q: string, page = 1, limit = 10) {
         allotment: a ? {
           _id: String(a._id), vehicleId: String(a.vehicle), vehicleNo: a.vehicleNo, allottedAt: a.allottedAt, expectedReleaseAt: a.expectedReleaseAt ?? null,
           nextAvailableAt: a.nextAvailableAt, remarks: a.remarks ?? null,
+          // the driver currently on this allotment (null = vehicle only / Driver Not Assigned)
+          driver: a.activeDriver ? { driverId: String(a.activeDriver), driverNumber: a.driverNumber ?? null, driverName: a.driverName ?? null, driverType: a.driverType ?? null, mobileNumber: a.driverMobile ?? null, assignedAt: a.driverAssignedAt ?? null } : null,
         } : null,
       };
     }),
@@ -194,6 +202,7 @@ export async function allotmentDetail(id: string) {
     current: current ? { vehicleNo: current.vehicleNo, vehicleMake: current.vehicleMake, vehicleModel: current.vehicleModel, status: current.status } : null,
     chain: chain.map(withUrls),
     vehicle: vehicle ? { ...vehicle, availabilityStatus: (vehicle as any).availability?.status ?? null } : null,
+    driver: await allotmentDriverView(a), // null = Driver Not Assigned (vehicle-only and older allotments)
     events,
   };
 }
@@ -219,12 +228,39 @@ export async function allotVehicle(input: unknown, username: string, now = new D
   const clash = await allocationConflict(p.trackupNumber);
   if (clash) throw new AppError(clash, 409);
 
+  // Option B (vehicle + driver): the driver is validated up front for a friendly error, and taken atomically below.
+  let drv: any = null;
+  if (d.driverId) {
+    drv = await Driver.findById(d.driverId).lean();
+    const dw = driverUnavailableReason(drv, now);
+    if (dw) throw new AppError(dw, drv ? 409 : 404);
+    if (await VehicleAllotment.exists({ activeDriver: drv._id })) throw new AppError(`Driver ${drv.driverNumber} is already assigned to another vehicle`, 409);
+  }
+
   const reserved = await reserveVehicle(veh, av.data, username);
   if (!reserved || reserved === "CONFLICT") throw new AppError(`Vehicle ${veh.vehicleNo} is no longer available`, 409);
+
+  const allotmentId = new mongoose.Types.ObjectId();
+  const nextAt = istToDate(d.schedule.nextAvailableDate, d.schedule.nextAvailableTime)!;
+  let reservedDrv: any = null;
+  let drvBlock: any = null;
+  if (drv) {
+    drvBlock = driverInUseBlock({
+      project: p.trackingProject, trackingVehicle: p.trackingVehicle, budget: p.budget, budgetVersion: p.budgetVersion, projectType: p.projectType, projectName: p.projectName,
+      clientName: p.clientName, trackupNumber: p.trackupNumber, pifNumber: p.pifNumber, allottedAt: d.allottedAt, nextAvailableAt: nextAt, remarks: d.remarks,
+      vehicle: veh._id, vehicleNo: veh.vehicleNo,
+    }, allotmentId);
+    reservedDrv = await reserveDriver(drv, drvBlock, username, now);
+    if (!reservedDrv) {
+      await restoreVehicle(veh._id, reserved.revision, veh.availability, username); // nothing half-done is left behind
+      throw new AppError(`Driver ${drv.driverNumber} is no longer available; no vehicle was allotted`, 409);
+    }
+  }
 
   let a: any;
   try {
     a = await VehicleAllotment.create({
+      _id: allotmentId, ...(drv ? driverFields(drv, username, now) : {}),
       vehicle: veh._id, vehicleNo: veh.vehicleNo, vehicleMake: veh.make, vehicleModel: veh.model,
       project: p.trackingProject, trackingVehicle: p.trackingVehicle, budget: p.budget, budgetVersion: p.budgetVersion,
       trackupNumber: p.trackupNumber, pifNumber: p.pifNumber, billNumber: p.billNumber ?? undefined, clientName: p.clientName,
@@ -234,14 +270,27 @@ export async function allotVehicle(input: unknown, username: string, now = new D
       status: "ACTIVE", source: "ALLOTMENT", createdBy: username, updatedBy: username,
     });
   } catch (e) {
+    if (reservedDrv) await restoreDriver(drv._id, reservedDrv.availability.revision, drv.availability, username);
     await restoreVehicle(veh._id, reserved.revision, veh.availability, username); // nothing half-done is left behind
+    if (isDup(e) && /activeDriver/.test(String((e as any).message))) throw new AppError(`Driver ${drv?.driverNumber} was just assigned to another vehicle; no vehicle was allotted`, 409);
     if (isDup(e)) throw new AppError(`${p.trackupNumber} was just allotted to another vehicle`, 409);
     throw e;
   }
   await logAllotment(a._id, "ALLOTTED", username, {
     vehicleNo: veh.vehicleNo, trackupNumber: p.trackupNumber, pifNumber: p.pifNumber, billNumber: p.billNumber ?? null,
     allottedAt: d.allottedAt, expectedReleaseAt: a.expectedReleaseAt ?? null, nextAvailableAt: a.nextAvailableAt, remarks: d.remarks,
+    ...(drv ? { driverNumber: drv.driverNumber } : {}),
   });
+  if (drv) {
+    await logAllotment(a._id, "DRIVER_ASSIGNED", username, {
+      driverId: String(drv._id), driverNumber: drv.driverNumber, driverName: drv.driverName, driverType: drv.driverType, mobileNumber: drv.mobileNumber,
+      vehicleNo: veh.vehicleNo, trackupNumber: p.trackupNumber, assignedAt: now, later: false,
+    });
+    const drows = driverAvailabilityHistory(drv.availability, drvBlock).map((r) => ({
+      ...r, driver: drv._id, username, reason: `Allotted with vehicle ${veh.vehicleNo} to ${p.projectName} (${p.trackupNumber})`,
+    }));
+    if (drows.length) await DriverHistory.insertMany(drows);
+  }
   const rows = vehicleRows(veh.availability, av.data, veh._id, username, `Allotted to ${p.projectName} (${p.trackupNumber})`);
   if (rows.length) await VehicleHistory.insertMany(rows);
   return withUrls(a.toObject());
@@ -279,10 +328,11 @@ export async function changeVehicle(id: string, input: unknown, username: string
 
   // 1) the original allotment steps aside (guarded: someone else may have just changed it)
   const stepped = await VehicleAllotment.findOneAndUpdate(
-    { _id: old._id, status: "ACTIVE" }, { $set: { status: "CHANGED", updatedBy: username } }, { returnDocument: "after" },
+    { _id: old._id, status: "ACTIVE" }, { $set: { status: "CHANGED", updatedBy: username }, ...(old.activeDriver ? { $unset: { activeDriver: 1 } } : {}) }, { returnDocument: "after" },
   ).lean();
   if (!stepped) throw new AppError("This allotment was just changed by someone else; refresh and retry", 409);
-  const undoAllotment = () => VehicleAllotment.updateOne({ _id: old._id }, { $set: { status: "ACTIVE", updatedBy: old.updatedBy }, $unset: { replacedBy: 1 } });
+  const undoAllotment = () =>
+    VehicleAllotment.updateOne({ _id: old._id }, { $set: { status: "ACTIVE", updatedBy: old.updatedBy, ...(old.activeDriver ? { activeDriver: old.activeDriver } : {}) }, $unset: { replacedBy: 1 } });
 
   // 2) the original vehicle is released (its hold would otherwise block the replacement on the same trackup)
   const freed = await freeVehicle(oldVeh._id, old.trackupNumber, username, now);
@@ -311,6 +361,12 @@ export async function changeVehicle(id: string, input: unknown, username: string
       allottedAt: now, expectedReleaseAt: old.expectedReleaseAt, nextAvailableAt: old.nextAvailableAt, remarks: old.remarks,
       status: "ACTIVE", source: "ALLOTMENT", previousAllotment: old._id, changedFromVehicleNo: old.vehicleNo, changeReason: d.reason,
       changeRemarks: d.remarks ?? undefined, changeAttachments: d.attachments, changedAt: now, createdBy: username, updatedBy: username,
+      // the driver stays with the project vehicle: carried over to the replacement allotment
+      ...(old.driver ? {
+        driver: old.driver, driverNumber: old.driverNumber, driverName: old.driverName, driverType: old.driverType, driverMobile: old.driverMobile,
+        driverAssignedAt: old.driverAssignedAt, driverAssignedBy: old.driverAssignedBy, driverReleasedAt: old.driverReleasedAt,
+        ...(old.activeDriver ? { activeDriver: old.activeDriver } : {}),
+      } : {}),
     });
   } catch (e) {
     await restoreVehicle(repl._id, reserved.revision, repl.availability, username);
@@ -320,6 +376,10 @@ export async function changeVehicle(id: string, input: unknown, username: string
     throw e;
   }
   await VehicleAllotment.updateOne({ _id: old._id }, { $set: { replacedBy: created._id } });
+  if (old.activeDriver) // the driver's allocation now points at the new allotment / vehicle
+    await Driver.updateOne({ _id: old.activeDriver, "availability.project.allotment": old._id }, {
+      $set: { "availability.project.allotment": created._id, "availability.project.vehicle": repl._id, "availability.project.vehicleNo": repl.vehicleNo },
+    });
 
   // 5) immutable records
   const detail = { fromVehicleNo: old.vehicleNo, toVehicleNo: repl.vehicleNo, reason: d.reason, remarks: d.remarks, attachments: d.attachments, changedAt: now };
@@ -367,6 +427,7 @@ export async function extendAllotment(id: string, input: unknown, username: stri
     await restoreVehicle(veh._id, (upd as any).revision, veh.availability, username);
     throw new AppError("This allotment was just changed by someone else; refresh and retry", 409);
   }
+  await syncDriverSchedule(res, username, now); // the driver's To date follows the allotment
   await logAllotment(a._id, "EXTENDED", username, {
     reason: v.data.reason, from: { expectedReleaseAt: a.expectedReleaseAt ?? null, nextAvailableAt: a.nextAvailableAt }, to: { expectedReleaseAt: exp, nextAvailableAt: nxt },
   });
@@ -393,6 +454,7 @@ export async function releaseAllotment(id: string, input: unknown, username: str
     throw new AppError("This allotment was just changed by someone else; refresh and retry", 409);
   }
   await logAllotment(a._id, "RELEASED", username, { reason, vehicleNo: a.vehicleNo, releasedAt: now });
+  await releaseAllotmentDriver(a, { username, reason, at: now }); // the driver (if any) becomes Available Now with the vehicle
   const rows = vehicleRows(freed.before.availability, availableNowBlock(freed.before.availability, now), a.vehicle, username, reason);
   if (rows.length) await VehicleHistory.insertMany(rows);
   return withUrls(res);

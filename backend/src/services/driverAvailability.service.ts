@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Driver, DriverHistory } from "../models/Driver.js";
+import { VehicleAllotment } from "../models/VehicleAllotment.js";
+import { logAllotment } from "./allotment.core.js";
 import { diffVehicle, type Change } from "../validators/vehicle.validator.js";
 import { joinLabel } from "../validators/availability.validator.js";
 import { istToday, nextDay, type DriverAvailabilityData } from "../validators/driverAvailability.validator.js";
@@ -134,6 +136,11 @@ export async function releaseDueDrivers(now = new Date(), batch = 500): Promise<
       continue;
     }
     released++;
+    if (a.project?.allotment) {
+      // the driver was held by a vehicle allotment: that allotment no longer has an active driver (its details stay for history)
+      const done = await VehicleAllotment.updateOne({ _id: a.project.allotment, activeDriver: d._id }, { $unset: { activeDriver: 1 }, $set: { driverReleasedAt: now } });
+      if (done.modifiedCount) await logAllotment(a.project.allotment, "DRIVER_RELEASED", "SYSTEM", { driverId: String(d._id), driverNumber: d.driverNumber, driverName: d.driverName, reason: AUTO_RELEASE_REASON, releasedAt: now });
+    }
     const rows = driverAvailabilityHistory(a, next);
     try {
       await DriverHistory.create({

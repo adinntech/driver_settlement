@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Driver, DriverHistory, DRIVER_AVAILABILITY_STATUSES } from "../models/Driver.js";
+import { VehicleAllotment } from "../models/VehicleAllotment.js";
 import { validateDriver, type DriverData } from "../validators/driver.validator.js";
 import { createWithDriverNumber } from "../utils/driverNumber.js";
 import { attachmentUrl } from "./storage.service.js";
@@ -83,6 +84,9 @@ export async function updateDriver(id: string, input: unknown, username: string)
   if (av.errors.length) throw new AppError(av.errors.join("; "), 400);
   await duplicateCheck(data, id);
   const avRows = av.data ? driverAvailabilityHistory(existing.availability, av.data) : [];
+  const heldBy = existing.availability?.status === "IN_USE" ? existing.availability.project?.allotment : null;
+  if (avRows.length && heldBy && (await VehicleAllotment.exists({ _id: heldBy, activeDriver: id })))
+    throw new AppError(`This driver is assigned to vehicle ${existing.availability.project.vehicleNo ?? ""} through Vehicle Allotment; use Change Driver or release the allotment there to change the availability`.replace("  ", " "), 409);
   const keys = DETAIL_KEYS;
   const norm = (x: unknown) => (x === undefined || x === null ? null : x);
   const same =
