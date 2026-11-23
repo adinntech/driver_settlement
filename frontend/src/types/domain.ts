@@ -1,4 +1,4 @@
-export type RoleKey = "RSOP" | "RBP" | "RSOM";
+export type RoleKey = "RSOP" | "RBP" | "RSOM" | "RSA";
 export type ProjectType = "ROADSHOW" | "SIGNAGE";
 
 export interface RoleInfo {
@@ -297,4 +297,10 @@ export interface DriverAvailability {
 export interface DriverHistoryRow {
   _id: string; action: string; changes: { field: string; from: unknown; to: unknown }[]; username: string; createdAt: string;
   previousStatus?: string | null; newStatus?: string | null; project?: Record<string, unknown> | null; reason?: string | null;
+}
+
+// ---- driver advance (RBP, View Driver Details)
+export interface DriverAdvanceRow {
+  _id: string; driver: string; driverNumber: string; driverName: string; workingDays: number; perDaySalary: number; eligibleAdvanceAmount: number;
+  calculatedHalfAmount: number; finalAdvanceAmount: number; roundingUnit: number; roundingMethod: string; submittedBy: string; submittedAt: string; createdAt: string;
 }

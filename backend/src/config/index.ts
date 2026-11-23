@@ -17,6 +17,7 @@ export const config = {
     { role: "RSOP", username: process.env.RSOP_USERNAME, password: process.env.RSOP_PASSWORD },
     { role: "RBP", username: process.env.RBP_USERNAME, password: process.env.RBP_PASSWORD },
     { role: "RSOM", username: process.env.RSOM_USERNAME, password: process.env.RSOM_PASSWORD },
+    { role: "RSA", username: process.env.RSA_USERNAME, password: process.env.RSA_PASSWORD },
   ],
   storage: {
     // local = backend/public folder, space = cloud bucket (DigitalOcean Spaces)

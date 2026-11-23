@@ -57,7 +57,7 @@ export default function LoginPage() {
 
         {roles.error && <div className="alert">{roles.error}</div>}
         <div className="role-grid">
-          {(["RSOP", "RBP", "RSOM"] as RoleKey[]).map((r) => (
+          {(["RSOP", "RBP", "RSOM", "RSA"] as RoleKey[]).map((r) => (
             <button
               key={r}
               type="button"

@@ -10,6 +10,8 @@ import { BudgetEvent, Notification } from "./models/Approval.js";
 import { Vehicle, VehicleHistory } from "./models/Vehicle.js";
 import { AllotmentEvent, VehicleAllotment } from "./models/VehicleAllotment.js";
 import { Driver, DriverHistory } from "./models/Driver.js";
+import { DriverAdvance } from "./models/DriverAdvance.js";
+import { Counter, RsaPayment } from "./models/RsaPayment.js";
 import { startAvailabilityScheduler } from "./jobs/availabilityScheduler.js";
 
 if (!config.jwtSecret) {
@@ -34,6 +36,9 @@ try {
     AllotmentEvent.init(),
     Driver.init(),
     DriverHistory.init(),
+    DriverAdvance.init(),
+    RsaPayment.init(),
+    Counter.init(),
   ]);
   await seedUsers();
 } catch (err) {

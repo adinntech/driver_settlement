@@ -544,3 +544,49 @@ textarea:focus { outline: none; border-color: var(--red); box-shadow: 0 0 0 3px 
 .drv-bank { margin: 8px 0 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); display: grid; gap: 8px; }
 .drv-bank-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 .drv-bank-head .sub { margin: 0; }
+
+.adv-form { grid-template-columns: 220px minmax(0, 420px); }
+.adv-final { font-weight: 700; color: var(--ok); }
+@media (max-width: 560px) { .adv-form { grid-template-columns: 1fr; } }
+
+/* ---------- RSA (Roadshow Accounts) ---------- */
+.rsa-head { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; padding: 12px 16px; border: 1px solid var(--border); border-left: 4px solid var(--red); border-radius: 12px; background: var(--bg); }
+.rsa-head-lines { display: grid; gap: 2px; font-size: .92rem; }
+.rsa-head-lines span, .rsa-head-no span { color: var(--red-dark); font-weight: 600; }
+.rsa-head-no { font-weight: 700; }
+.rsa-grid { display: grid; grid-template-columns: 180px minmax(0, 520px); gap: 10px 12px; align-items: center; margin-bottom: 10px; }
+.rsa-ro { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: #f6f6f6; }
+.rsa-check { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+.rsa-diesel { display: grid; grid-template-columns: 160px 180px minmax(160px, 320px) auto; gap: 8px; margin: 6px 0; }
+.rsa-chips { list-style: none; padding: 0; margin: 6px 0 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+.rsa-chips li { padding: 4px 10px; border-radius: 999px; background: var(--ok-soft); font-size: .85rem; }
+.rsa-exp-entry { display: grid; grid-template-columns: 200px minmax(160px, 1fr) 150px auto auto; gap: 8px; align-items: center; padding: 10px; background: #fff3e4; border-radius: 10px; margin-bottom: 8px; }
+.rsa-exp { font-size: .88rem; margin-bottom: 8px; }
+.rsa-exp-foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.rsa-exp-foot input { max-width: 150px; text-align: right; }
+.rsa-payable { display: flex; gap: 10px; align-items: center; justify-content: flex-end; margin-top: 12px; font-weight: 700; }
+.rsa-payable-input { max-width: 170px; text-align: right; font-weight: 700; }
+.rsa-actions { position: sticky; bottom: 0; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 16px; padding: 12px 0; background: var(--bg); border-top: 1px solid var(--border); }
+.rsa-filters .rsa-range { display: inline-flex; align-items: center; gap: 6px; font-size: .82rem; }
+.rsa-list { font-size: .85rem; }
+@media (max-width: 760px) { .rsa-exp-entry { grid-template-columns: 1fr 1fr; } .rsa-diesel { grid-template-columns: 1fr 1fr; } }
+.rsa-stat-value { font-size: 1.5rem !important; }
+.rsa-hist { font-size: .85rem; }
+
+.rsa-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.rsa-top .rsa-head { flex: 1; min-width: 280px; }
+.rsa-history-btn { display: inline-flex; align-items: center; gap: 8px; }
+.rsa-count { background: var(--red); color: #fff; border-radius: 999px; padding: 0 8px; font-size: .75rem; line-height: 1.4rem; }
+.rsa-full { width: 100%; }
+.rsa-drawer-root { position: fixed; inset: 0; z-index: 60; }
+.rsa-scrim { position: absolute; inset: 0; background: rgba(15, 15, 18, .45); animation: rsa-fade .22s ease both; }
+.rsa-drawer { position: absolute; top: 0; right: 0; height: 100%; width: min(960px, 94vw); background: var(--surface, #fff); box-shadow: -12px 0 32px rgba(0, 0, 0, .18); display: flex; flex-direction: column; animation: rsa-slide .28s var(--ease, ease) both; }
+.rsa-drawer-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.rsa-drawer-head h3 { margin: 0; }
+.rsa-drawer-body { padding: 16px 18px; overflow: auto; flex: 1; }
+@keyframes rsa-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes rsa-slide { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .rsa-scrim, .rsa-drawer { animation: none; } }
+.rsa-detail-row > td { background: #faf7f7; padding: 14px 18px !important; }
+.rsa-row-open > td { border-bottom: 0; }
+.rsa-detail .kv { margin-bottom: 8px; }

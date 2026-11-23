@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import AppShell from "@/components/AppShell";
+import DriverAdvancePanel from "@/components/DriverAdvance";
 import DriverDetails from "@/components/DriverDetails";
 import { ErrorState, Skeleton } from "@/components/ui/Ui";
 import { useApi } from "@/hooks/useApi";
@@ -37,6 +38,7 @@ function View() {
         <Link href={`/rbp/drivers/edit?id=${res.data._id}`} className="btn btn-primary">Edit Driver</Link>
       </div>
       <DriverDetails d={res.data} history={hist.data ?? undefined} />
+      <DriverAdvancePanel driver={res.data} />
       {hist.error && <p className="muted">History could not be loaded: {hist.error}</p>}
     </>
   );

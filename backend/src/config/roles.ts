@@ -16,6 +16,11 @@ export const ROLES = {
     defaultUsername: "RSOM",
     description: "Review and approve or reject budgets created by RBP.",
   },
+  RSA: {
+    label: "RSA",
+    defaultUsername: "RSA",
+    description: "Manage approved Roadshow and Signage project payments, vehicle expenses, and driver payment records.",
+  },
 } as const;
 
 export type RoleKey = keyof typeof ROLES;
