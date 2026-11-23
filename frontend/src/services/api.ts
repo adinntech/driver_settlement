@@ -92,3 +92,25 @@ export async function uploadAttachment(file: File): Promise<import("@/types/doma
   if (!res.ok || !json?.success || !json.data) throw new ApiError(json?.message ?? `Upload failed (${res.status})`, res.status);
   return json.data;
 }
+
+export interface UploadedPhoto { kind: string; storage: string; key: string; name: string; size: number; mimeType: string; url: string }
+/** Uploads one vehicle delivery photo (multipart) for a clearance; the server binds the stored file to that delivery. */
+export async function uploadDeliveryPhoto(clearanceId: string, kind: "speedometer" | "evidence", file: File): Promise<UploadedPhoto> {
+  const token = tokenStore.get();
+  const fd = new FormData();
+  fd.append("file", file);
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}/on-road-vehicles/${clearanceId}/photos/${kind}`, { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body: fd });
+  } catch {
+    throw new ApiError("Cannot reach the server. Please check your connection.", 0);
+  }
+  let json: ApiResponse<UploadedPhoto> | null = null;
+  try {
+    json = (await res.json()) as ApiResponse<UploadedPhoto>;
+  } catch {
+    /* non-JSON error body */
+  }
+  if (!res.ok || !json?.success || !json.data) throw new ApiError(json?.message ?? `Upload failed (${res.status})`, res.status);
+  return json.data;
+}

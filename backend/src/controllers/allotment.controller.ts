@@ -3,6 +3,7 @@ import {
   allotVehicle, allotmentDetail, changeVehicle, extendAllotment, listAllotmentProjects, listAllotments, releaseAllotment, searchAvailableVehicles,
 } from "../services/allotment.service.js";
 import { assignDriver, changeDriver, getDriverBank, lookupAvailableDriver, searchAvailableDrivers, updateDriverBank } from "../services/allotmentDriver.service.js";
+import { syncClearances } from "../services/clearance.service.js";
 import { sendResponse } from "../utils/sendResponse.js";
 
 const wrap =
@@ -12,6 +13,15 @@ const wrap =
 
 const q = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
 const n = (v: unknown) => (typeof v === "string" && /^\d+$/.test(v) ? Number(v) : undefined);
+
+/** Opens / refreshes the RSA clearance of the project vehicle just allotted. It never blocks or fails the allotment call itself. */
+const submitClearance = async (a: unknown) => {
+  try {
+    await syncClearances({ trackingVehicle: (a as { trackingVehicle?: unknown } | null)?.trackingVehicle });
+  } catch (e) {
+    console.error("Clearance submission failed", e);
+  }
+};
 
 export const projects = wrap(async (req, res) => {
   const data = await listAllotmentProjects(q(req.query.q) ?? "", n(req.query.page), n(req.query.limit));
@@ -44,11 +54,15 @@ export const saveDriverBank = wrap(async (req, res) => {
 });
 
 export const assign = wrap(async (req, res) => {
-  res.status(200).json(sendResponse(true, "Driver assigned successfully", await assignDriver(String(req.params.id), req.body ?? {}, req.user!.username)));
+  const data = await assignDriver(String(req.params.id), req.body ?? {}, req.user!.username);
+  await submitClearance(data);
+  res.status(200).json(sendResponse(true, "Driver assigned successfully", data));
 });
 
 export const changeDrv = wrap(async (req, res) => {
-  res.status(200).json(sendResponse(true, "Driver changed successfully", await changeDriver(String(req.params.id), req.body ?? {}, req.user!.username)));
+  const data = await changeDriver(String(req.params.id), req.body ?? {}, req.user!.username);
+  await submitClearance(data);
+  res.status(200).json(sendResponse(true, "Driver changed successfully", data));
 });
 
 export const list = wrap(async (req, res) => {
@@ -66,11 +80,14 @@ export const one = wrap(async (req, res) => {
 
 export const allot = wrap(async (req, res) => {
   const data = await allotVehicle(req.body ?? {}, req.user!.username);
+  await submitClearance(data);
   res.status(201).json(sendResponse(true, data.driver ? "Vehicle and driver allotted successfully" : "Vehicle allotted successfully", data));
 });
 
 export const change = wrap(async (req, res) => {
-  res.status(200).json(sendResponse(true, "Vehicle changed successfully", await changeVehicle(String(req.params.id), req.body ?? {}, req.user!.username)));
+  const data = await changeVehicle(String(req.params.id), req.body ?? {}, req.user!.username);
+  await submitClearance(data);
+  res.status(200).json(sendResponse(true, "Vehicle changed successfully", data));
 });
 
 export const extend = wrap(async (req, res) => {

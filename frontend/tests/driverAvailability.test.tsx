@@ -26,11 +26,12 @@ const inUseForm = (over: Partial<DriverAvForm["project"]> = {}): DriverAvForm =>
 const naForm = (over: Partial<DriverAvForm["notAvailable"]> = {}): DriverAvForm => av({ status: "NOT_AVAILABLE", notAvailable: { reason: "Family function", category: "Personal Leave", fromDate: "2026-11-24", expectedAvailableDate: "", remarks: "", ...over } });
 
 // ================================================================== sidebar
-test("sidebar: RBP order is Projects & Budgets, Vehicle Management, Driver Management; RSOP and RSOM menus are unchanged", () => {
+test("sidebar: RBP order is Projects & Budgets, Vehicle Management, Driver Management, Vehicle Deliver; RSOP and RSOM menus are unchanged", () => {
   assert.deepEqual(NAV.RBP, [
     { href: "/rbp", label: "Projects & Budgets" },
     { href: "/rbp/vehicles", label: "Vehicle Management" },
     { href: "/rbp/drivers", label: "Driver Management" },
+    { href: "/rbp/on-road", label: "Vehicle Deliver" },
   ]);
   assert.deepEqual(NAV.RSOP, [{ href: "/rsop", label: "Dashboard" }, { href: "/rsop/new", label: "New Tracking Request" }]);
   assert.deepEqual(NAV.RSOM, [{ href: "/rsom", label: "Budget Approvals" }]);

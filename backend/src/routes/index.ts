@@ -9,6 +9,7 @@ import vehicleRoutes from "./vehicle.routes.js";
 import allotmentRoutes from "./allotment.routes.js";
 import driverRoutes from "./driver.routes.js";
 import rsaRoutes from "./rsa.routes.js";
+import { onRoadRoutes, rsaClearanceRoutes } from "./clearance.routes.js";
 
 const router = Router();
 router.use("/health", healthRoutes);
@@ -21,5 +22,7 @@ router.use("/vehicles", vehicleRoutes);
 router.use("/vehicle-allotments", allotmentRoutes);
 router.use("/drivers", driverRoutes);
 router.use("/rsa", rsaRoutes);
+router.use("/rsa-clearances", rsaClearanceRoutes);
+router.use("/on-road-vehicles", onRoadRoutes);
 
 export default router;

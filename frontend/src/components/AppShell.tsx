@@ -19,9 +19,13 @@ export const NAV: Record<RoleKey, { href: string; label: string }[]> = {
     { href: "/rbp", label: "Projects & Budgets" },
     { href: "/rbp/vehicles", label: "Vehicle Management" },
     { href: "/rbp/drivers", label: "Driver Management" },
+    { href: "/rbp/on-road", label: "Vehicle Deliver" },
   ],
   RSOM: [{ href: "/rsom", label: "Budget Approvals" }],
-  RSA: [{ href: "/rsa", label: "Payments" }],
+  RSA: [
+    { href: "/rsa", label: "Payments" },
+    { href: "/rsa/clearance", label: "Vehicle & Driver Clearance" },
+  ],
 };
 
 /** Exact match, or a sub-page of this entry unless another entry matches more specifically. */
