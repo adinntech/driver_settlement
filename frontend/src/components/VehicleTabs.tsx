@@ -7,7 +7,7 @@ export const VEHICLE_TABS = [
   { href: "/rbp/vehicles", label: "Vehicle Management" },
   { href: "/rbp/vehicles/allotment", label: "Vehicle Allotment" },
   { href: "/rbp/vehicles/allotment-history", label: "Allotment History" },
-] as const;
+] as const; // Driver Management has its own left-sidebar menu (/rbp/drivers)
 
 /** Which tab a path belongs to (the add / edit / view pages belong to the first tab). */
 export function activeTab(pathname: string): string {

@@ -262,3 +262,28 @@ export interface AllotmentDetailData {
   vehicle: { vehicleNo?: string; make?: string; model?: string; type?: string; availabilityStatus?: string | null } | null;
   events: AllotmentEventRow[];
 }
+
+// ---- driver management
+export interface Driver {
+  _id: string; driverNumber: string; driverName: string; driverType: "COMPANY_DRIVER" | "ACTING_DRIVER";
+  address?: string | null; mobileNumber: string; accountName?: string | null; accountNumber?: string | null; ifscCode?: string | null;
+  bankName?: string | null; licenceNumber?: string | null; licenceType?: string | null; licenceExpiryDate?: string | null;
+  attachment: Attachment | null; salary: number; status: "ACTIVE" | "INACTIVE";
+  availability?: DriverAvailability | null; // absent on drivers created before availability existed
+  createdBy: string; updatedBy: string; createdAt: string; updatedAt: string;
+}
+export type DriverAvStatus = "AVAILABLE" | "IN_USE" | "NOT_AVAILABLE";
+export interface DriverAvailability {
+  status: DriverAvStatus | null; availableFromDate?: string | null; availableFromTime?: string | null;
+  project?: {
+    trackingProject?: string | null; trackingVehicle?: string | null; budget?: string | null; budgetVersion?: number | null; projectType?: string | null;
+    projectName?: string | null; clientName?: string | null; trackupNumber?: string | null; pifNumber?: string | null;
+    startDate?: string | null; endDate?: string | null; remarks?: string | null;
+  } | null;
+  notAvailable?: { reason?: string | null; category?: string | null; fromDate?: string | null; expectedAvailableDate?: string | null; remarks?: string | null } | null;
+  lastStatusUpdatedBy?: string | null; lastStatusUpdatedAt?: string | null; autoReleasedAt?: string | null;
+}
+export interface DriverHistoryRow {
+  _id: string; action: string; changes: { field: string; from: unknown; to: unknown }[]; username: string; createdAt: string;
+  previousStatus?: string | null; newStatus?: string | null; project?: Record<string, unknown> | null; reason?: string | null;
+}

@@ -29,7 +29,7 @@ const okForm = () => ({
 });
 
 test("three tabs: Vehicle Management, Vehicle Allotment, Allotment History; the right one is highlighted", () => {
-  assert.deepEqual(VEHICLE_TABS.map((t) => t.label), ["Vehicle Management", "Vehicle Allotment", "Allotment History"]);
+  assert.deepEqual(VEHICLE_TABS.map((t) => t.label), ["Vehicle Management", "Vehicle Allotment", "Allotment History"]); // Driver Management is a separate sidebar menu
   for (const [path, tab] of [
     ["/rbp/vehicles", "/rbp/vehicles"], ["/rbp/vehicles/edit", "/rbp/vehicles"], ["/rbp/vehicles/view", "/rbp/vehicles"],
     ["/rbp/vehicles/allotment", "/rbp/vehicles/allotment"], ["/rbp/vehicles/allotment-history", "/rbp/vehicles/allotment-history"],

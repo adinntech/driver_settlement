@@ -499,3 +499,38 @@ textarea:focus { outline: none; border-color: var(--red); box-shadow: 0 0 0 3px 
 .al-timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .al-timeline li { display: grid; gap: 2px; padding: 8px 12px; border-left: 3px solid var(--red); background: var(--bg); border-radius: 0 8px 8px 0; }
 .allot-detail .kv { margin-bottom: 6px; }
+
+/* ---------- Driver management ---------- */
+.drv-form .rm-form { grid-template-columns: 170px minmax(0, 520px); }
+.drv-no { color: var(--red); font-size: 1.05rem; letter-spacing: .5px; }
+.drv-attach { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; }
+.drv-attach .btn { padding: 8px 16px; min-width: 48px; text-align: center; }
+.drv-attach a.btn { text-decoration: none; }
+.drv-types { display: flex; gap: 22px; flex-wrap: wrap; }
+.drv-radio { display: inline-flex; align-items: center; gap: 8px; text-align: left !important; font-weight: 600; cursor: pointer; }
+.drv-radio input { width: auto; accent-color: var(--red); }
+.drv-actions { display: flex; gap: 10px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+@media (max-width: 560px) { .drv-form .rm-form { grid-template-columns: 1fr; } }
+
+/* ---------- Driver availability ---------- */
+.drv-av-radios { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+.drv-av-opt { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border: 1.5px solid var(--border); border-radius: 999px; font-weight: 600; cursor: pointer; background: var(--bg); }
+.drv-av-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.drv-av-dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
+.drv-av-green { color: var(--ok); }
+.drv-av-blue { color: #1b4fb3; }
+.drv-av-red { color: var(--red-dark); }
+.drv-av-opt.on.drv-av-green { background: var(--ok-soft); border-color: var(--ok); }
+.drv-av-opt.on.drv-av-blue { background: #e6effd; border-color: #1b4fb3; }
+.drv-av-opt.on.drv-av-red { background: var(--red-soft); border-color: var(--red); }
+.drv-av-opt:focus-within { outline: 2px solid var(--red); outline-offset: 2px; }
+.drv-filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.drv-filters select { min-width: 200px; }
+.drv-history { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.drv-hist-item { padding: 12px 14px; border-left: 3px solid var(--red); background: var(--bg); border-radius: 0 10px 10px 0; display: grid; gap: 6px; }
+.drv-hist-head { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.drv-hist-status { display: flex; gap: 18px; flex-wrap: wrap; margin: 0; }
+.drv-hist-reason { margin: 0; }
+.drv-hist-changes { font-size: .85rem; }
+.drv-filters .search-wide { flex: 1; min-width: 260px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

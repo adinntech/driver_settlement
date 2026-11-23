@@ -10,7 +10,7 @@ import NotificationBell from "@/components/NotificationBell";
 import { Skeleton } from "@/components/ui/Ui";
 
 // Modular navigation: add an entry per role to onboard new modules.
-const NAV: Record<RoleKey, { href: string; label: string }[]> = {
+export const NAV: Record<RoleKey, { href: string; label: string }[]> = {
   RSOP: [
     { href: "/rsop", label: "Dashboard" },
     { href: "/rsop/new", label: "New Tracking Request" },
@@ -18,6 +18,7 @@ const NAV: Record<RoleKey, { href: string; label: string }[]> = {
   RBP: [
     { href: "/rbp", label: "Projects & Budgets" },
     { href: "/rbp/vehicles", label: "Vehicle Management" },
+    { href: "/rbp/drivers", label: "Driver Management" },
   ],
   RSOM: [{ href: "/rsom", label: "Budget Approvals" }],
 };
