@@ -1,14 +1,21 @@
-import MainLayout from "@/layouts/MainLayout";
-import BackendStatus from "@/components/BackendStatus";
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { useAuth } from "@/context/AuthContext";
+import { homeFor } from "@/utils/budgetDescribe";
+import { Skeleton } from "@/components/ui/Ui";
 
 export default function Home() {
+  const { user, ready } = useAuth();
+  const router = useRouter();
+  useEffect(() => {
+    if (!ready) return;
+    router.replace(!user ? "/login" : homeFor(user.role));
+  }, [ready, user, router]);
   return (
-    <MainLayout>
-      <section className="hero">
-        <h1>Driver Settlement</h1>
-        <p>Project setup is complete. Application features will be added soon.</p>
-        <BackendStatus />
-      </section>
-    </MainLayout>
+    <div className="boot">
+      <Skeleton rows={3} />
+    </div>
   );
 }
