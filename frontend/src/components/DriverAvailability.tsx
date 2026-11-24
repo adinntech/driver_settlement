@@ -1,5 +1,7 @@
 "use client";
 
+import Select from "@/components/ui/Select";
+import DateInput from "@/components/ui/DateInput";
 import { useState, type ReactNode } from "react";
 import { useApi } from "@/hooks/useApi";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -127,7 +129,7 @@ export default function DriverAvailability({ value: a, onChange }: { value: Driv
       {a.status === "AVAILABLE" && (
         <div className="av-panel av-green" data-panel="available">
           <Row label="Available From Date">
-            <input type="date" value={a.availableFromDate} onChange={(e) => set("availableFromDate", e.target.value)} aria-label="Available From Date" />
+            <DateInput value={a.availableFromDate} onChange={(e) => set("availableFromDate", e.target.value)} aria-label="Available From Date" />
           </Row>
           <Row label="Available From Time">
             <input type="time" value={a.availableFromTime} onChange={(e) => set("availableFromTime", e.target.value)} aria-label="Available From Time" />
@@ -161,10 +163,10 @@ export default function DriverAvailability({ value: a, onChange }: { value: Driv
             </div>
             <div className="b-col">
               <Row label="Project From Date" req>
-                <input type="date" value={a.project.startDate} onChange={(e) => setProject({ ...a.project, startDate: e.target.value })} aria-label="Project From Date" />
+                <DateInput value={a.project.startDate} onChange={(e) => setProject({ ...a.project, startDate: e.target.value })} aria-label="Project From Date" />
               </Row>
               <Row label="Project To Date" req>
-                <input type="date" value={a.project.endDate} min={a.project.startDate || undefined} onChange={(e) => setProject({ ...a.project, endDate: e.target.value })} aria-label="Project To Date" />
+                <DateInput value={a.project.endDate} min={a.project.startDate || undefined} onChange={(e) => setProject({ ...a.project, endDate: e.target.value })} aria-label="Project To Date" />
               </Row>
               <Row label="Additional Remarks">
                 <textarea rows={3} value={a.project.remarks} maxLength={300} aria-label="Additional Remarks" onChange={(e) => setProject({ ...a.project, remarks: e.target.value })} />
@@ -181,10 +183,10 @@ export default function DriverAvailability({ value: a, onChange }: { value: Driv
           <div className="b-cols">
             <div className="b-col">
               <Row label="Reason Category" req>
-                <select value={a.notAvailable.category} onChange={(e) => na("category", e.target.value)} aria-label="Reason Category">
+                <Select value={a.notAvailable.category} onChange={(e) => na("category", e.target.value)} aria-label="Reason Category">
                   <option value="">Select category</option>
                   {UNAVAILABLE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
+                </Select>
               </Row>
               <Row label={a.notAvailable.category === "Other" ? "Custom Reason" : "Unavailable Reason"} req>
                 <textarea rows={3} value={a.notAvailable.reason} maxLength={300} aria-label="Unavailable Reason" onChange={(e) => na("reason", e.target.value)}
@@ -193,10 +195,10 @@ export default function DriverAvailability({ value: a, onChange }: { value: Driv
             </div>
             <div className="b-col">
               <Row label="Unavailable From Date">
-                <input type="date" value={a.notAvailable.fromDate} onChange={(e) => na("fromDate", e.target.value)} aria-label="Unavailable From Date" />
+                <DateInput value={a.notAvailable.fromDate} onChange={(e) => na("fromDate", e.target.value)} aria-label="Unavailable From Date" />
               </Row>
               <Row label="Expected Available Date">
-                <input type="date" value={a.notAvailable.expectedAvailableDate} min={a.notAvailable.fromDate || undefined} onChange={(e) => na("expectedAvailableDate", e.target.value)} aria-label="Expected Available Date" />
+                <DateInput value={a.notAvailable.expectedAvailableDate} min={a.notAvailable.fromDate || undefined} onChange={(e) => na("expectedAvailableDate", e.target.value)} aria-label="Expected Available Date" />
               </Row>
               <Row label="Additional Remarks">
                 <textarea rows={2} value={a.notAvailable.remarks} maxLength={300} aria-label="Additional Remarks" onChange={(e) => na("remarks", e.target.value)} />

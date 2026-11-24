@@ -1,5 +1,7 @@
 "use client";
 
+import TableWrap from "@/components/ui/TableWrap";
+import Select from "@/components/ui/Select";
 import { useState } from "react";
 import AppShell from "@/components/AppShell";
 import { AllotModal, AssignDriverModal, ChangeDriverModal, ChangeModal, ExtendModal, ReleaseModal } from "@/components/AllotmentModals";
@@ -59,7 +61,7 @@ function Allotment() {
           <EmptyState title={q ? "No approved project matches" : "No approved projects yet"} hint={q ? "Try clearing the search." : "A project appears here once RSOM approves its budget."} />
         ) : (
           <>
-            <div className="table-wrap">
+            <TableWrap>
               <table className="table">
                 <thead>
                   <tr>
@@ -115,15 +117,15 @@ function Allotment() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </TableWrap>
             <div className="pager">
               <span className="muted">{list.data.total} project(s) · page {page} of {pages}</span>
               <div className="inline">
                 <label className="muted size-pick">
                   Rows
-                  <select value={limit} onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }} aria-label="Page size">
+                  <Select value={limit} onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }} aria-label="Page size">
                     {[10, 25, 50].map((n) => <option key={n} value={n}>{n}</option>)}
-                  </select>
+                  </Select>
                 </label>
                 <button className="btn btn-outline btn-sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button>
                 <button className="btn btn-outline btn-sm" disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</button>

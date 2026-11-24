@@ -1,0 +1,12 @@
+﻿0 JS-33456/2026-27 Hindustan Unilever Ltd estBudget 35181 estKm 1280 estFuel 128 existingFinal true
+1 JS-38221/2026-27 Bajaj Auto Ltd estBudget 37631 estKm 1360 estFuel 143.16 existingFinal true
+2 JS-58690/2026-27 Tata Motors Ltd estBudget 48840 estKm 1890 estFuel 210 existingFinal true
+3 JS-64130/2026-27 QA Test Roadshow 59H6X estBudget 1800023200 estKm 630 estFuel 78.75 existingFinal false
+4 JS-70505/2026-27 Samsung India Electronics estBudget 15615 estKm 400 estFuel 36.36 existingFinal false
+5 JS-71295/2026-27 ITC Ltd estBudget 27655 estKm 1050 estFuel 100 existingFinal false
+6 JS-78804/2026-27 Dabur India Ltd estBudget 47500 estKm 1050 estFuel 150 existingFinal true
+7 JS-81817/2026-27 Tata Motors Ltd estBudget 46965 estKm 1890 estFuel 210 existingFinal false
+8 JS-84445/2026-27 Reliance Retail Ltd estBudget 18224 estKm 450 estFuel 40.91 existingFinal false
+9 JS-93128/2026-27 Asian Paints Ltd estBudget 55169 estKm 2100 estFuel 247.06 existingFinal false
+10 JS-93686/2026-27 Mahindra & Mahindra Ltd estBudget 50828 estKm 2090 estFuel 209 existingFinal false
+11 JS-95952/2026-27 Britannia Industries Ltd estBudget 12598 estKm 378 estFuel 31.5 existingFinal false

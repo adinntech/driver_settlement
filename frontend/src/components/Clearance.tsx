@@ -1,5 +1,8 @@
 "use client";
 
+import TableWrap from "@/components/ui/TableWrap";
+import Select from "@/components/ui/Select";
+import DateInput from "@/components/ui/DateInput";
 import Link from "next/link";
 import { useState } from "react";
 import { RsaPager } from "@/components/RsaHistory";
@@ -45,16 +48,16 @@ export function ClearanceFiltersBar({ f, onChange, onClear, searchHint, mode = "
   return (
     <div className="filters-vehicle rsa-filters" data-section="clearance-filters">
       <input className="search-wide" aria-label="Mass search" value={f.q} onChange={(e) => set("q", e.target.value)} placeholder={searchHint} />
-      <select value={f.status} aria-label="Status filter" onChange={(e) => set("status", e.target.value)}>
+      <Select value={f.status} aria-label="Status filter" onChange={(e) => set("status", e.target.value)}>
         {mode === "RBP"
           ? RBP_STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)
           : <><option value="">All</option><option value="YET_TO_APPROVE">Yet to Approve</option><option value="APPROVED">Approved</option><option value="REJECTED">Rejected</option></>}
-      </select>
-      <select value={f.projectType} aria-label="Project type filter" onChange={(e) => set("projectType", e.target.value)}>
+      </Select>
+      <Select value={f.projectType} aria-label="Project type filter" onChange={(e) => set("projectType", e.target.value)}>
         <option value="">Roadshow / Signage</option><option value="ROADSHOW">Roadshow</option><option value="SIGNAGE">Signage</option>
-      </select>
-      <label className="rsa-range">Allocation date from<input type="date" value={f.from} aria-label="Allocation date from" onChange={(e) => set("from", e.target.value)} /></label>
-      <label className="rsa-range">to<input type="date" value={f.to} min={f.from || undefined} aria-label="Allocation date to" onChange={(e) => set("to", e.target.value)} /></label>
+      </Select>
+      <label className="rsa-range">Allocation date from<DateInput value={f.from} aria-label="Allocation date from" onChange={(e) => set("from", e.target.value)} /></label>
+      <label className="rsa-range">to<DateInput value={f.to} min={f.from || undefined} aria-label="Allocation date to" onChange={(e) => set("to", e.target.value)} /></label>
       <button type="button" className="btn btn-outline" onClick={onClear} disabled={!clearanceFiltersActive(f)}>Clear Filters</button>
     </div>
   );
@@ -70,7 +73,7 @@ export const RBP_COLUMNS = [
 export function ClearanceTable({ items, mode, hrefFor }: { items: ClearanceRow[]; mode: "RSA" | "RBP"; hrefFor: (id: string) => string }) {
   const cols = mode === "RSA" ? RSA_COLUMNS : RBP_COLUMNS;
   return (
-    <div className="table-wrap">
+    <TableWrap>
       <table className="table rsa-hist" data-section="clearance-table">
         <thead><tr>{cols.map((c) => <th key={c}>{c === "Actions" ? <span className="sr-only">{c}</span> : c}</th>)}</tr></thead>
         <tbody>
@@ -106,7 +109,7 @@ export function ClearanceTable({ items, mode, hrefFor }: { items: ClearanceRow[]
           ))}
         </tbody>
       </table>
-    </div>
+    </TableWrap>
   );
 }
 
@@ -177,11 +180,11 @@ export function FinancialPanel({ fin }: { fin: ClearanceFinancial }) {
       {fin.status === "UNAVAILABLE" && <p className="muted">{fin.message}. Approval stays blocked; the outstanding amount is never assumed to be zero.</p>}
       <h4>Previous Advance Transactions</h4>
       {fin.advances.length === 0 ? <p className="muted">No advance transactions on record.</p> : (
-        <div className="table-wrap">
+        <TableWrap>
           <table className="table"><thead><tr><th>Advance Date &amp; Time</th><th>Working Days</th><th>Advance Amount</th><th>Submitted By</th></tr></thead>
             <tbody>{fin.advances.map((a) => (<tr key={a._id}><td>{formatDateTime(a.submittedAt)}</td><td>{a.workingDays}</td><td>{formatInr(a.finalAdvanceAmount)}</td><td>{a.submittedBy}</td></tr>))}</tbody>
           </table>
-        </div>
+        </TableWrap>
       )}
       <h4>Settlement Details</h4>
       {fin.settlementDataAvailable
@@ -243,11 +246,11 @@ export function ClearanceHistory({ rows }: { rows: ClearanceHistoryRow[] }) {
   return (
     <section className="card cl-section" data-section="approval-history">
       <h3>Approval History</h3>
-      <div className="table-wrap">
+      <TableWrap>
         <table className="table"><thead><tr><th>Version</th><th>Action</th><th>User</th><th>Date &amp; Time</th><th>Details</th></tr></thead>
           <tbody>{rows.map((h) => (<tr key={h._id}><td>V{h.version}</td><td>{ACTION_LABEL[h.action] ?? h.action}</td><td>{h.username} ({h.role})</td><td>{formatDateTime(h.at)}</td><td>{historyText(h)}</td></tr>))}</tbody>
         </table>
-      </div>
+      </TableWrap>
     </section>
   );
 }

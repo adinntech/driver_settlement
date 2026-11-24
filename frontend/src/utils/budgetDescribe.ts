@@ -90,5 +90,5 @@ export const canEdit = (s: string | null | undefined): boolean => statusOf(s) ==
 export const canSubmit = (s: string | null | undefined, currentVersion: number, rejectedVersion?: number | null): boolean =>
   statusOf(s) === "DRAFT" || (statusOf(s) === "REJECTED" && currentVersion > (rejectedVersion ?? 0));
 
-export const ROLE_HOME: Record<string, string> = { RSOP: "/rsop", RBP: "/rbp", RSOM: "/rsom", RSA: "/rsa" };
+export const ROLE_HOME: Record<string, string> = { RSOP: "/rsop", RBP: "/rbp", RSOM: "/rsom", RSA: "/rsa", RSO: "/rso" };
 export const homeFor = (role: string): string => ROLE_HOME[role] ?? "/login";

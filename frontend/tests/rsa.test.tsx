@@ -35,13 +35,16 @@ const panel = (f: PaymentForm = form(), c: RsaContext = ctx()) => renderToStatic
 // ================================================================== login / navigation
 test("RSA is the fourth login: own home, own sidebar; the other three logins are unchanged", () => {
   assert.equal(homeFor("RSA"), "/rsa");
-  assert.deepEqual(NAV.RSA, [{ href: "/rsa", label: "Payments" }, { href: "/rsa/clearance", label: "Vehicle & Driver Clearance" }]);
+  assert.deepEqual(NAV.RSA.slice(0, 2), [{ href: "/rsa", label: "Payments" }, { href: "/rsa/clearance", label: "Vehicle & Driver Clearance" }]); // original entries first, unchanged
+  assert.deepEqual(NAV.RSA.slice(2).map((n) => n.href), ["/rsa/driver-payments", "/rsa/settlements", "/rsa/settlements/completed"]);
+  assert.equal(homeFor("RSO"), "/rso"); // RSO is a separate login from RSOM
+  assert.deepEqual(NAV.RSO.map((n) => n.href), ["/rso", "/rso/reports"]);
   assert.equal(homeFor("RSOP"), "/rsop");
   assert.equal(homeFor("RBP"), "/rbp");
   assert.equal(homeFor("RSOM"), "/rsom");
   assert.equal(homeFor("NOPE"), "/login");
-  assert.deepEqual(NAV.RSOM, [{ href: "/rsom", label: "Budget Approvals" }]);
-  assert.deepEqual(NAV.RBP.map((n) => n.label), ["Projects & Budgets", "Vehicle Management", "Driver Management", "Vehicle Deliver"]);
+  assert.deepEqual(NAV.RSOM, [{ href: "/rsom", label: "Budget Approvals" }, { href: "/rsom/payments", label: "Daily Payment Approvals" }]);
+  assert.deepEqual(NAV.RBP.map((n) => n.label), ["Projects & Budgets", "Vehicle Management", "Driver Management", "Vehicle Deliver", "Driver Payments"]); // payments appended
   assert.deepEqual(NAV.RSOP.map((n) => n.label), ["Dashboard", "New Tracking Request"]);
   assert.ok(!NAV.RSA.some((n) => n.href.startsWith("/rbp") || n.href.startsWith("/rsop") || n.href.startsWith("/rsom"))); // no entry into other roles' pages
 });

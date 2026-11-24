@@ -1,11 +1,14 @@
 "use client";
 
+import TableWrap from "@/components/ui/TableWrap";
+import Select from "@/components/ui/Select";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import { ConfirmDialog, EmptyState, ErrorState, Skeleton } from "@/components/ui/Ui";
 import { useToast } from "@/context/ToastContext";
 import { useApi } from "@/hooks/useApi";
+import StatCard from "@/components/ui/StatCard";
 import { useDebounce } from "@/hooks/useDebounce";
 import { request } from "@/services/api";
 import type { Vehicle } from "@/types/domain";
@@ -94,18 +97,16 @@ function Vehicles() {
           Array.from({ length: 8 }, (_, i) => <div key={i} className="stat skeleton" style={{ height: 84 }} />)
         ) : (
           <>
-            <div className="stat"><span>Total Vehicles</span><strong>{summary.data.total}</strong></div>
-            <div className="stat stat-ok"><span>Active Vehicles</span><strong>{summary.data.active}</strong></div>
-            <div className="stat"><span>Draft Vehicles</span><strong>{summary.data.draft}</strong></div>
-            <div className={`stat${summary.data.maintenanceDue ? " accent" : ""}`} title={`Last service older than ${summary.data.rules.maintenanceDueDays} days`}>
-              <span>Requiring Maintenance</span><strong>{summary.data.maintenanceDue}</strong>
-            </div>
-            <div className={`stat${summary.data.expiringSoon ? " accent" : ""}`} title={`Insurance / FC expired or expiring within ${summary.data.rules.expiringDays} days`}>
-              <span>Insurance / FC Expiring</span><strong>{summary.data.expiringSoon}</strong>
-            </div>
-            <div className="stat stat-av-green"><span>Available Now</span><strong>{summary.data.availableNow ?? 0}</strong></div>
-            <div className="stat stat-av-blue"><span>In Use – Another Project</span><strong>{summary.data.inUse ?? 0}</strong></div>
-            <div className="stat stat-av-red"><span>Vehicle Issue</span><strong>{summary.data.withIssue ?? 0}</strong></div>
+            <StatCard label="Total Vehicles" value={summary.data.total} active={!filtered} onClick={() => { setF(EMPTY); setPage(1); }} title="Show all vehicles" />
+            <StatCard label="Active Vehicles" value={summary.data.active} tone="stat-ok" />
+            <StatCard label="Draft Vehicles" value={summary.data.draft} />
+            <StatCard label="Requiring Maintenance" value={summary.data.maintenanceDue} tone={summary.data.maintenanceDue ? "accent" : undefined} title={`Last service older than ${summary.data.rules.maintenanceDueDays} days`} />
+            <StatCard label="Insurance / FC Expiring" value={summary.data.expiringSoon} tone={summary.data.expiringSoon ? "accent" : undefined}
+              active={f.docStatus === "EXPIRING_SOON"} onClick={() => set("docStatus", f.docStatus === "EXPIRING_SOON" ? "" : "EXPIRING_SOON")}
+              title={`Insurance / FC expired or expiring within ${summary.data.rules.expiringDays} days`} />
+            {([["AVAILABLE", "Available Now", summary.data.availableNow, "stat-av-green"], ["IN_USE", "In Use – Another Project", summary.data.inUse, "stat-av-blue"], ["ISSUE", "Vehicle Issue", summary.data.withIssue, "stat-av-red"]] as const).map(([k, label, n, tone]) => (
+              <StatCard key={k} label={label} value={n ?? 0} tone={tone} active={f.availabilityStatus === k} onClick={() => set("availabilityStatus", f.availabilityStatus === k ? "" : k)} />
+            ))}
           </>
         )}
       </div>
@@ -113,22 +114,22 @@ function Vehicles() {
       <div className="card">
         <div className="filters-vehicle">
           <input className="search-wide" placeholder="Search vehicle no, make, model, type, trackup no, PIF no, project name" value={f.q} onChange={(e) => set("q", e.target.value)} aria-label="Mass search" />
-          <select value={f.availabilityStatus} onChange={(e) => set("availabilityStatus", e.target.value)} aria-label="Vehicle availability">
+          <Select value={f.availabilityStatus} onChange={(e) => set("availabilityStatus", e.target.value)} aria-label="Vehicle availability">
             <option value="">Availability: All</option>
             {AV_STATUSES.map((st) => <option key={st} value={st}>{AV_LABEL[st]}</option>)}
-          </select>
-          <select value={f.docStatus} onChange={(e) => set("docStatus", e.target.value)} aria-label="Document expiry">
+          </Select>
+          <Select value={f.docStatus} onChange={(e) => set("docStatus", e.target.value)} aria-label="Document expiry">
             <option value="">Document expiry: All</option>
             <option value="VALID">Valid</option>
             <option value="EXPIRING_SOON">Expiring Soon</option>
             <option value="EXPIRED">Expired</option>
             <option value="NONE">No Expiry</option>
-          </select>
-          <select value={f.docType} onChange={(e) => set("docType", e.target.value)} aria-label="Document type">
+          </Select>
+          <Select value={f.docType} onChange={(e) => set("docType", e.target.value)} aria-label="Document type">
             <option value="">All Documents</option>
             <option value="FC">FC</option>
             <option value="INSURANCE">Insurance</option>
-          </select>
+          </Select>
           {filtered && (
             <button className="btn btn-ghost" onClick={() => { setF(EMPTY); setPage(1); }}>Clear Filters</button>
           )}
@@ -142,7 +143,7 @@ function Vehicles() {
           <EmptyState title={filtered ? "No vehicles match these filters" : "No vehicles yet"} hint={filtered ? "Try clearing some filters." : "Click Add Vehicle to create the first one."} />
         ) : (
           <>
-            <div className="table-wrap">
+            <TableWrap>
               <table className="table">
                 <thead>
                   <tr>
@@ -191,15 +192,15 @@ function Vehicles() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </TableWrap>
             <div className="pager">
               <span className="muted">{list.data.total} vehicle(s) · page {page} of {pages}</span>
               <div className="inline">
                 <label className="muted size-pick">
                   Rows
-                  <select value={limit} onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }} aria-label="Page size">
+                  <Select value={limit} onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }} aria-label="Page size">
                     {[10, 25, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
-                  </select>
+                  </Select>
                 </label>
                 <button className="btn btn-outline btn-sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button>
                 <button className="btn btn-outline btn-sm" disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</button>

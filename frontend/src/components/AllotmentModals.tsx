@@ -1,5 +1,6 @@
 "use client";
 
+import DateInput from "@/components/ui/DateInput";
 import { useRef, useState, type ReactNode } from "react";
 import DriverBankSection from "@/components/DriverBank";
 import DriverPicker, { DriverCard } from "@/components/DriverPicker";
@@ -25,7 +26,7 @@ export const Field = ({ label, req, children }: { label: string; req?: boolean; 
 );
 const DT = ({ d, t, onD, onT, label }: { d: string; t: string; onD: (v: string) => void; onT: (v: string) => void; label: string }) => (
   <div className="dt-pair">
-    <input type="date" value={d} onChange={(e) => onD(e.target.value)} aria-label={`${label} date`} />
+    <DateInput value={d} onChange={(e) => onD(e.target.value)} aria-label={`${label} date`} />
     <input type="time" value={t} onChange={(e) => onT(e.target.value)} aria-label={`${label} time`} />
   </div>
 );

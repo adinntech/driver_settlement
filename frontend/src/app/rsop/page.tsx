@@ -1,11 +1,16 @@
 "use client";
 
+import TableWrap from "@/components/ui/TableWrap";
+import Select from "@/components/ui/Select";
+import DateInput from "@/components/ui/DateInput";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import CopyButton from "@/components/ui/CopyButton";
 import { EmptyState, ErrorState, Modal, Skeleton, StatusBadge } from "@/components/ui/Ui";
 import { useApi } from "@/hooks/useApi";
+import StatCard from "@/components/ui/StatCard";
+import { useDebounce } from "@/hooks/useDebounce";
 import type { Project, Stats, Vehicle } from "@/types/domain";
 import { formatDate, formatDateTime, labelize } from "@/utils/format";
 
@@ -19,6 +24,7 @@ export default function RsopDashboard() {
 
 function Dashboard() {
   const [q, setQ] = useState("");
+  const dq = useDebounce(q); // one request after typing pauses, not one per keystroke
   const [type, setType] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -26,12 +32,12 @@ function Dashboard() {
 
   const qs = useMemo(() => {
     const p = new URLSearchParams();
-    if (q.trim()) p.set("q", q.trim());
+    if (dq.trim()) p.set("q", dq.trim());
     if (type) p.set("projectType", type);
     if (from) p.set("from", from);
     if (to) p.set("to", to);
     return p.toString();
-  }, [q, type, from, to]);
+  }, [dq, type, from, to]);
 
   const stats = useApi<Stats>("/tracking/stats");
   const list = useApi<Project[]>(`/tracking${qs ? `?${qs}` : ""}`);
@@ -55,9 +61,9 @@ function Dashboard() {
           Array.from({ length: 5 }, (_, i) => <div key={i} className="stat skeleton" style={{ height: 84 }} />)
         ) : (
           <>
-            <Stat label="Total Requests" value={stats.data.total} />
-            <Stat label="Roadshow" value={stats.data.roadshow} />
-            <Stat label="Signage" value={stats.data.signage} />
+            <StatCard label="Total Requests" value={stats.data.total} active={!type} onClick={() => setType("")} title="Show all requests" />
+            <StatCard label="Roadshow" value={stats.data.roadshow} active={type === "ROADSHOW"} onClick={() => setType(type === "ROADSHOW" ? "" : "ROADSHOW")} />
+            <StatCard label="Signage" value={stats.data.signage} active={type === "SIGNAGE"} onClick={() => setType(type === "SIGNAGE" ? "" : "SIGNAGE")} />
             <Stat label="Pending Budget" value={stats.data.pendingBudget} accent />
             <Stat label="Budget Created" value={stats.data.budgetCreated} />
           </>
@@ -86,13 +92,13 @@ function Dashboard() {
             onChange={(e) => setQ(e.target.value)}
             aria-label="Search"
           />
-          <select value={type} onChange={(e) => setType(e.target.value)} aria-label="Project type">
+          <Select value={type} onChange={(e) => setType(e.target.value)} aria-label="Project type">
             <option value="">All types</option>
             <option value="ROADSHOW">Roadshow</option>
             <option value="SIGNAGE">Signage</option>
-          </select>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="Created from" />
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label="Created to" />
+          </Select>
+          <DateInput value={from} onChange={(e) => setFrom(e.target.value)} aria-label="Created from" />
+          <DateInput value={to} onChange={(e) => setTo(e.target.value)} aria-label="Created to" />
           {(q || type || from || to) && (
             <button
               className="btn btn-ghost"
@@ -115,7 +121,7 @@ function Dashboard() {
         ) : rows.length === 0 ? (
           <EmptyState title="No tracking requests found" hint="Create your first request or adjust the filters." />
         ) : (
-          <div className="table-wrap">
+          <TableWrap>
             <table className="table">
               <thead>
                 <tr>
@@ -137,7 +143,7 @@ function Dashboard() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableWrap>
         )}
       </div>
 

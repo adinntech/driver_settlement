@@ -8,6 +8,7 @@ import { EmptyState, ErrorState, Skeleton, StatusBadge } from "@/components/ui/U
 import { ApprovalBadge } from "@/components/ApprovalTimeline";
 import { statusOf } from "@/utils/budgetDescribe";
 import { useApi } from "@/hooks/useApi";
+import { useDebounce } from "@/hooks/useDebounce";
 import type { Project } from "@/types/domain";
 import { formatDate, formatDateTime, labelize } from "@/utils/format";
 
@@ -27,7 +28,8 @@ export function overallStatus(p: Project): "PENDING" | "CREATED" | "PARTIAL" {
 function Projects() {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState<string | null>(null);
-  const list = useApi<Project[]>(`/tracking${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ""}`);
+  const dq = useDebounce(q); // one request after typing pauses, not one per keystroke
+  const list = useApi<Project[]>(`/tracking${dq.trim() ? `?q=${encodeURIComponent(dq.trim())}` : ""}`);
 
   return (
     <>

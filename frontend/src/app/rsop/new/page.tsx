@@ -1,5 +1,7 @@
 "use client";
 
+import Select from "@/components/ui/Select";
+import DateInput from "@/components/ui/DateInput";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type ReactNode } from "react";
 import AppShell from "@/components/AppShell";
@@ -274,12 +276,12 @@ function RoadshowForm() {
           <Field label="Model / Backlit or Nonlit"><input {...bind("model")} placeholder="LED Van" /></Field>
           <Field label="Innovation Model / LED Model"><input {...bind("innovationModel")} placeholder="2 Sided LED Van" /></Field>
           <Field label="Sunday Halt"><YesNo value={f.sundayHalt} onChange={(v) => set("sundayHalt", v)} /></Field>
-          <Field label="Start Date *"><input type="date" {...bind("startDate")} /></Field>
-          <Field label="End Date *"><input type="date" {...bind("endDate")} /></Field>
+          <Field label="Start Date *"><DateInput {...bind("startDate")} /></Field>
+          <Field label="End Date *"><DateInput {...bind("endDate")} /></Field>
           <Field label="Number of Days" hint={f.sundayHalt === "YES" ? "Sundays excluded" : "Sundays included"}>
             <input value={days ? `${days} day${days > 1 ? "s" : ""}` : ""} readOnly />
           </Field>
-          <Field label="Reporting Date *"><input type="date" {...bind("reportingDate")} /></Field>
+          <Field label="Reporting Date *"><DateInput {...bind("reportingDate")} /></Field>
         </div>
       )}
 
@@ -304,18 +306,18 @@ function RoadshowForm() {
           <Field label="Promoter"><YesNo value={f.promoter} onChange={(v) => set("promoter", v)} /></Field>
           <Field label="Leaflet / Carry Material"><YesNo value={f.leaflet} onChange={(v) => set("leaflet", v)} /></Field>
           <Field label="Photos">
-            <select {...bind("photos")}>
+            <Select {...bind("photos")}>
               <option value="REQUIRED">Required</option>
               <option value="NOT_REQUIRED">Not required</option>
-            </select>
+            </Select>
           </Field>
           <Field label="Other Elements" wide><input {...bind("otherElements")} placeholder="As per design, all required elements" /></Field>
-          <Field label="Arts File Date"><input type="date" {...bind("artsFileDate")} /></Field>
-          <Field label="Printing Date"><input type="date" {...bind("printingDate")} /></Field>
-          <Field label="Fabrication Date"><input type="date" {...bind("fabricationDate")} /></Field>
-          <Field label="Vehicle Delivery Date"><input type="date" {...bind("vehicleDeliveryDate")} /></Field>
-          <Field label="Supporting Date"><input type="date" {...bind("supportingDate")} /></Field>
-          <Field label="Invoice Date"><input type="date" {...bind("invoiceDate")} /></Field>
+          <Field label="Arts File Date"><DateInput {...bind("artsFileDate")} /></Field>
+          <Field label="Printing Date"><DateInput {...bind("printingDate")} /></Field>
+          <Field label="Fabrication Date"><DateInput {...bind("fabricationDate")} /></Field>
+          <Field label="Vehicle Delivery Date"><DateInput {...bind("vehicleDeliveryDate")} /></Field>
+          <Field label="Supporting Date"><DateInput {...bind("supportingDate")} /></Field>
+          <Field label="Invoice Date"><DateInput {...bind("invoiceDate")} /></Field>
         </div>
       )}
 
@@ -391,14 +393,14 @@ function SignageForm() {
         </div>
       )}
       <div className="grid">
-        <Field label="Date"><input type="date" {...bind("date")} /></Field>
+        <Field label="Date"><DateInput {...bind("date")} /></Field>
         <Field label="Client *"><input {...bind("client")} placeholder="DALMIA" /></Field>
         <Field label="Job Sheet Number *"><input {...bind("jobSheetNumber")} placeholder="22070649" /></Field>
         <Field label="Location *"><input {...bind("location")} placeholder="RAMNAD" /></Field>
         <Field label="Number of Vehicles *"><input type="number" min={1} max={100} {...bind("numberOfVehicles")} /></Field>
         <Field label="Arrived Budget (₹)"><input type="number" min={0} {...bind("arrivedBudget")} placeholder="25000" /></Field>
-        <Field label="From Date *"><input type="date" {...bind("fromDate")} /></Field>
-        <Field label="To Date *"><input type="date" {...bind("toDate")} /></Field>
+        <Field label="From Date *"><DateInput {...bind("fromDate")} /></Field>
+        <Field label="To Date *"><DateInput {...bind("toDate")} /></Field>
         <Field label="Total Days of Work" hint={manualDays ? "Manual value" : "Auto-calculated"}>
           <div className="inline">
             <input

@@ -1,0 +1,32 @@
+{
+  "console": [
+    {
+      "t": "00:13",
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+      "url": "http://localhost:3100/rbp/budget?vehicle=6b05f2cc7d08425f7741598f"
+    }
+  ],
+  "network": [],
+  "steps": [
+    "[00:04] BUD-01 START RBP: budget with Completion Date before On Road Date is refused",
+    "[00:09] BUD-01 · budget page: /rbp/budget?vehicle=6b05f2cc7d08425f7741598f",
+    "[00:13] BUD-01 · message: ",
+    "[00:13] BUD-01 FAIL — Failure: inconsistent dates accepted",
+    "[00:13] BUD-02 START RBP: valid budget V1 is saved and submitted to RSOM",
+    "[00:13] BUD-02 FAIL — Failure: field \"On Road Date\" (date) not found",
+    "[00:13] BUD-03 START RBP cannot approve its own budget (API call from the RBP session is refused)",
+    "[00:13] BUD-03 · POST /approvals/:id/approve as RBP -> HTTP 403",
+    "[00:13] BUD-03 PASS — POST /approvals/:id/approve as RBP -> HTTP 403",
+    "[00:17] BUD-04 START RSOM: rejection without reason / fields is refused",
+    "[00:19] BUD-04 FAIL — Failure: clickText: no \"Review Budget\" in table tbody tr a",
+    "[00:19] BUD-05 START RSOM: rejects V1 with a reason and a field-level comment",
+    "[00:19] BUD-05 FAIL — Failure: No element found for selector: .modal textarea",
+    "[00:24] BUD-06 START RBP: rejection is visible; resubmit is disabled until a new version is saved",
+    "[00:24] BUD-06 FAIL — Failure: Protocol error (Page.navigate): Invalid parameters Failed to deserialize params.url - BINDINGS: mandatory field missing at position 50",
+    "[00:24] BUD-07 START RBP: edits the rejected field, saves V2 and resubmits",
+    "[00:24] BUD-07 FAIL — Failure: clickText: no \"Edit Budget\" in button.btn-primary",
+    "[00:29] BUD-08 START RSOM: sees V1 vs V2 comparison and approves V2",
+    "[00:32] BUD-08 FAIL — Failure: clickText: no \"Review Budget\" in table tbody tr a"
+  ]
+}

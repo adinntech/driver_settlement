@@ -1,5 +1,6 @@
 "use client";
 
+import Select from "@/components/ui/Select";
 import { useState } from "react";
 import { Modal } from "@/components/ui/Ui";
 import { useToast } from "@/context/ToastContext";
@@ -90,9 +91,9 @@ function RejectDialog({ d, onClose, onDone }: { d: ClearanceDetail; onClose: () 
     <Modal title="Reject Vehicle & Driver" onClose={onClose}>
       <p className="muted">{d.trackupNumber} · {d.vehicleNo} · {d.driverNumber} {d.driverName} · Outstanding advance: {outstandingText(d.financial.outstanding, d.financial.status)}</p>
       <label className="field"><span>Rejection Reason *</span>
-        <select value={reason} onChange={(e) => setReason(e.target.value)} aria-label="Rejection reason">
+        <Select value={reason} onChange={(e) => setReason(e.target.value)} aria-label="Rejection reason">
           <option value="">Select a reason</option>{REJECTION_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
-        </select>
+        </Select>
       </label>
       <label className="field"><span>Additional Remarks{reason === "Other" ? " *" : " (optional)"}</span>
         <textarea value={remarks} maxLength={MAX_REMARKS} rows={3} onChange={(e) => setRemarks(e.target.value)} aria-label="Additional remarks" />

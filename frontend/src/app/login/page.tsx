@@ -46,7 +46,8 @@ export default function LoginPage() {
   return (
     <div className="login-page">
       <section className="login-hero">
-        <span className="brand-mark big">DS</span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/adinn-logo.png" alt="Adinn Advertising Services" className="login-logo" />
         <h1>Driver Settlement</h1>
         <p>Roadshow &amp; Signage job tracking and budget management in one place.</p>
         <BackendStatus />
@@ -57,7 +58,7 @@ export default function LoginPage() {
 
         {roles.error && <div className="alert">{roles.error}</div>}
         <div className="role-grid">
-          {(["RSOP", "RBP", "RSOM", "RSA"] as RoleKey[]).map((r) => (
+          {(["RSOP", "RBP", "RSOM", "RSA", "RSO"] as RoleKey[]).filter((r) => !roles.data || roles.data[r]).map((r) => (
             <button
               key={r}
               type="button"

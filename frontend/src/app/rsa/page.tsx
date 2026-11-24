@@ -43,7 +43,7 @@ function History() {
         <Link href="/rsa/new" className="btn btn-primary">+ Enter Payment</Link>
       </div>
 
-      {summary.data && <RsaSummaryCards s={summary.data} />}
+      {summary.data && <RsaSummaryCards s={summary.data} paymentFor={f.paymentFor} onPick={(v) => change({ ...f, paymentFor: v })} />}
 
       <div className="card">
         <RsaHistoryFilters f={f} onChange={change} onClear={() => change(emptyHistoryFilters())} createdByOptions={summary.data?.createdByOptions ?? []} />

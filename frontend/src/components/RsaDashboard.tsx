@@ -1,5 +1,8 @@
 "use client";
 
+import TableWrap from "@/components/ui/TableWrap";
+import Select from "@/components/ui/Select";
+import DateInput from "@/components/ui/DateInput";
 import Link from "next/link";
 import { formatDate, formatDateTime, formatInr } from "@/utils/format";
 import { PAYMENT_FOR_LABEL, PAYMENT_STATUS_LABEL, dash, type RsaProjectRow } from "@/utils/rsa";
@@ -31,14 +34,14 @@ export function RsaFilters({ f, onChange, onClear }: { f: RsaFilterState; onChan
   return (
     <div className="filters-vehicle rsa-filters">
       <input className="search-wide" placeholder="Search trackup no, client / billing name, vehicle no, driver name" value={f.q} aria-label="Mass search" onChange={(e) => set("q", e.target.value)} />
-      <select value={f.projectType} aria-label="Project type filter" onChange={(e) => set("projectType", e.target.value)}>
+      <Select value={f.projectType} aria-label="Project type filter" onChange={(e) => set("projectType", e.target.value)}>
         <option value="">All types</option><option value="ROADSHOW">Roadshow</option><option value="SIGNAGE">Signage</option>
-      </select>
-      <select value={f.paymentStatus} aria-label="Payment status filter" onChange={(e) => set("paymentStatus", e.target.value)}>
+      </Select>
+      <Select value={f.paymentStatus} aria-label="Payment status filter" onChange={(e) => set("paymentStatus", e.target.value)}>
         <option value="">All payment status</option><option value="PENDING">{PAYMENT_STATUS_LABEL.PENDING}</option><option value="ENTERED">{PAYMENT_STATUS_LABEL.ENTERED}</option>
-      </select>
-      <label className="rsa-range">Campaign from<input type="date" value={f.from} aria-label="Date range from" onChange={(e) => set("from", e.target.value)} /></label>
-      <label className="rsa-range">to<input type="date" value={f.to} min={f.from || undefined} aria-label="Date range to" onChange={(e) => set("to", e.target.value)} /></label>
+      </Select>
+      <label className="rsa-range">Campaign from<DateInput value={f.from} aria-label="Date range from" onChange={(e) => set("from", e.target.value)} /></label>
+      <label className="rsa-range">to<DateInput value={f.to} min={f.from || undefined} aria-label="Date range to" onChange={(e) => set("to", e.target.value)} /></label>
       <button type="button" className="btn btn-outline" onClick={onClear} disabled={!rsaFiltersActive(f)}>Clear Filters</button>
     </div>
   );
@@ -46,7 +49,7 @@ export function RsaFilters({ f, onChange, onClear }: { f: RsaFilterState; onChan
 
 export function RsaProjectTable({ items, actionLabel = "Payment Entry" }: { items: RsaProjectRow[]; actionLabel?: string }) {
   return (
-    <div className="table-wrap">
+    <TableWrap>
       <table className="table rsa-list">
         <thead><tr>{RSA_COLUMNS.map((c, i) => <th key={i}>{c}</th>)}</tr></thead>
         <tbody>
@@ -70,6 +73,6 @@ export function RsaProjectTable({ items, actionLabel = "Payment Entry" }: { item
           ))}
         </tbody>
       </table>
-    </div>
+    </TableWrap>
   );
 }

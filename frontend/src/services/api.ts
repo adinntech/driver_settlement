@@ -3,6 +3,54 @@ import type { ApiResponse } from "@/types/api";
 
 const TOKEN_KEY = "ds_token";
 
+// ---------------------------------------------------------------- shared GET cache + in-flight dedupe + activity
+/**
+ * One cache for every screen: a GET result is kept per path so revisiting a page (or going back) shows data instantly while it is
+ * revalidated, and identical requests made at the same moment share one network call. Any successful POST / PUT / DELETE, and every
+ * login / logout, clears the cache, so a change made by one role is never hidden behind a stale copy.
+ */
+const cache = new Map<string, { data: unknown; at: number }>();
+const inflight = new Map<string, Promise<unknown>>();
+let generation = 0; // bumped on invalidation: a response that started before it is not cached
+let activeRequests = 0;
+const activityListeners = new Set<() => void>();
+const emitActivity = () => activityListeners.forEach((l) => l());
+export const apiActivity = {
+  subscribe: (l: () => void) => {
+    activityListeners.add(l);
+    return () => {
+      activityListeners.delete(l);
+    };
+  },
+  count: () => activeRequests,
+};
+export const cachedGet = (path: string): unknown => cache.get(path)?.data;
+export function invalidateApiCache(): void {
+  cache.clear();
+  inflight.clear();
+  generation++;
+}
+/** GET through the shared cache: concurrent callers share one request; the result is cached for the next render. */
+export function fetchCached<T>(path: string): Promise<T> {
+  const running = inflight.get(path);
+  if (running) return running as Promise<T>;
+  const gen = generation;
+  activeRequests++;
+  emitActivity();
+  const p: Promise<T> = request<T>(path)
+    .then((data) => {
+      if (gen === generation) cache.set(path, { data, at: Date.now() });
+      return data;
+    })
+    .finally(() => {
+      if (inflight.get(path) === p) inflight.delete(path);
+      activeRequests--;
+      emitActivity();
+    });
+  inflight.set(path, p);
+  return p;
+}
+
 export const tokenStore = {
   get: (): string | null => {
     try {
@@ -12,6 +60,7 @@ export const tokenStore = {
     }
   },
   set: (t: string) => {
+    invalidateApiCache(); // a new login never sees the previous user's data
     try {
       localStorage.setItem(TOKEN_KEY, t);
     } catch {
@@ -19,6 +68,7 @@ export const tokenStore = {
     }
   },
   clear: () => {
+    invalidateApiCache();
     try {
       localStorage.removeItem(TOKEN_KEY);
     } catch {
@@ -65,6 +115,7 @@ export async function request<T>(path: string, method = "GET", body?: unknown): 
     /* non-JSON error body */
   }
   if (!res.ok || !json?.success) throw new ApiError(json?.message ?? `Request failed (${res.status})`, res.status);
+  if (method !== "GET") invalidateApiCache(); // a change: every list / detail revalidates from the server
   return json.data as T;
 }
 
@@ -90,6 +141,7 @@ export async function uploadAttachment(file: File): Promise<import("@/types/doma
     /* non-JSON error body */
   }
   if (!res.ok || !json?.success || !json.data) throw new ApiError(json?.message ?? `Upload failed (${res.status})`, res.status);
+  invalidateApiCache();
   return json.data;
 }
 
@@ -112,5 +164,35 @@ export async function uploadDeliveryPhoto(clearanceId: string, kind: "speedomete
     /* non-JSON error body */
   }
   if (!res.ok || !json?.success || !json.data) throw new ApiError(json?.message ?? `Upload failed (${res.status})`, res.status);
+  invalidateApiCache();
   return json.data;
+}
+
+/** Authenticated file download (Excel / PDF). Saves the response under the server's file name. */
+export async function downloadFile(path: string, fallbackName: string): Promise<void> {
+  const token = tokenStore.get();
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, { cache: "no-store", headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  } catch {
+    throw new ApiError("Cannot reach the server. Please check your connection.", 0);
+  }
+  if (!res.ok) {
+    let msg = `Download failed (${res.status})`;
+    try {
+      msg = ((await res.json()) as ApiResponse).message ?? msg;
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new ApiError(msg, res.status);
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

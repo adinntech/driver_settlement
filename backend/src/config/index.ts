@@ -18,7 +18,11 @@ export const config = {
     { role: "RBP", username: process.env.RBP_USERNAME, password: process.env.RBP_PASSWORD },
     { role: "RSOM", username: process.env.RSOM_USERNAME, password: process.env.RSOM_PASSWORD },
     { role: "RSA", username: process.env.RSA_USERNAME, password: process.env.RSA_PASSWORD },
+    { role: "RSO", username: process.env.RSO_USERNAME, password: process.env.RSO_PASSWORD },
   ],
+  // Encrypts bank account numbers and payment transaction details at rest (AES-256-GCM). Falls back to a key derived from JWT_SECRET.
+  dataKey: process.env.DATA_ENCRYPTION_KEY ?? "",
+  companyName: process.env.COMPANY_NAME ?? "ADINN",
   storage: {
     // local = backend/public folder, space = cloud bucket (DigitalOcean Spaces)
     type: (process.env.STORAGE_TYPE ?? "local").trim().toLowerCase(),

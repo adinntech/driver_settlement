@@ -1,0 +1,92 @@
+{
+  "console": [
+    {
+      "t": "00:28",
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "url": "http://localhost:3100/login"
+    },
+    {
+      "t": "00:32",
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "url": "http://localhost:3100/login"
+    },
+    {
+      "t": "00:53",
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "url": "http://localhost:3100/rsa/settlements"
+    }
+  ],
+  "network": [
+    {
+      "t": "00:28",
+      "status": 401,
+      "method": "POST",
+      "url": "/auth/login",
+      "body": "{\"success\":false,\"message\":\"Invalid credentials\",\"data\":null}"
+    },
+    {
+      "t": "00:32",
+      "status": 401,
+      "method": "POST",
+      "url": "/auth/login",
+      "body": "{\"success\":false,\"message\":\"Invalid credentials\",\"data\":null}"
+    },
+    {
+      "t": "00:53",
+      "status": 401,
+      "method": "GET",
+      "url": "/auth/me",
+      "body": "{\"success\":false,\"message\":\"Invalid or expired token\",\"data\":null}"
+    }
+  ],
+  "steps": [
+    "[00:01] AUTH-01 START Login screen lists all five roles (RSO separate from RSOM)",
+    "[00:01] AUTH-01 · role cards: RSOP Login, RBP Login, RSOM Login, RSA Login, RSO Login",
+    "[00:02] AUTH-01 PASS — role cards: RSOP Login, RBP Login, RSOM Login, RSA Login, RSO Login",
+    "[00:02] AUTH-LOGIN-RSOP START RSOP logs in with valid credentials and lands on its home",
+    "[00:06] AUTH-LOGIN-RSOP · url after login: http://localhost:3100/rsop",
+    "[00:06] AUTH-LOGIN-RSOP · sidebar: Dashboard | New Tracking Request",
+    "[00:06] AUTH-LOGIN-RSOP PASS — sidebar: Dashboard | New Tracking Request",
+    "[00:06] AUTH-LOGIN-RBP START RBP logs in with valid credentials and lands on its home",
+    "[00:11] AUTH-LOGIN-RBP · url after login: http://localhost:3100/rbp",
+    "[00:11] AUTH-LOGIN-RBP · sidebar: Projects & Budgets | Vehicle Management | Driver Management | Vehicle Deliver | Driver Payments",
+    "[00:11] AUTH-LOGIN-RBP PASS — sidebar: Projects & Budgets | Vehicle Management | Driver Management | Vehicle Deliver | Driver Payments",
+    "[00:11] AUTH-LOGIN-RSOM START RSOM logs in with valid credentials and lands on its home",
+    "[00:15] AUTH-LOGIN-RSOM · url after login: http://localhost:3100/rsom",
+    "[00:15] AUTH-LOGIN-RSOM · sidebar: Budget Approvals | Daily Payment Approvals",
+    "[00:16] AUTH-LOGIN-RSOM PASS — sidebar: Budget Approvals | Daily Payment Approvals",
+    "[00:16] AUTH-LOGIN-RSA START RSA logs in with valid credentials and lands on its home",
+    "[00:20] AUTH-LOGIN-RSA · url after login: http://localhost:3100/rsa",
+    "[00:20] AUTH-LOGIN-RSA · sidebar: Payments | Vehicle & Driver Clearance | Driver Payments | Settlement Payments | Payment Completed",
+    "[00:20] AUTH-LOGIN-RSA PASS — sidebar: Payments | Vehicle & Driver Clearance | Driver Payments | Settlement Payments | Payment Completed",
+    "[00:20] AUTH-LOGIN-RSO START RSO logs in with valid credentials and lands on its home",
+    "[00:25] AUTH-LOGIN-RSO · url after login: http://localhost:3100/rso",
+    "[00:25] AUTH-LOGIN-RSO · sidebar: Final Settlement Approvals | Reports",
+    "[00:25] AUTH-LOGIN-RSO PASS — sidebar: Final Settlement Approvals | Reports",
+    "[00:25] AUTH-02 START Wrong password is rejected with a clear message",
+    "[00:30] AUTH-02 · message: Invalid credentials",
+    "[00:30] AUTH-02 PASS — message: Invalid credentials",
+    "[00:30] AUTH-03 START Valid credentials used with the wrong role card are rejected",
+    "[00:34] AUTH-03 · message: Invalid credentials",
+    "[00:34] AUTH-03 PASS — message: Invalid credentials",
+    "[00:34] AUTH-04 START Empty username / password cannot be submitted",
+    "[00:37] AUTH-04 · username field valid=false, still on http://localhost:3100/login",
+    "[00:37] AUTH-04 PASS — username field valid=false, still on http://localhost:3100/login",
+    "[00:37] AUTH-05 START A signed-in role cannot open another role's pages (redirected to own home)",
+    "[00:43] AUTH-05 · /rbp/payments -> /rsom",
+    "[00:45] AUTH-05 · /rsa/settlements -> /rsom",
+    "[00:47] AUTH-05 · /rso/reports -> /rsom",
+    "[00:48] AUTH-05 · /rsop/new -> /rsom",
+    "[00:48] AUTH-05 PASS — /rsop/new -> /rsom",
+    "[00:48] AUTH-06 START Expired / tampered session token sends the user back to login",
+    "[00:55] AUTH-06 · after tampered token: /login",
+    "[00:55] AUTH-06 PASS — after tampered token: /login",
+    "[00:55] AUTH-07 START Refresh keeps the session; logout ends it and protected pages need login again",
+    "[01:01] AUTH-07 · after sign out: /login",
+    "[01:03] AUTH-07 · browser Back after logout: /login",
+    "[01:03] AUTH-07 PASS — browser Back after logout: /login"
+  ]
+}

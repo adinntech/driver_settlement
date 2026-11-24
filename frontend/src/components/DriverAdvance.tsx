@@ -1,5 +1,6 @@
 "use client";
 
+import TableWrap from "@/components/ui/TableWrap";
 import { useRef, useState } from "react";
 import { Modal, EmptyState, ErrorState, Skeleton } from "@/components/ui/Ui";
 import { useToast } from "@/context/ToastContext";
@@ -87,7 +88,7 @@ export function AdvanceHistoryTable({
         <EmptyState title="No advances yet" hint="Submitted advances for this driver appear here." />
       ) : (
         <>
-          <div className="table-wrap">
+          <TableWrap>
             <table className="table">
               <thead>
                 <tr><th>Date &amp; Time</th><th>Working Days</th><th>Per Day Salary</th><th>Eligible Amount</th><th>Advance Amount</th><th>Submitted By</th><th>Actions</th></tr>
@@ -106,7 +107,7 @@ export function AdvanceHistoryTable({
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableWrap>
           <div className="pager">
             <span className="muted">{total} advance(s) · page {page} of {pages}</span>
             <div className="inline">

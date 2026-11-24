@@ -1,5 +1,7 @@
 "use client";
 
+import TableWrap from "@/components/ui/TableWrap";
+import Select from "@/components/ui/Select";
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { EmptyState, ErrorState, Modal, Skeleton } from "@/components/ui/Ui";
 import { useToast } from "@/context/ToastContext";
@@ -82,7 +84,7 @@ export function PaymentHistoryTable({
         <EmptyState title="No payments yet" hint="Saved payment entries for this project appear here, latest first." />
       ) : (
         <>
-          <div className="table-wrap">
+          <TableWrap>
             <table className="table">
               <thead>
                 <tr><th>Date</th><th>Payment No</th><th>Amount</th><th>Mode</th><th>Bank Name</th><th>Cheque/DD No</th><th>Entered</th><th>By</th><th>Status</th><th /></tr>
@@ -118,7 +120,7 @@ export function PaymentHistoryTable({
                 })}
               </tbody>
             </table>
-          </div>
+          </TableWrap>
           <div className="pager">
             <span className="muted">{total} payment(s) · page {page} of {pages}</span>
             <div className="inline">
@@ -179,9 +181,9 @@ export function PaymentFormPanel({
       <Errors list={errors} />
       <div className="rsa-grid">
         <label>Payment For</label>
-        <select value={ctx.paymentFor} disabled aria-label="Payment For">
+        <Select value={ctx.paymentFor} disabled aria-label="Payment For">
           {options.paymentFor.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
-        </select>
+        </Select>
         <label>From Date</label>
         <div className="rsa-ro" data-field="from-date">{ctx.campaignFromDate ? formatDate(ctx.campaignFromDate) : "—"}</div>
         <label>To Date</label>
@@ -195,10 +197,10 @@ export function PaymentFormPanel({
       <h4 className="sub">Diesel Cost</h4>
       <div className="rsa-diesel">
         <input className="num-input" inputMode="decimal" placeholder="0.00" value={diesel.amount} aria-label="Diesel Cost" onChange={(e) => setDiesel({ ...diesel, amount: sanitizeAmount(e.target.value) })} />
-        <select value={diesel.mode} aria-label="Diesel payment mode" onChange={(e) => setDiesel({ ...diesel, mode: e.target.value })}>
+        <Select value={diesel.mode} aria-label="Diesel payment mode" onChange={(e) => setDiesel({ ...diesel, mode: e.target.value })}>
           <option value="">Mode</option>
           {options.dieselPaymentModes.map((m) => <option key={m} value={m}>{m}</option>)}
-        </select>
+        </Select>
         <input placeholder="Reference" maxLength={120} value={diesel.reference} aria-label="Diesel reference" onChange={(e) => setDiesel({ ...diesel, reference: e.target.value.replace(/[<>]/g, "") })} />
         <button type="button" className="btn btn-outline" onClick={addDiesel} aria-label="Add diesel entry">+</button>
       </div>
@@ -226,9 +228,9 @@ export function PaymentFormPanel({
 
       <h4 className="sub">Other Expenses</h4>
       <div className="rsa-exp-entry" data-section="expense-entry">
-        <select value={draft.optionKey} aria-label="Expense Category" onChange={(e) => setDraft({ ...draft, optionKey: e.target.value })}>
+        <Select value={draft.optionKey} aria-label="Expense Category" onChange={(e) => setDraft({ ...draft, optionKey: e.target.value })}>
           {options.expenseOptions.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
-        </select>
+        </Select>
         <input placeholder={opt?.descriptionRequired ? "Description (required)" : "Description"} maxLength={200} value={draft.description} aria-label="Expense Description"
           onChange={(e) => setDraft({ ...draft, description: e.target.value.replace(/[<>]/g, "") })} />
         <input className="num-input" inputMode="decimal" placeholder="Amount" value={draft.amount} aria-label="Expense Amount" onChange={(e) => setDraft({ ...draft, amount: sanitizeAmount(e.target.value) })} />

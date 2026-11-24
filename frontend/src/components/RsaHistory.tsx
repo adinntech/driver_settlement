@@ -1,5 +1,9 @@
 "use client";
 
+import TableWrap from "@/components/ui/TableWrap";
+import StatCard from "@/components/ui/StatCard";
+import Select from "@/components/ui/Select";
+import DateInput from "@/components/ui/DateInput";
 import { EmptyState } from "@/components/ui/Ui";
 import { formatDate, formatDateTime } from "@/utils/format";
 import { PAYMENT_FOR_LABEL, dash, money, type RsaPaymentRow } from "@/utils/rsa";
@@ -12,7 +16,7 @@ export interface RsaSummary {
 const inr = (n: number) => money(Math.round(n * 100));
 
 /** Totals straight from the database (all payment entries, not just the page on screen). */
-export function RsaSummaryCards({ s }: { s: RsaSummary }) {
+export function RsaSummaryCards({ s, paymentFor, onPick }: { s: RsaSummary; paymentFor?: string; onPick?: (paymentFor: string) => void }) {
   const cards: [string, string, string | null][] = [
     ["Total Payment Entries", String(s.totalEntries), null],
     ["Total Payment Amount", inr(s.totalAmount), null],
@@ -23,11 +27,11 @@ export function RsaSummaryCards({ s }: { s: RsaSummary }) {
   return (
     <div className="stat-row" data-section="summary-cards">
       {cards.map(([label, value, sub]) => (
-        <div key={label} className={`stat${label === "Total Payment Amount" ? " accent" : ""}`}>
-          <span>{label}</span>
-          <strong className="rsa-stat-value">{value}</strong>
-          {sub && <small className="muted">{sub}</small>}
-        </div>
+        <StatCard key={label} label={label} value={value} sub={sub} valueClassName="rsa-stat-value" tone={label === "Total Payment Amount" ? "accent" : undefined}
+          active={onPick ? (label === "Roadshow Payments" ? paymentFor === "ROADSHOW" : label === "Signage Payments" ? paymentFor === "SIGNAGE" : label === "Total Payment Entries" ? !paymentFor : false) : undefined}
+          onClick={onPick && ["Total Payment Entries", "Roadshow Payments", "Signage Payments"].includes(label)
+            ? () => onPick(label === "Roadshow Payments" ? (paymentFor === "ROADSHOW" ? "" : "ROADSHOW") : label === "Signage Payments" ? (paymentFor === "SIGNAGE" ? "" : "SIGNAGE") : "")
+            : undefined} />
       ))}
     </div>
   );
@@ -59,19 +63,19 @@ export function RsaHistoryFilters({
     <div className="filters-vehicle rsa-filters" data-section="history-filters">
       <input className="search-wide" aria-label="Mass search" value={f.q} onChange={(e) => set("q", e.target.value)}
         placeholder="Search payment no, trackup / PIF / bill no, client, vehicle, driver, expense description" />
-      <select value={f.paymentFor} aria-label="Payment For filter" onChange={(e) => set("paymentFor", e.target.value)}>
+      <Select value={f.paymentFor} aria-label="Payment For filter" onChange={(e) => set("paymentFor", e.target.value)}>
         <option value="">All</option><option value="ROADSHOW">Roadshow</option><option value="SIGNAGE">Signage</option>
-      </select>
-      <select value={f.paymentStatus} aria-label="Payment status filter" onChange={(e) => set("paymentStatus", e.target.value)}>
+      </Select>
+      <Select value={f.paymentStatus} aria-label="Payment status filter" onChange={(e) => set("paymentStatus", e.target.value)}>
         <option value="">All status</option><option value="ENTERED">Entered</option>
-      </select>
+      </Select>
       {createdByOptions.length > 1 && (
-        <select value={f.createdBy} aria-label="Created by filter" onChange={(e) => set("createdBy", e.target.value)}>
+        <Select value={f.createdBy} aria-label="Created by filter" onChange={(e) => set("createdBy", e.target.value)}>
           <option value="">All users</option>{createdByOptions.map((u) => <option key={u} value={u}>{u}</option>)}
-        </select>
+        </Select>
       )}
-      <label className="rsa-range">Payment date from<input type="date" value={f.from} aria-label="Payment date from" onChange={(e) => set("from", e.target.value)} /></label>
-      <label className="rsa-range">to<input type="date" value={f.to} min={f.from || undefined} aria-label="Payment date to" onChange={(e) => set("to", e.target.value)} /></label>
+      <label className="rsa-range">Payment date from<DateInput value={f.from} aria-label="Payment date from" onChange={(e) => set("from", e.target.value)} /></label>
+      <label className="rsa-range">to<DateInput value={f.to} min={f.from || undefined} aria-label="Payment date to" onChange={(e) => set("to", e.target.value)} /></label>
       <button type="button" className="btn btn-outline" onClick={onClear} disabled={!historyFiltersActive(f)}>Clear Filters</button>
     </div>
   );
@@ -83,7 +87,7 @@ export const HISTORY_COLUMNS = [
 
 export function RsaHistoryTable({ items, onView }: { items: RsaPaymentRow[]; onView: (p: RsaPaymentRow) => void }) {
   return (
-    <div className="table-wrap">
+    <TableWrap>
       <table className="table rsa-hist" data-section="history-table">
         <thead><tr>{HISTORY_COLUMNS.map((c) => <th key={c}>{c === "Actions" ? <span className="sr-only">{c}</span> : c}</th>)}</tr></thead>
         <tbody>
@@ -105,7 +109,7 @@ export function RsaHistoryTable({ items, onView }: { items: RsaPaymentRow[]; onV
           ))}
         </tbody>
       </table>
-    </div>
+    </TableWrap>
   );
 }
 
@@ -126,9 +130,9 @@ export function RsaPager({
       <div className="inline">
         <label className="muted size-pick">
           Rows
-          <select value={limit} onChange={(e) => onLimit(Number(e.target.value))} aria-label="Page size">
+          <Select value={limit} onChange={(e) => onLimit(Number(e.target.value))} aria-label="Page size">
             {[10, 25, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
+          </Select>
         </label>
         <button className="btn btn-outline btn-sm" disabled={page <= 1} onClick={() => onPage(page - 1)}>Previous</button>
         <button className="btn btn-outline btn-sm" disabled={page >= pages} onClick={() => onPage(page + 1)}>Next</button>

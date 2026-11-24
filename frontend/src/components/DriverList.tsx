@@ -1,5 +1,7 @@
 "use client";
 
+import TableWrap from "@/components/ui/TableWrap";
+import Select from "@/components/ui/Select";
 import Link from "next/link";
 import { DriverAvBadge } from "@/components/DriverAvailability";
 import type { Driver } from "@/types/domain";
@@ -11,7 +13,7 @@ export const DRIVER_LIST_COLUMNS = ["Driver No", "Driver Name", "Mobile No", "Dr
 
 export function DriverTable({ items }: { items: Driver[] }) {
   return (
-    <div className="table-wrap">
+    <TableWrap>
       <table className="table drv-list">
         <thead>
           <tr>{DRIVER_LIST_COLUMNS.map((c) => <th key={c}>{c === "Actions" ? <span className="sr-only">{c}</span> : c}</th>)}</tr>
@@ -36,7 +38,7 @@ export function DriverTable({ items }: { items: Driver[] }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </TableWrap>
   );
 }
 
@@ -48,10 +50,10 @@ export function DriverFilters({
     <div className="filters-vehicle drv-filters">
       <input className="search-wide" placeholder="Search driver no, name, mobile, licence no, project name, trackup / PIF no" value={q}
         onChange={(e) => onQ(e.target.value)} aria-label="Mass search" />
-      <select value={status} onChange={(e) => onStatus(e.target.value)} aria-label="Availability status filter">
+      <Select value={status} onChange={(e) => onStatus(e.target.value)} aria-label="Availability status filter">
         <option value="">All</option>
         {DRIVER_AV_STATUSES.map((s) => <option key={s} value={s}>{DRIVER_AV_LABEL[s]}</option>)}
-      </select>
+      </Select>
       <button type="button" className="btn btn-outline" onClick={onClear} disabled={!q && !status}>Clear Filters</button>
     </div>
   );

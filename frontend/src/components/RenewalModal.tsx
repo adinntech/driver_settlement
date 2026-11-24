@@ -1,5 +1,7 @@
 "use client";
 
+import Select from "@/components/ui/Select";
+import DateInput from "@/components/ui/DateInput";
 import { useRef, useState } from "react";
 import { Modal } from "@/components/ui/Ui";
 import { uploadAttachment } from "@/services/api";
@@ -65,14 +67,14 @@ export default function RenewalModal({ initialType, initial, onSave, onClose }: 
       {error && <div className="alert" role="alert">{error}</div>}
       <div className="rm-form">
         <label htmlFor="rn-type">Renewal Type</label>
-        <select id="rn-type" value={type} onChange={(e) => setType(e.target.value as DocKey)} disabled={busy}>
+        <Select id="rn-type" value={type} onChange={(e) => setType(e.target.value as DocKey)} disabled={busy}>
           {DOC_KEYS.map((k) => (
             <option key={k} value={k}>{DOC_LABEL[k]}</option>
           ))}
-        </select>
+        </Select>
 
         <label htmlFor="rn-date">Next Renewal Date</label>
-        <input id="rn-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} disabled={busy} />
+        <DateInput id="rn-date" value={date} onChange={(e) => setDate(e.target.value)} disabled={busy} />
 
         <label htmlFor="rn-file">Attachments</label>
         <div className="rm-file">

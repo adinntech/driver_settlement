@@ -1,5 +1,6 @@
 "use client";
 
+import TableWrap from "@/components/ui/TableWrap";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
@@ -100,11 +101,11 @@ function DeliveryHistory({ rows }: { rows: NonNullable<ClearanceDetail["delivery
   return (
     <section className="card cl-section" data-section="delivery-history">
       <h3>Vehicle Delivery History</h3>
-      <div className="table-wrap">
+      <TableWrap>
         <table className="table"><thead><tr><th>Version</th><th>Activity</th><th>User</th><th>Date &amp; Time</th></tr></thead>
           <tbody>{rows.map((h) => (<tr key={h._id}><td>V{h.version}</td><td>{DELIVERY_ACTION[h.action] ?? h.action}</td><td>{h.username} ({h.role})</td><td>{formatDateTime(h.at)}</td></tr>))}</tbody>
         </table>
-      </div>
+      </TableWrap>
     </section>
   );
 }

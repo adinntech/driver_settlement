@@ -8,6 +8,7 @@ import type { RoleKey } from "@/types/domain";
 import { homeFor } from "@/utils/budgetDescribe";
 import NotificationBell from "@/components/NotificationBell";
 import { Skeleton } from "@/components/ui/Ui";
+import { useNetworkActivity } from "@/hooks/useApi";
 
 // Modular navigation: add an entry per role to onboard new modules.
 export const NAV: Record<RoleKey, { href: string; label: string }[]> = {
@@ -20,11 +21,22 @@ export const NAV: Record<RoleKey, { href: string; label: string }[]> = {
     { href: "/rbp/vehicles", label: "Vehicle Management" },
     { href: "/rbp/drivers", label: "Driver Management" },
     { href: "/rbp/on-road", label: "Vehicle Deliver" },
+    { href: "/rbp/payments", label: "Driver Payments" },
   ],
-  RSOM: [{ href: "/rsom", label: "Budget Approvals" }],
+  RSOM: [
+    { href: "/rsom", label: "Budget Approvals" },
+    { href: "/rsom/payments", label: "Daily Payment Approvals" },
+  ],
   RSA: [
     { href: "/rsa", label: "Payments" },
     { href: "/rsa/clearance", label: "Vehicle & Driver Clearance" },
+    { href: "/rsa/driver-payments", label: "Driver Payments" },
+    { href: "/rsa/settlements", label: "Settlement Payments" },
+    { href: "/rsa/settlements/completed", label: "Payment Completed" },
+  ],
+  RSO: [
+    { href: "/rso", label: "Final Settlement Approvals" },
+    { href: "/rso/reports", label: "Reports" },
   ],
 };
 
@@ -40,6 +52,7 @@ export default function AppShell({ role, children }: { role: RoleKey; children: 
   const router = useRouter();
   const path = usePathname();
   const [open, setOpen] = useState(false);
+  const busy = useNetworkActivity() > 0;
 
   useEffect(() => {
     if (!ready) return;
@@ -58,7 +71,8 @@ export default function AppShell({ role, children }: { role: RoleKey; children: 
     <div className="app">
       <aside className={`sidebar${open ? " open" : ""}`}>
         <div className="brand">
-          <span className="brand-mark">DS</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/adinn-logo.png" alt="Adinn Advertising Services" className="brand-logo" />
           <div>
             <strong>Driver Settlement</strong>
             <small>{role} workspace</small>
@@ -96,6 +110,7 @@ export default function AppShell({ role, children }: { role: RoleKey; children: 
         </div>
       </aside>
       {open && <div className="scrim" onClick={() => setOpen(false)} />}
+      <div className={`net-bar${busy ? " is-on" : ""}`} role="progressbar" aria-hidden={!busy} aria-label="Loading" />
       <div className="content">
         <header className="topbar">
           <button className="icon-btn menu-btn" onClick={() => setOpen(true)} aria-label="Open menu">

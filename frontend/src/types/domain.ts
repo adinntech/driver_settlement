@@ -1,4 +1,4 @@
-export type RoleKey = "RSOP" | "RBP" | "RSOM" | "RSA";
+export type RoleKey = "RSOP" | "RBP" | "RSOM" | "RSA" | "RSO";
 export type ProjectType = "ROADSHOW" | "SIGNAGE";
 
 export interface RoleInfo {

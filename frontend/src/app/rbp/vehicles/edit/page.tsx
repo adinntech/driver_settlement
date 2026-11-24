@@ -1,5 +1,7 @@
 "use client";
 
+import Select from "@/components/ui/Select";
+import DateInput from "@/components/ui/DateInput";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useRef, useState, type ReactNode } from "react";
@@ -119,15 +121,15 @@ function VehicleForm({ vehicle }: { vehicle: Vehicle | null }) {
               <input value={f.model} maxLength={80} onChange={(e) => set("model", e.target.value)} />
             </Row>
             <Row label="Type" req>
-              <select value={f.type} onChange={(e) => set("type", e.target.value)}>
+              <Select value={f.type} onChange={(e) => set("type", e.target.value)}>
                 {VEHICLE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
+              </Select>
             </Row>
             <Row label="Year Of Manufacture" req>
               <input className="num-input" inputMode="numeric" value={f.yearOfManufacture} onChange={(e) => set("yearOfManufacture", sanitizeYear(e.target.value))} placeholder="YYYY" />
             </Row>
             <Row label="Purchase Date" req>
-              <input type="date" value={f.purchaseDate} max={today} onChange={(e) => set("purchaseDate", e.target.value)} />
+              <DateInput value={f.purchaseDate} max={today} onChange={(e) => set("purchaseDate", e.target.value)} />
             </Row>
             <Row label="Current Running" req>
               <input className="num-input" inputMode="decimal" value={f.currentRunning} onChange={(e) => set("currentRunning", sanitizeRunning(e.target.value))} placeholder="0" />
@@ -141,23 +143,23 @@ function VehicleForm({ vehicle }: { vehicle: Vehicle | null }) {
               <input value={f.batteryStatus} maxLength={80} onChange={(e) => set("batteryStatus", e.target.value)} />
             </Row>
             <Row label="Oil Top Up On">
-              <input type="date" value={f.oilTopUpOn} min={f.purchaseDate || undefined} onChange={(e) => set("oilTopUpOn", e.target.value)} />
+              <DateInput value={f.oilTopUpOn} min={f.purchaseDate || undefined} onChange={(e) => set("oilTopUpOn", e.target.value)} />
             </Row>
             <Row label="Grease Packing On">
-              <input type="date" value={f.greasePackingOn} min={f.purchaseDate || undefined} onChange={(e) => set("greasePackingOn", e.target.value)} />
+              <DateInput value={f.greasePackingOn} min={f.purchaseDate || undefined} onChange={(e) => set("greasePackingOn", e.target.value)} />
             </Row>
             <Row label="General Check Up On">
-              <input type="date" value={f.generalCheckUpOn} min={f.purchaseDate || undefined} onChange={(e) => set("generalCheckUpOn", e.target.value)} />
+              <DateInput value={f.generalCheckUpOn} min={f.purchaseDate || undefined} onChange={(e) => set("generalCheckUpOn", e.target.value)} />
             </Row>
             <Row label="Total Running" req>
               <input className="num-input" inputMode="decimal" value={f.totalRunning} onChange={(e) => set("totalRunning", sanitizeRunning(e.target.value))} placeholder="0" />
             </Row>
             {!isDraft && (
               <Row label="Record Status">
-                <select value={status} onChange={(e) => setStatus(e.target.value)}>
+                <Select value={status} onChange={(e) => setStatus(e.target.value)}>
                   <option value="ACTIVE">Active</option>
                   <option value="INACTIVE">Inactive</option>
-                </select>
+                </Select>
               </Row>
             )}
           </div>

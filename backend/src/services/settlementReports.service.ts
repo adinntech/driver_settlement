@@ -1,0 +1,330 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import ExcelJS from "exceljs";
+import PDFDocument from "pdfkit";
+import { fileURLToPath } from "node:url";
+import { config } from "../config/index.js";
+import { Driver } from "../models/Driver.js";
+import { SettlementPayment } from "../models/SettlementPayment.js";
+import { VehicleAllotment } from "../models/VehicleAllotment.js";
+import { Budget } from "../models/Budget.js";
+import { AppError } from "../utils/AppError.js";
+import { maskTail, unseal } from "../utils/secureField.js";
+import { DEDUCTION_KEYS, DEDUCTION_LABELS } from "../utils/settlement.js";
+import { CATEGORY_LABEL, ensureDseNumber } from "./settlement.service.js";
+
+/** Reports (RSO), the RSA accounts export and the individual driver salary PDF. All read the saved records only. */
+
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+const validId = (id: unknown): id is string => typeof id === "string" && /^[a-f0-9]{24}$/i.test(id);
+const ist = (d: Date | string | null | undefined) => (d ? new Date(new Date(d).getTime() + 5.5 * 3600_000).toISOString().slice(0, 16).replace("T", " ") : "");
+const dmy = (ymd: string | null | undefined) => (ymd && YMD.test(ymd) ? `${ymd.slice(8, 10)}-${ymd.slice(5, 7)}-${ymd.slice(0, 4)}` : ymd ?? "");
+
+// ------------------------------------------------------------------------------------------------ report data
+
+export interface ReportQuery { from?: string; to?: string; category?: string; q?: string }
+
+export async function approvedPaymentRows(q: ReportQuery, statuses: string[] = ["APPROVED", "COMPLETED"]) {
+  const filter: any = { status: { $in: statuses } };
+  if (q.category === "DAILY" || q.category === "FINAL") filter.category = q.category;
+  if (q.from && YMD.test(q.from)) filter.toDate = { $gte: q.from };
+  if (q.to && YMD.test(q.to)) filter.fromDate = { $lte: q.to };
+  const rows: any[] = await SettlementPayment.find(filter).sort({ reviewedAt: -1 }).limit(5000).lean();
+  return rows.map((p) => ({
+    _id: String(p._id), paymentNumber: p.paymentNumber, category: CATEGORY_LABEL[p.category as "DAILY" | "FINAL"], status: p.status, trackupNumber: p.trackupNumber, jsNumber: p.jsNumber ?? "",
+    clientName: p.clientName ?? "", projectType: p.projectType, vehicleNo: p.vehicleNo ?? "", driverNumber: p.driverNumber ?? "", driverName: p.driverName ?? "", fromDate: p.fromDate, toDate: p.toDate,
+    amount: p.amount, accountName: p.bank?.accountName ?? "", bankName: p.bank?.bankName ?? "", ifscCode: p.bank?.ifscCode ?? "", accountNumber: p.bank?.accountMasked ?? "",
+    submittedBy: p.submittedBy, approvedBy: p.reviewedBy ?? "", approvedAt: p.reviewedAt ?? null,
+    referenceNumber: p.completion?.referenceNumber ?? "", paymentDate: p.completion?.paymentDate ?? "", paymentMode: p.completion?.paymentMode ?? "",
+  }));
+}
+
+export async function driverListRows(q: ReportQuery) {
+  const filter: any = {};
+  if (q.q?.trim()) {
+    const rx = new RegExp(q.q.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    filter.$or = [{ driverNumber: rx }, { driverName: rx }, { mobileNumber: rx }];
+  }
+  const [drivers, finals]: any[] = await Promise.all([
+    Driver.find(filter).sort({ driverNumber: 1 }).limit(5000).lean(),
+    SettlementPayment.aggregate([{ $match: { category: "FINAL", status: { $in: ["APPROVED", "COMPLETED"] } } }, { $group: { _id: "$driver", n: { $sum: 1 }, net: { $sum: "$amount" } } }]),
+  ]);
+  const byDriver = new Map(finals.map((f: any) => [String(f._id), f]));
+  return drivers.map((d: any) => ({
+    _id: String(d._id), driverNumber: d.driverNumber, driverName: d.driverName, driverType: d.driverType ?? "", mobileNumber: d.mobileNumber ?? "", status: d.status ?? "",
+    availability: d.availability?.status ?? "", perDaySalary: d.salary ?? 0, bankName: d.bankName ?? "", ifscCode: d.ifscCode ?? "", accountNumber: maskTail(d.accountNumber) ?? "",
+    settlements: (byDriver.get(String(d._id)) as any)?.n ?? 0, settledAmount: Math.round(((byDriver.get(String(d._id)) as any)?.net ?? 0) * 100) / 100,
+  }));
+}
+
+export async function vehicleMisRows(q: ReportQuery) {
+  const match: any = {};
+  if (q.from && YMD.test(q.from)) match.createdAt = { $gte: new Date(`${q.from}T00:00:00+05:30`) };
+  if (q.to && YMD.test(q.to)) match.createdAt = { ...(match.createdAt ?? {}), $lte: new Date(`${q.to}T23:59:59.999+05:30`) };
+  const allots: any[] = await VehicleAllotment.find(match).sort({ createdAt: -1 }).limit(5000).lean();
+  const tvIds = [...new Set(allots.map((a) => String(a.trackingVehicle)))];
+  const [budgets, pays]: any[] = await Promise.all([
+    Budget.find({ vehicle: { $in: tvIds } }).select("vehicle total approvalStatus approvedVersion").lean(),
+    SettlementPayment.aggregate([
+      { $match: { allotment: { $in: allots.map((a) => a._id) }, status: { $in: ["APPROVED", "COMPLETED", "PENDING"] } } },
+      { $group: { _id: { a: "$allotment", c: "$category", s: "$status" }, amount: { $sum: "$amount" }, n: { $sum: 1 } } },
+    ]),
+  ]);
+  const bud = new Map(budgets.map((b: any) => [String(b.vehicle), b]));
+  const sum = (a: any, c: string, s: string[]) => pays.filter((p: any) => String(p._id.a) === String(a._id) && p._id.c === c && s.includes(p._id.s)).reduce((t: number, p: any) => t + p.amount, 0);
+  return allots.map((a) => {
+    const b: any = bud.get(String(a.trackingVehicle));
+    const daily = sum(a, "DAILY", ["APPROVED", "COMPLETED"]);
+    const final = sum(a, "FINAL", ["APPROVED", "COMPLETED"]);
+    return {
+      _id: String(a._id), trackupNumber: a.trackupNumber, pifNumber: a.pifNumber ?? "", clientName: a.clientName ?? "", projectType: a.projectType ?? "", vehicleNo: a.vehicleNo ?? "",
+      driverNumber: a.driverNumber ?? "", driverName: a.driverName ?? "", allotmentStatus: a.status, allottedAt: a.allottedAt ?? a.createdAt ?? null,
+      budgetStatus: b?.approvalStatus ?? "", approvedBudget: b?.approvalStatus === "APPROVED" ? b.total : 0,
+      dailyApproved: Math.round(daily * 100) / 100, dailyPending: Math.round(sum(a, "DAILY", ["PENDING"]) * 100) / 100, finalApproved: Math.round(final * 100) / 100,
+      totalPaid: Math.round((daily + final) * 100) / 100, budgetBalance: b?.approvalStatus === "APPROVED" ? Math.round((b.total - daily - final) * 100) / 100 : 0,
+    };
+  });
+}
+
+export async function driverSalaryRows(q: ReportQuery) {
+  const filter: any = { category: "FINAL", status: { $in: ["APPROVED", "COMPLETED"] } };
+  if (q.from && YMD.test(q.from)) filter.toDate = { $gte: q.from };
+  if (q.to && YMD.test(q.to)) filter.fromDate = { $lte: q.to };
+  const rows: any[] = await SettlementPayment.find(filter).sort({ reviewedAt: -1 }).limit(5000).lean();
+  return rows.map((p) => ({
+    _id: String(p._id), paymentNumber: p.paymentNumber, status: p.status, driverNumber: p.driverNumber, driverName: p.driverName, vehicleNo: p.vehicleNo, trackupNumber: p.trackupNumber, jsNumber: p.jsNumber ?? "",
+    clientName: p.clientName ?? "", fromDate: p.fromDate, toDate: p.toDate, onRoadDays: p.data?.days?.onRoadDays ?? 0, onRoadSundays: p.data?.days?.onRoadSundays ?? 0, haltDays: p.data?.days?.haltDays ?? 0,
+    earnings: p.data?.earningsTotal ?? 0, approvedExpenses: p.data?.approvedTotal ?? 0, gross: p.data?.gross ?? 0, totalDeduction: p.data?.totalDeduction ?? 0, suspenseAmount: p.data?.suspenseAmount ?? 0,
+    netAmount: p.amount, approvedBy: p.reviewedBy ?? "", approvedAt: p.reviewedAt ?? null, referenceNumber: p.completion?.referenceNumber ?? "",
+  }));
+}
+
+// ------------------------------------------------------------------------------------------------ Excel
+
+interface Col { header: string; key: string; width?: number; money?: boolean; date?: boolean }
+
+async function workbook(title: string, cols: Col[], rows: Record<string, unknown>[]): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = `${config.companyName} Driver Settlement`;
+  wb.created = new Date();
+  const ws = wb.addWorksheet(title.slice(0, 31), { views: [{ state: "frozen", ySplit: 1 }] });
+  ws.columns = cols.map((c) => ({ header: c.header, key: c.key, width: c.width ?? Math.max(12, c.header.length + 2) }));
+  for (const r of rows) ws.addRow(Object.fromEntries(cols.map((c) => [c.key, c.date ? ist(r[c.key] as any) : r[c.key] ?? ""])));
+  const head = ws.getRow(1);
+  head.font = { bold: true, color: { argb: "FFFFFFFF" } };
+  head.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F3A5F" } };
+  cols.forEach((c, i) => {
+    if (c.money) ws.getColumn(i + 1).numFmt = "#,##0.00";
+  });
+  const moneyCols = cols.filter((c) => c.money);
+  if (rows.length && moneyCols.length) {
+    const total = ws.addRow(Object.fromEntries([[cols[0].key, "TOTAL"], ...moneyCols.map((c) => [c.key, Math.round(rows.reduce((s, r) => s + (Number(r[c.key]) || 0), 0) * 100) / 100])]));
+    total.font = { bold: true };
+  }
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: cols.length } };
+  return Buffer.from(await wb.xlsx.writeBuffer());
+}
+
+export const PAYMENT_COLS: Col[] = [
+  { header: "Payment No", key: "paymentNumber", width: 20 }, { header: "Category", key: "category", width: 24 }, { header: "Status", key: "status" }, { header: "Trackup No", key: "trackupNumber", width: 16 },
+  { header: "JS No", key: "jsNumber" }, { header: "Client", key: "clientName", width: 24 }, { header: "Project Type", key: "projectType" }, { header: "Vehicle No", key: "vehicleNo", width: 14 },
+  { header: "Driver Code", key: "driverNumber" }, { header: "Driver Name", key: "driverName", width: 22 }, { header: "From", key: "fromDate" }, { header: "To", key: "toDate" },
+  { header: "Amount (INR)", key: "amount", money: true, width: 16 }, { header: "Account Name", key: "accountName", width: 22 }, { header: "Bank", key: "bankName", width: 22 }, { header: "IFSC", key: "ifscCode" },
+  { header: "Account Number", key: "accountNumber", width: 20 }, { header: "Submitted By", key: "submittedBy" }, { header: "Approved By", key: "approvedBy" }, { header: "Approved On", key: "approvedAt", date: true, width: 18 },
+];
+
+/** RSA accounts export: approved entries only, with the full account number (the file goes to the accounts team). */
+export async function accountsExport(rows: any[]) {
+  const shaped = rows.map((p) => ({
+    paymentNumber: p.paymentNumber, category: CATEGORY_LABEL[p.category as "DAILY" | "FINAL"], status: p.status, trackupNumber: p.trackupNumber, jsNumber: p.jsNumber ?? "", clientName: p.clientName ?? "",
+    projectType: p.projectType, vehicleNo: p.vehicleNo ?? "", driverNumber: p.driverNumber ?? "", driverName: p.driverName ?? "", fromDate: p.fromDate, toDate: p.toDate, amount: p.amount,
+    accountName: p.bank?.accountName ?? "", bankName: p.bank?.bankName ?? "", ifscCode: p.bank?.ifscCode ?? "", accountNumber: unseal(p.bank?.account) ?? p.bank?.accountMasked ?? "",
+    submittedBy: p.submittedBy, approvedBy: p.reviewedBy ?? "", approvedAt: p.reviewedAt,
+  }));
+  return workbook("Approved Payments", PAYMENT_COLS, shaped);
+}
+
+export async function reportWorkbook(kind: string, q: ReportQuery): Promise<{ name: string; buffer: Buffer }> {
+  if (kind === "approved-payments") {
+    const rows = await approvedPaymentRows(q);
+    return { name: "approved-payment-report", buffer: await workbook("Approved Payments", [...PAYMENT_COLS, { header: "Payment Ref", key: "referenceNumber", width: 18 }, { header: "Paid On", key: "paymentDate" }, { header: "Mode", key: "paymentMode" }], rows) };
+  }
+  if (kind === "vehicle-mis")
+    return { name: "vehicle-mis-report", buffer: await workbook("Vehicle MIS", [
+      { header: "Trackup No", key: "trackupNumber", width: 16 }, { header: "PIF No", key: "pifNumber", width: 16 }, { header: "Client", key: "clientName", width: 24 }, { header: "Type", key: "projectType" },
+      { header: "Vehicle No", key: "vehicleNo", width: 14 }, { header: "Driver Code", key: "driverNumber" }, { header: "Driver", key: "driverName", width: 22 }, { header: "Allotment", key: "allotmentStatus" },
+      { header: "Allotted On", key: "allottedAt", date: true, width: 18 }, { header: "Budget Status", key: "budgetStatus" }, { header: "Approved Budget", key: "approvedBudget", money: true },
+      { header: "Daily Approved", key: "dailyApproved", money: true }, { header: "Daily Pending", key: "dailyPending", money: true }, { header: "Final Approved", key: "finalApproved", money: true },
+      { header: "Total Paid", key: "totalPaid", money: true }, { header: "Budget Balance", key: "budgetBalance", money: true },
+    ], await vehicleMisRows(q)) };
+  if (kind === "driver-list")
+    return { name: "driver-list-report", buffer: await workbook("Drivers", [
+      { header: "Driver Code", key: "driverNumber" }, { header: "Driver Name", key: "driverName", width: 22 }, { header: "Type", key: "driverType", width: 18 }, { header: "Mobile", key: "mobileNumber", width: 16 },
+      { header: "Status", key: "status" }, { header: "Availability", key: "availability", width: 16 }, { header: "Per Day Salary", key: "perDaySalary", money: true }, { header: "Bank", key: "bankName", width: 22 },
+      { header: "IFSC", key: "ifscCode" }, { header: "Account (masked)", key: "accountNumber", width: 20 }, { header: "Settlements", key: "settlements" }, { header: "Settled Amount", key: "settledAmount", money: true },
+    ], await driverListRows(q)) };
+  if (kind === "driver-salary")
+    return { name: "driver-salary-report", buffer: await workbook("Driver Salary", [
+      { header: "DSE No", key: "paymentNumber", width: 20 }, { header: "Status", key: "status" }, { header: "Driver Code", key: "driverNumber" }, { header: "Driver", key: "driverName", width: 22 },
+      { header: "Vehicle No", key: "vehicleNo", width: 14 }, { header: "Trackup No", key: "trackupNumber", width: 16 }, { header: "JS No", key: "jsNumber" }, { header: "Client", key: "clientName", width: 24 },
+      { header: "From", key: "fromDate" }, { header: "To", key: "toDate" }, { header: "On Road Days", key: "onRoadDays" }, { header: "On Road Sundays", key: "onRoadSundays" }, { header: "Halt Days", key: "haltDays" },
+      { header: "Earnings", key: "earnings", money: true }, { header: "Approved Expenses", key: "approvedExpenses", money: true }, { header: "Gross", key: "gross", money: true },
+      { header: "Total Deduction", key: "totalDeduction", money: true }, { header: "Suspense", key: "suspenseAmount", money: true }, { header: "Net Amount", key: "netAmount", money: true },
+      { header: "Approved By", key: "approvedBy" }, { header: "Approved On", key: "approvedAt", date: true, width: 18 }, { header: "Payment Ref", key: "referenceNumber", width: 18 },
+    ], await driverSalaryRows(q)) };
+  throw new AppError("Unknown report", 404);
+}
+
+// ------------------------------------------------------------------------------------------------ individual driver salary PDF
+
+const LOGO = fileURLToPath(new URL("../../assets/adinn-logo.png", import.meta.url)); // transparent, cropped only (aspect ratio kept)
+const num2 = (n: unknown) => (Number(n) || 0).toFixed(2);
+const plain = (n: unknown) => String(Math.round((Number(n) || 0) * 100) / 100);
+const dmySlash = (d: Date | string | null | undefined) => {
+  if (!d) return "";
+  const x = new Date(new Date(d).getTime() + 5.5 * 3600_000).toISOString().slice(0, 10);
+  return `${x.slice(8, 10)}/${x.slice(5, 7)}/${x.slice(0, 4)}`;
+};
+
+/**
+ * One A4 statement per approved final settlement (never for a pending / rejected one). The layout follows the
+ * "ROADSHOW - DRIVER SALARY AND EXPENSES" reference: same sections, labels, order and positions.
+ */
+export async function driverSalaryPdf(id: string): Promise<{ name: string; buffer: Buffer }> {
+  if (!validId(id)) throw new AppError("Invalid payment id", 400);
+  const found: any = await SettlementPayment.findById(id).select("category status").lean();
+  if (!found || found.category !== "FINAL") throw new AppError("Final settlement not found", 404);
+  if (found.status !== "APPROVED" && found.status !== "COMPLETED") throw new AppError("The salary statement is available only after RSO approves the final settlement", 409);
+  const dseNo = await ensureDseNumber(id);
+  const p: any = await SettlementPayment.findById(id).lean();
+  const d = p.data;
+
+  const doc = new PDFDocument({ size: "A4", margin: 0, info: { Title: `Driver Salary and Expenses - DSE ${dseNo}`, Author: config.companyName } });
+  const chunks: Buffer[] = [];
+  doc.on("data", (c: Buffer) => chunks.push(c));
+  const done = new Promise<Buffer>((res) => doc.on("end", () => res(Buffer.concat(chunks))));
+
+  const L = 39;
+  const R = 559;
+  const FS = 7.5;
+  const GREY = "#BDBDBD";
+  const txt = (s: string, x: number, y: number, o: { w?: number; align?: "left" | "right" | "center"; bold?: boolean; size?: number } = {}) => {
+    doc.font(o.bold ? "Helvetica-Bold" : "Helvetica").fontSize(o.size ?? FS).fillColor("#000");
+    doc.text(s, x, y, { width: o.w, align: o.align ?? "left", lineBreak: !!o.w && o.align === undefined, height: o.w ? 30 : undefined });
+  };
+  const fit = (s: string, w: number, bold = false, size = FS) => {
+    doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(size);
+    if (doc.widthOfString(s) <= w) return s;
+    let t = s;
+    while (t.length > 1 && doc.widthOfString(`${t}…`) > w) t = t.slice(0, -1);
+    return `${t.trimEnd()}…`;
+  };
+  const hline = (x1: number, x2: number, y: number, w = 0.7, color = "#000") => doc.moveTo(x1, y).lineTo(x2, y).lineWidth(w).strokeColor(color).stroke();
+
+  // ---- header: title block left, logo right
+  const title = p.projectType === "SIGNAGE" ? "SIGNAGE" : "ROADSHOW";
+  txt(title, L, 56, { bold: true, size: 12 });
+  txt("DRIVER SALARY AND EXPENSES", L, 70, { size: 10 });
+  txt(`DSE No. : ${dseNo}`, L, 82, { size: 6.5 });
+  const logoW = 140; // height follows the image's own aspect ratio
+  doc.image(LOGO, R - logoW - 8, 48, { width: logoW });
+  txt(`Accounted on : ${dmySlash(p.reviewedAt)}`, 360, 116, { size: 6.5, w: R - 360, align: "right" });
+  txt(`Accounted by : ${p.reviewedBy ?? "__________________"}`, 360, 126, { size: 6.5, w: R - 360, align: "right" });
+  hline(L, 337, 137);
+
+  // ---- campaign details (two columns)
+  txt("Campaign Details", L, 150, { bold: true });
+  const lv = (label: string, value: string, x: number, y: number, vx: number, vw: number) => {
+    txt(label, x, y);
+    doc.font("Helvetica").fontSize(FS).text(value || "", vx, y, { width: vw, lineBreak: true, height: 18 });
+  };
+  lv("JS No.", d.jsNumber ?? p.jsNumber ?? p.trackupNumber, L, 165, 113, 170);
+  lv("Client", p.clientName ?? "", L, 177, 113, 120);
+  lv("Campaign Period", `From: ${dmy(d.campaignFrom)}   To: ${dmy(d.campaignTo)}`, L, 203, 113, 180);
+  lv("Total Days", String(d.totalDays ?? ""), L, 218, 113, 170);
+  lv("Location", fit(d.location ?? "", 170), L, 231, 113, 170);
+  lv("Vehicle No.", p.vehicleNo ?? "", 299, 165, 387, 170);
+  lv("Driver Name", p.driverName ?? "", 299, 177, 387, 170);
+  lv("Driver Code", p.driverNumber ?? "", 299, 218, 387, 170);
+  lv("Reporting Date", dmy(d.reportingDate), 299, 231, 387, 170);
+  lv("Estimated KM Per Day", plain(d.estimatedKmPerDay), 299, 244, 387, 170);
+
+  // ---- ON-ROAD EXPENSES bar
+  doc.rect(L, 259, R - L, 15).fillAndStroke(GREY, "#888");
+  txt("ON-ROAD EXPENSES", L, 263.5, { bold: true, w: R - L, align: "center" });
+
+  // ---- fuel consumption + on-road budget estimation
+  txt("Fuel Consumption", L, 284, { bold: true });
+  txt("On-Road budget Estimation", 330, 284, { bold: true });
+  const fy = [299, 311.5, 324, 336.5];
+  [["Fixed Mileage", plain(d.fuel.fixedMileage), `Diesel Cost : ${plain(d.fuel.dieselCost)}`], ["Opening KM", plain(d.fuel.openingKm), `IOCL card usage in Ltrs : ${plain(d.fuel.ioclLitres)}`],
+    ["Closing KM", plain(d.fuel.closingKm), `IOCL card usage in KMs : ${plain(d.fuel.ioclKms)}`], ["Result", plain(d.fuel.resultKm), `Variation in ltrs : ${plain(d.fuel.variationLitres)}`]]
+    .forEach(([a, b, c], i) => { txt(a, L, fy[i]); txt(b, 124, fy[i]); txt(c, 175, fy[i]); });
+  [["Estimated Budget", num2(d.estimate.estimatedBudget)], ["Estimated KM", plain(d.estimate.estimatedKm)], ["Estimated Fuel", num2(d.estimate.estimatedFuel)]]
+    .forEach(([a, b], i) => { txt(a, 330, fy[i]); txt(b, 452, fy[i]); });
+
+  // ---- ON-ROAD EXPENSES DETAILS table
+  txt("ON-ROAD EXPENSES DETAILS", L, 351, { bold: true, w: R - L, align: "center" });
+  const cols = [L, 163, 305, 376, 473, R];
+  const heads = ["Description", "Others", "Cost", "Days/Hrs/Kms/QTY", "Approved Amount"];
+  const RH = 12.6;
+  let y = 362;
+  doc.rect(L, y, R - L, RH + 1).fillAndStroke("#D9D9D9", "#000");
+  heads.forEach((h, i) => txt(h, cols[i], y + 3.3, { bold: true, w: cols[i + 1] - cols[i], align: "center" }));
+  y += RH + 1;
+  const rows: string[][] = [
+    ...d.earnings.filter((e: any) => e.amount > 0).map((e: any) => [e.key === "salary" ? "On Road Days" : e.label, "", plain(e.rate), plain(e.quantity), num2(e.amount)]),
+    ...d.expenses.map((e: any) => [e.label, e.description ?? "", plain(e.cost), plain(e.quantity), num2(e.approved)]),
+  ];
+  for (const r of rows) {
+    if (y > 742) { doc.addPage(); y = 50; }
+    doc.rect(L, y, R - L, RH).lineWidth(0.5).strokeColor("#000").stroke();
+    for (let i = 1; i < cols.length - 1; i++) doc.moveTo(cols[i], y).lineTo(cols[i], y + RH).stroke();
+    r.forEach((v, i) => {
+      const w = cols[i + 1] - cols[i] - 6;
+      const right = i >= 2;
+      txt(fit(v, w), cols[i] + 3, y + 3, { w, align: right ? "right" : "left" });
+    });
+    y += RH;
+  }
+  // vertical borders of the header row
+  for (let i = 1; i < cols.length - 1; i++) doc.moveTo(cols[i], 362).lineTo(cols[i], 362 + RH + 1).lineWidth(0.5).stroke();
+
+  // ---- totals and deductions (right side, as in the reference)
+  if (y > 640) { doc.addPage(); y = 50; }
+  const LBL_R = 473;
+  const VAL_R = R - 1;
+  const step = 16.2;
+  y += 5;
+  txt("Gross :", 300, y, { bold: true, w: LBL_R - 300 - 8, align: "right" }); txt(num2(d.gross), LBL_R, y, { bold: true, w: VAL_R - LBL_R, align: "right" });
+  y += step;
+  for (const k of DEDUCTION_KEYS) {
+    txt(`${DEDUCTION_LABELS[k]} :`, 233, y);
+    txt(num2(d.deductions[k]), LBL_R, y, { w: VAL_R - LBL_R, align: "right" });
+    y += step;
+  }
+  txt("Total Deduction :", 233, y, { bold: true }); txt(num2(d.totalDeduction), LBL_R, y, { bold: true, w: VAL_R - LBL_R, align: "right" });
+  y += step;
+  txt("SUSPENSE AMOUNT :", 300, y, { bold: true, w: LBL_R - 300 - 8, align: "right" }); txt(num2(d.suspenseAmount), LBL_R, y, { bold: true, w: VAL_R - LBL_R, align: "right" });
+  y += step;
+  txt("NET AMOUNT :", 300, y, { bold: true, w: LBL_R - 300 - 8, align: "right" }); txt(num2(d.netAmount), LBL_R, y, { bold: true, w: VAL_R - LBL_R, align: "right" });
+
+  // ---- signatures + driver bank strip
+  y += 38;
+  hline(78, 259, y, 0.5, "#777");
+  hline(358, 500, y, 0.5, "#777");
+  txt("Authorised Signatory", 78, y + 8, { bold: true, w: 181, align: "center" });
+  txt("Prepared & Verified", 358, y + 8, { bold: true, w: 142, align: "center" });
+  hline(52, 549, y + 20, 0.8);
+  const by = y + 22;
+  doc.rect(52, by, 497, 13).fill(GREY);
+  const bc = [52, 130, 245, 352, 478, 549];
+  const bank = [p.driverNumber ?? "", p.bank?.accountName || p.driverName || "", unseal(p.bank?.account) ?? p.bank?.accountMasked ?? "", p.bank?.bankName ?? "", p.bank?.ifscCode ?? ""];
+  ["Driver Code", "Driver Name", "Account No", "Bank", "IFC Code"].forEach((h, i) => {
+    txt(h, bc[i], by + 3.5, { bold: true, w: bc[i + 1] - bc[i], align: "center" });
+    txt(fit(String(bank[i]).toUpperCase(), bc[i + 1] - bc[i] - 4, true), bc[i], by + 18, { bold: true, w: bc[i + 1] - bc[i], align: "center" });
+  });
+
+  doc.end();
+  const safe = `${p.driverNumber ?? "driver"}-DSE-${dseNo}`.replace(/[^A-Za-z0-9-]+/g, "_");
+  return { name: `driver-salary-${safe}.pdf`, buffer: await done };
+}

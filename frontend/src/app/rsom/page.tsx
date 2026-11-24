@@ -1,5 +1,8 @@
 "use client";
 
+import TableWrap from "@/components/ui/TableWrap";
+import Select from "@/components/ui/Select";
+import DateInput from "@/components/ui/DateInput";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
@@ -7,6 +10,7 @@ import { ApprovalBadge } from "@/components/ApprovalTimeline";
 import CopyButton from "@/components/ui/CopyButton";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/Ui";
 import { useApi } from "@/hooks/useApi";
+import StatCard from "@/components/ui/StatCard";
 import { statusOf } from "@/utils/budgetDescribe";
 import { formatDate, formatDateTime, formatInr } from "@/utils/format";
 
@@ -81,10 +85,10 @@ function Dashboard() {
           Array.from({ length: 4 }, (_, i) => <div key={i} className="stat skeleton" style={{ height: 84 }} />)
         ) : (
           <>
-            <div className="stat"><span>Total Budgets Received</span><strong>{stats.data.total}</strong></div>
-            <div className={`stat${stats.data.pending ? " accent" : ""}`}><span>Pending Approval</span><strong>{stats.data.pending}</strong></div>
-            <div className="stat stat-ok"><span>Approved Budgets</span><strong>{stats.data.approved}</strong></div>
-            <div className="stat stat-bad"><span>Rejected Budgets</span><strong>{stats.data.rejected}</strong></div>
+            <StatCard label="Total Budgets Received" value={stats.data.total} active={!f.status} onClick={() => set("status", "")} title="Show all budgets" />
+            {([["PENDING", "Pending Approval", stats.data.pending, stats.data.pending ? "accent" : undefined], ["APPROVED", "Approved Budgets", stats.data.approved, "stat-ok"], ["REJECTED", "Rejected Budgets", stats.data.rejected, "stat-bad"]] as const).map(([k, label, n, tone]) => (
+              <StatCard key={k} label={label} value={n} tone={tone} active={f.status === k} onClick={() => set("status", f.status === k ? "" : k)} />
+            ))}
           </>
         )}
       </div>
@@ -94,18 +98,18 @@ function Dashboard() {
           <input placeholder="Client / Billing name" value={f.client} onChange={(e) => set("client", e.target.value)} aria-label="Client name" />
           <input placeholder="Trackup number" value={f.trackup} onChange={(e) => set("trackup", e.target.value)} aria-label="Trackup number" />
           <input placeholder="PIF number" value={f.pif} onChange={(e) => set("pif", e.target.value)} aria-label="PIF number" />
-          <select value={f.projectType} onChange={(e) => set("projectType", e.target.value)} aria-label="Project type">
+          <Select value={f.projectType} onChange={(e) => set("projectType", e.target.value)} aria-label="Project type">
             <option value="">All types</option>
             <option value="ROADSHOW">Roadshow</option>
             <option value="SIGNAGE">Signage</option>
-          </select>
-          <select value={f.status} onChange={(e) => set("status", e.target.value)} aria-label="Approval status">
+          </Select>
+          <Select value={f.status} onChange={(e) => set("status", e.target.value)} aria-label="Approval status">
             <option value="">All statuses</option>
             <option value="PENDING">Pending</option>
             <option value="APPROVED">Approved</option>
             <option value="REJECTED">Rejected</option>
-          </select>
-          <input type="date" value={f.from} onChange={(e) => set("from", e.target.value)} aria-label="Submitted from" title="Submitted on or after" />
+          </Select>
+          <DateInput value={f.from} onChange={(e) => set("from", e.target.value)} aria-label="Submitted from" title="Submitted on or after" />
           {filtered && (
             <button className="btn btn-ghost" onClick={() => { setF({ projectType: "", client: "", trackup: "", pif: "", status: "", from: "" }); setPage(1); }}>
               Clear
@@ -121,7 +125,7 @@ function Dashboard() {
           <EmptyState title="No budgets to show" hint="Budgets submitted by RBP will appear here." />
         ) : (
           <>
-            <div className="table-wrap">
+            <TableWrap>
               <table className="table">
                 <thead>
                   <tr>
@@ -152,7 +156,7 @@ function Dashboard() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </TableWrap>
             <div className="pager">
               <span className="muted">{list.data.total} budget(s) · page {page} of {pages}</span>
               <div className="inline">

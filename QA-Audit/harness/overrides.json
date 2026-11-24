@@ -1,0 +1,2 @@
+﻿[{"id":"BUD-01","status":"PASS","reason":"Manual review of evidence S03b--01: the Completion Date calendar opens at December with 'Previous' disabled (min = On Road Date 01-Dec-2026); earlier days cannot be reached or chosen. The automated probe looked for a 30-Nov cell that is never rendered."},
+ {"id":"RSOP-07","scenario":"S02-rsop-project-creation","status":"HARNESS","reason":"Harness clicked the row copy button instead of View; re-run as S02b RSOP-07 = PASS."}]

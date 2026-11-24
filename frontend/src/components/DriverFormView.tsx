@@ -1,5 +1,7 @@
 "use client";
 
+import Select from "@/components/ui/Select";
+import DateInput from "@/components/ui/DateInput";
 import { useRef, useState, type ReactNode } from "react";
 import { fileError } from "@/components/RenewalModal";
 import DriverAvailability from "@/components/DriverAvailability";
@@ -79,7 +81,7 @@ export default function DriverFormView({
           <input value={f.licenceType} maxLength={40} onChange={(e) => set("licenceType", e.target.value.replace(/[<>]/g, ""))} aria-label="Licence Type" />
         </Row>
         <Row label="Licence Expiry Date">
-          <input type="date" value={f.licenceExpiryDate} onChange={(e) => set("licenceExpiryDate", e.target.value)} aria-label="Licence Expiry Date" />
+          <DateInput value={f.licenceExpiryDate} onChange={(e) => set("licenceExpiryDate", e.target.value)} aria-label="Licence Expiry Date" />
         </Row>
         <Row label="Attachment">
           <div className="drv-attach">
@@ -108,10 +110,10 @@ export default function DriverFormView({
         </Row>
         {isEdit && (
           <Row label="Status">
-            <select value={f.status} onChange={(e) => set("status", e.target.value as "ACTIVE" | "INACTIVE")} aria-label="Status">
+            <Select value={f.status} onChange={(e) => set("status", e.target.value as "ACTIVE" | "INACTIVE")} aria-label="Status">
               <option value="ACTIVE">Active</option>
               <option value="INACTIVE">Inactive</option>
-            </select>
+            </Select>
           </Row>
         )}
       </div>

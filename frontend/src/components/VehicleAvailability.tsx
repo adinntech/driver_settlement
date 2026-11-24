@@ -1,5 +1,7 @@
 "use client";
 
+import Select from "@/components/ui/Select";
+import DateInput from "@/components/ui/DateInput";
 import { useState, type ReactNode } from "react";
 import { useApi } from "@/hooks/useApi";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -18,7 +20,7 @@ const Row = ({ label, req, children }: { label: string; req?: boolean; children:
 );
 const DateTime = ({ d, t, onD, onT, minD }: { d: string; t: string; onD: (v: string) => void; onT: (v: string) => void; minD?: string }) => (
   <div className="dt-pair">
-    <input type="date" value={d} min={minD} onChange={(e) => onD(e.target.value)} aria-label="date" />
+    <DateInput value={d} min={minD} onChange={(e) => onD(e.target.value)} aria-label="date" />
     <input type="time" value={t} onChange={(e) => onT(e.target.value)} aria-label="time" />
   </div>
 );
@@ -126,10 +128,10 @@ export default function VehicleAvailability({ value: a, onChange }: { value: AvF
       <div className="b-col narrow">
         <Row label="Vehicle Status" req>
           <div className="av-status-pick">
-            <select value={a.status} onChange={(e) => set("status", e.target.value as AvForm["status"])} aria-label="Vehicle Status">
+            <Select value={a.status} onChange={(e) => set("status", e.target.value as AvForm["status"])} aria-label="Vehicle Status">
               <option value="">Select status</option>
               {AV_STATUSES.map((s) => <option key={s} value={s}>{AV_LABEL[s]}</option>)}
-            </select>
+            </Select>
             {a.status && <span className={`badge badge-av-${AV_TONE[a.status]}`}>{AV_LABEL[a.status]}</span>}
           </div>
         </Row>
@@ -197,10 +199,10 @@ export default function VehicleAvailability({ value: a, onChange }: { value: AvF
           <div className="b-cols">
             <div className="b-col">
               <Row label="Issue Category" req>
-                <select value={a.issue.category} onChange={(e) => iss("category", e.target.value)}>
+                <Select value={a.issue.category} onChange={(e) => iss("category", e.target.value)}>
                   <option value="">Select category</option>
                   {ISSUE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
+                </Select>
               </Row>
               <Row label="Issue Description / Reason" req>
                 <textarea rows={3} value={a.issue.description} maxLength={500} onChange={(e) => iss("description", e.target.value)} placeholder="What is wrong with the vehicle?" />
@@ -209,9 +211,9 @@ export default function VehicleAvailability({ value: a, onChange }: { value: AvF
                 <DateTime d={a.issue.reportedDate} t={a.issue.reportedTime} onD={(v) => iss("reportedDate", v)} onT={(v) => iss("reportedTime", v)} />
               </Row>
               <Row label="Issue Status">
-                <select value={a.issue.issueStatus} onChange={(e) => iss("issueStatus", e.target.value)}>
+                <Select value={a.issue.issueStatus} onChange={(e) => iss("issueStatus", e.target.value)}>
                   {Object.entries(ISSUE_STATUS_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-                </select>
+                </Select>
               </Row>
             </div>
             <div className="b-col">

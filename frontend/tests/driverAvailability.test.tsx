@@ -32,9 +32,10 @@ test("sidebar: RBP order is Projects & Budgets, Vehicle Management, Driver Manag
     { href: "/rbp/vehicles", label: "Vehicle Management" },
     { href: "/rbp/drivers", label: "Driver Management" },
     { href: "/rbp/on-road", label: "Vehicle Deliver" },
+    { href: "/rbp/payments", label: "Driver Payments" },
   ]);
   assert.deepEqual(NAV.RSOP, [{ href: "/rsop", label: "Dashboard" }, { href: "/rsop/new", label: "New Tracking Request" }]);
-  assert.deepEqual(NAV.RSOM, [{ href: "/rsom", label: "Budget Approvals" }]);
+  assert.deepEqual(NAV.RSOM, [{ href: "/rsom", label: "Budget Approvals" }, { href: "/rsom/payments", label: "Daily Payment Approvals" }]);
   for (const r of ["RSOP", "RSOM"] as const) assert.ok(!NAV[r].some((n) => /Driver/.test(n.label)), `${r} has no driver menu`); // authorised RBP users only
 });
 

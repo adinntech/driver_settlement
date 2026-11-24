@@ -1,5 +1,6 @@
 "use client";
 
+import Select from "@/components/ui/Select";
 import Link from "next/link";
 import { useState } from "react";
 import AppShell from "@/components/AppShell";
@@ -54,9 +55,9 @@ function Picker() {
               <div className="inline">
                 <label className="muted size-pick">
                   Rows
-                  <select value={limit} onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }} aria-label="Page size">
+                  <Select value={limit} onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }} aria-label="Page size">
                     {[10, 25, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
-                  </select>
+                  </Select>
                 </label>
                 <button className="btn btn-outline btn-sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button>
                 <button className="btn btn-outline btn-sm" disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</button>

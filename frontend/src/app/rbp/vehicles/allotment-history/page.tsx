@@ -1,5 +1,8 @@
 "use client";
 
+import TableWrap from "@/components/ui/TableWrap";
+import Select from "@/components/ui/Select";
+import DateInput from "@/components/ui/DateInput";
 import { useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import AllotmentDetail, { AllotStatusBadge } from "@/components/AllotmentDetail";
@@ -60,19 +63,19 @@ function History() {
           <input placeholder="Client name" value={f.clientName} onChange={(e) => set("clientName", e.target.value)} aria-label="Client name" />
           <input placeholder="Trackup number" value={f.trackupNumber} onChange={(e) => set("trackupNumber", e.target.value)} aria-label="Trackup number" />
           <input placeholder="PIF number" value={f.pifNumber} onChange={(e) => set("pifNumber", e.target.value)} aria-label="PIF number" />
-          <select value={f.projectType} onChange={(e) => set("projectType", e.target.value)} aria-label="Project type">
+          <Select value={f.projectType} onChange={(e) => set("projectType", e.target.value)} aria-label="Project type">
             <option value="">Project type</option>
             <option value="ROADSHOW">Roadshow</option>
             <option value="SIGNAGE">Signage</option>
-          </select>
-          <select value={f.status} onChange={(e) => set("status", e.target.value)} aria-label="Allotment status">
+          </Select>
+          <Select value={f.status} onChange={(e) => set("status", e.target.value)} aria-label="Allotment status">
             <option value="">Allotment status</option>
             <option value="ACTIVE">Active</option>
             <option value="RELEASED">Released</option>
             <option value="CHANGED">Changed</option>
-          </select>
-          <input type="date" value={f.from} onChange={(e) => set("from", e.target.value)} aria-label="Allotted from" title="Allotted from" />
-          <input type="date" value={f.to} min={f.from || undefined} onChange={(e) => set("to", e.target.value)} aria-label="Allotted to" title="Allotted to" />
+          </Select>
+          <DateInput value={f.from} onChange={(e) => set("from", e.target.value)} aria-label="Allotted from" title="Allotted from" />
+          <DateInput value={f.to} min={f.from || undefined} onChange={(e) => set("to", e.target.value)} aria-label="Allotted to" title="Allotted to" />
           {filtered && <button className="btn btn-ghost" onClick={() => { setF(EMPTY); setPage(1); }}>Clear Filters</button>}
         </div>
 
@@ -84,7 +87,7 @@ function History() {
           <EmptyState title={filtered ? "No allotments match these filters" : "No allotments yet"} hint={filtered ? "Try clearing some filters." : "Allot a vehicle from the Vehicle Allotment tab."} />
         ) : (
           <>
-            <div className="table-wrap">
+            <TableWrap>
               <table className="table">
                 <thead>
                   <tr>
@@ -115,15 +118,15 @@ function History() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </TableWrap>
             <div className="pager">
               <span className="muted">{list.data.total} allotment(s) · page {page} of {pages}</span>
               <div className="inline">
                 <label className="muted size-pick">
                   Rows
-                  <select value={limit} onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }} aria-label="Page size">
+                  <Select value={limit} onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }} aria-label="Page size">
                     {[10, 25, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
-                  </select>
+                  </Select>
                 </label>
                 <button className="btn btn-outline btn-sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button>
                 <button className="btn btn-outline btn-sm" disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</button>

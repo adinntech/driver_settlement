@@ -1,5 +1,7 @@
 "use client";
 
+import Select from "@/components/ui/Select";
+import DateInput from "@/components/ui/DateInput";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, createContext, useContext, useMemo, useRef, useState, type ReactNode } from "react";
@@ -165,10 +167,10 @@ const Row = ({ label, k, children }: { label: string; k?: string; children: Reac
 
 function UnitSelect({ value, onChange, fixed }: { value: Unit; onChange?: (u: Unit) => void; fixed?: boolean }) {
   return (
-    <select value={value} disabled={fixed} onChange={(e) => onChange?.(e.target.value as Unit)} aria-label="Unit">
+    <Select value={value} disabled={fixed} onChange={(e) => onChange?.(e.target.value as Unit)} aria-label="Unit">
       <option value="PER_DAY">Per Day</option>
       <option value="PER_CAMPAIGN">Per Campaign</option>
-    </select>
+    </Select>
   );
 }
 
@@ -249,9 +251,9 @@ function BudgetForm({
         <div className="b-col">
           <Row label="Mileage" k="mileage"><DecimalInput value={f.mileage} onChange={(x) => set("mileage", x)} placeholder="0" /></Row>
           <Row label="Estimated KM per day" k="estimatedKmPerDay"><DecimalInput value={f.estimatedKmPerDay} onChange={(x) => set("estimatedKmPerDay", x)} placeholder="0" /></Row>
-          <Row label="On Road Date" k="onRoadDate"><input type="date" value={f.onRoadDate} onChange={(e) => setSchedule({ onRoadDate: e.target.value })} /></Row>
+          <Row label="On Road Date" k="onRoadDate"><DateInput value={f.onRoadDate} onChange={(e) => setSchedule({ onRoadDate: e.target.value })} /></Row>
           <Row label="Completion Date" k="completionDate">
-            <input type="date" value={f.completionDate} min={f.onRoadDate} onChange={(e) => setSchedule({ completionDate: e.target.value })} />
+            <DateInput value={f.completionDate} min={f.onRoadDate} onChange={(e) => setSchedule({ completionDate: e.target.value })} />
             <label className="check">
               <input type="checkbox" checked={f.sundayHalt} onChange={(e) => setSchedule({ sundayHalt: e.target.checked })} /> Sunday Halt
             </label>

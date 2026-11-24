@@ -21,6 +21,12 @@ export const ROLES = {
     defaultUsername: "RSA",
     description: "Manage approved Roadshow and Signage project payments, vehicle expenses, and driver payment records.",
   },
+  // RSO is a separate role from RSOM: it approves final driver salary settlements and owns the payment reports.
+  RSO: {
+    label: "RSO",
+    defaultUsername: "", // never hardcoded: the login form is prefilled from RSO_USERNAME (see getRoles)
+    description: "Approve or reject final driver salary settlements and download payment, vehicle and driver reports.",
+  },
 } as const;
 
 export type RoleKey = keyof typeof ROLES;
