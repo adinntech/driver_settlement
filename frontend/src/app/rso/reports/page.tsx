@@ -25,13 +25,16 @@ const REPORTS: { kind: Kind; label: string; hint: string; dates: boolean; cols: 
     ],
   },
   {
-    kind: "vehicle-mis", label: "Vehicle MIS Report", hint: "Every vehicle allotment with its budget and payments.", dates: true,
+    kind: "vehicle-mis", label: "Vehicle MIS Report", hint: "Vehicle master register (all non-draft vehicles), in the Vehicle MIS format. Document columns show the latest renewal date.", dates: false,
     cols: [
-      { key: "trackupNumber", label: "Trackup No" }, { key: "clientName", label: "Client" }, { key: "vehicleNo", label: "Vehicle" }, { key: "driverName", label: "Driver" }, { key: "allotmentStatus", label: "Allotment" },
-      { key: "budgetStatus", label: "Budget" }, { key: "approvedBudget", label: "Approved Budget", type: "money" }, { key: "dailyApproved", label: "Daily Approved", type: "money" },
-      { key: "dailyPending", label: "Daily Pending", type: "money" }, { key: "finalApproved", label: "Final Approved", type: "money" }, { key: "totalPaid", label: "Total", type: "money" }, { key: "budgetBalance", label: "Balance", type: "money" },
-    ],
-  },
+      { key: "vehicleNo", label: "Vehicle No" }, { key: "make", label: "Make" }, { key: "model", label: "Model" }, { key: "yom", label: "Y.O.M", type: "num" },
+      { key: "purchaseDate", label: "Purchase Date", type: "date" }, { key: "type", label: "Vehicle Type" }, { key: "stepneyStatus", label: "Stepney Status" },
+      { key: "batteryStatus", label: "Battery Status" }, { key: "oilTopUpOn", label: "Oil Top Up On", type: "date" }, { key: "greasePackingOn", label: "Grease Packing On", type: "date" },
+      { key: "generalCheckUpOn", label: "General Check Up On", type: "date" }, { key: "currentRunning", label: "Current Running", type: "num" }, { key: "totalRunning", label: "Total Running", type: "num" },
+      { key: "fc", label: "Fc", type: "date" }, { key: "insurance", label: "Insurance", type: "date" }, { key: "statePermit", label: "State Permit", type: "date" },
+      { key: "rtoPermission", label: "Rto Permission", type: "date" }, { key: "policePermission", label: "Police Permission", type: "date" }, { key: "condition", label: "Condition" },
+      { key: "specification", label: "Specification" },
+    ],  },
   {
     kind: "driver-list", label: "Driver List Report", hint: "All drivers with salary, bank (masked) and settlement totals.", dates: false,
     cols: [

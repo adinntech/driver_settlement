@@ -23,6 +23,8 @@ export const config = {
   // Encrypts bank account numbers and payment transaction details at rest (AES-256-GCM). Falls back to a key derived from JWT_SECRET.
   dataKey: process.env.DATA_ENCRYPTION_KEY ?? "",
   companyName: process.env.COMPANY_NAME ?? "ADINN",
+  // Opt-in, development only: lets the login page show the demo username / password of each role. Never active in production.
+  demoLoginHints: process.env.DEMO_LOGIN_HINTS === "true",
   storage: {
     // local = backend/public folder, space = cloud bucket (DigitalOcean Spaces)
     type: (process.env.STORAGE_TYPE ?? "local").trim().toLowerCase(),

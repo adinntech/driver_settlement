@@ -5,8 +5,7 @@ import { fileURLToPath } from "node:url";
 import { config } from "../config/index.js";
 import { Driver } from "../models/Driver.js";
 import { SettlementPayment } from "../models/SettlementPayment.js";
-import { VehicleAllotment } from "../models/VehicleAllotment.js";
-import { Budget } from "../models/Budget.js";
+import { Vehicle } from "../models/Vehicle.js";
 import { AppError } from "../utils/AppError.js";
 import { maskTail, unseal } from "../utils/secureField.js";
 import { DEDUCTION_KEYS, DEDUCTION_LABELS } from "../utils/settlement.js";
@@ -56,35 +55,110 @@ export async function driverListRows(q: ReportQuery) {
   }));
 }
 
+// ------------------------------------------------------------------------------------------------ Vehicle MIS (vehicle master)
+
+/**
+ * Vehicle MIS = the vehicle master register, in the column order of the reference "VehicleMISReport" sheet.
+ * Every field comes from the saved vehicle record; nothing is derived or defaulted. Document columns (FC, Insurance,
+ * State Permit, RTO / Police Permission) show the latest next-renewal date of that document, the same rule the vehicle
+ * list uses for FC / Insurance expiry. A missing or invalid value stays blank (never 01-Jan-1900).
+ */
+type MisKind = "text" | "int" | "date";
+export const VEHICLE_MIS_COLUMNS: { key: string; header: string; kind: MisKind; width: number }[] = [
+  { key: "vehicleNo", header: "Vehicle No", kind: "text", width: 16 },
+  { key: "make", header: "Make", kind: "text", width: 14 },
+  { key: "model", header: "Model", kind: "text", width: 16 },
+  { key: "yom", header: "Y.O.M", kind: "int", width: 7 },
+  { key: "purchaseDate", header: "Purchase Date", kind: "date", width: 12.5 },
+  { key: "type", header: "Vehicle Type", kind: "text", width: 12 },
+  { key: "stepneyStatus", header: "Stepney Status", kind: "text", width: 11 },
+  { key: "batteryStatus", header: "Battery Status", kind: "text", width: 11 },
+  { key: "oilTopUpOn", header: "Oil Top Up On", kind: "date", width: 12.5 },
+  { key: "greasePackingOn", header: "Grease Packing On", kind: "date", width: 12.5 },
+  { key: "generalCheckUpOn", header: "General Check Up On", kind: "date", width: 12.5 },
+  { key: "currentRunning", header: "Current Running", kind: "int", width: 10 },
+  { key: "totalRunning", header: "Total Running", kind: "int", width: 10 },
+  { key: "fc", header: "Fc", kind: "date", width: 12.5 },
+  { key: "insurance", header: "Insurance", kind: "date", width: 12.5 },
+  { key: "statePermit", header: "State Permit", kind: "date", width: 12.5 },
+  { key: "rtoPermission", header: "Rto Permission", kind: "date", width: 12.5 },
+  { key: "policePermission", header: "Police Permission", kind: "date", width: 12.5 },
+  { key: "condition", header: "Condition", kind: "text", width: 14 },
+  { key: "specification", header: "Specification", kind: "text", width: 22 },
+];
+const validYmd = (v: unknown): string => (typeof v === "string" && YMD.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && Number(v.slice(0, 4)) >= 1950 ? v : "");
+const latestRenewal = (list: unknown): string => validYmd((Array.isArray(list) ? list : []).reduce<string>((m, e: any) => (validYmd(e?.nextRenewalDate) > m ? validYmd(e?.nextRenewalDate) : m), ""));
+const txt = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+const num = (v: unknown): number | "" => (typeof v === "number" && Number.isFinite(v) ? v : "");
+
 export async function vehicleMisRows(q: ReportQuery) {
-  const match: any = {};
-  if (q.from && YMD.test(q.from)) match.createdAt = { $gte: new Date(`${q.from}T00:00:00+05:30`) };
-  if (q.to && YMD.test(q.to)) match.createdAt = { ...(match.createdAt ?? {}), $lte: new Date(`${q.to}T23:59:59.999+05:30`) };
-  const allots: any[] = await VehicleAllotment.find(match).sort({ createdAt: -1 }).limit(5000).lean();
-  const tvIds = [...new Set(allots.map((a) => String(a.trackingVehicle)))];
-  const [budgets, pays]: any[] = await Promise.all([
-    Budget.find({ vehicle: { $in: tvIds } }).select("vehicle total approvalStatus approvedVersion").lean(),
-    SettlementPayment.aggregate([
-      { $match: { allotment: { $in: allots.map((a) => a._id) }, status: { $in: ["APPROVED", "COMPLETED", "PENDING"] } } },
-      { $group: { _id: { a: "$allotment", c: "$category", s: "$status" }, amount: { $sum: "$amount" }, n: { $sum: 1 } } },
-    ]),
-  ]);
-  const bud = new Map(budgets.map((b: any) => [String(b.vehicle), b]));
-  const sum = (a: any, c: string, s: string[]) => pays.filter((p: any) => String(p._id.a) === String(a._id) && p._id.c === c && s.includes(p._id.s)).reduce((t: number, p: any) => t + p.amount, 0);
-  return allots.map((a) => {
-    const b: any = bud.get(String(a.trackingVehicle));
-    const daily = sum(a, "DAILY", ["APPROVED", "COMPLETED"]);
-    const final = sum(a, "FINAL", ["APPROVED", "COMPLETED"]);
-    return {
-      _id: String(a._id), trackupNumber: a.trackupNumber, pifNumber: a.pifNumber ?? "", clientName: a.clientName ?? "", projectType: a.projectType ?? "", vehicleNo: a.vehicleNo ?? "",
-      driverNumber: a.driverNumber ?? "", driverName: a.driverName ?? "", allotmentStatus: a.status, allottedAt: a.allottedAt ?? a.createdAt ?? null,
-      budgetStatus: b?.approvalStatus ?? "", approvedBudget: b?.approvalStatus === "APPROVED" ? b.total : 0,
-      dailyApproved: Math.round(daily * 100) / 100, dailyPending: Math.round(sum(a, "DAILY", ["PENDING"]) * 100) / 100, finalApproved: Math.round(final * 100) / 100,
-      totalPaid: Math.round((daily + final) * 100) / 100, budgetBalance: b?.approvalStatus === "APPROVED" ? Math.round((b.total - daily - final) * 100) / 100 : 0,
-    };
-  });
+  const filter: any = { status: { $ne: "DRAFT" } }; // drafts are incomplete records (they may not even have a vehicle number)
+  if (q.q?.trim()) {
+    const rx = new RegExp(q.q.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    filter.$or = [{ vehicleNo: rx }, { make: rx }, { model: rx }, { type: rx }];
+  }
+  const list: any[] = await Vehicle.find(filter).sort({ vehicleNo: 1 }).limit(10000).lean();
+  return list.map((v) => ({
+    _id: String(v._id), vehicleNo: txt(v.vehicleNo), make: txt(v.make), model: txt(v.model), yom: num(v.yearOfManufacture), purchaseDate: validYmd(v.purchaseDate),
+    type: txt(v.type), stepneyStatus: txt(v.stepneyStatus), batteryStatus: txt(v.batteryStatus), oilTopUpOn: validYmd(v.oilTopUpOn), greasePackingOn: validYmd(v.greasePackingOn),
+    generalCheckUpOn: validYmd(v.generalCheckUpOn), currentRunning: num(v.currentRunning), totalRunning: num(v.totalRunning), fc: latestRenewal(v.fc), insurance: latestRenewal(v.insurance),
+    statePermit: latestRenewal(v.permit), rtoPermission: latestRenewal(v.rtoPermission), policePermission: latestRenewal(v.policePermission), condition: txt(v.condition),
+    specification: txt(v.specification), status: v.status,
+  }));
 }
 
+/** Workbook laid out like the reference VehicleMISReport.xls: narrow spacer column A, merged bold title, spacer row,
+ *  bold centred wrapped header with thin borders, Arial 10 data with thin borders, dd-MMM-yyyy dates. */
+export async function vehicleMisWorkbook(rows: Awaited<ReturnType<typeof vehicleMisRows>>): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = `${config.companyName} Driver Settlement`;
+  wb.created = new Date();
+  const ws = wb.addWorksheet("Sheet1", { views: [{ state: "frozen", xSplit: 2, ySplit: 3, showGridLines: false }], pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
+  const font = { name: "Arial", size: 10 };
+  const thin = { style: "thin" as const, color: { argb: "FFD3D3D3" } }; // light-grey grid, as in the reference
+  const border = { top: thin, left: thin, bottom: thin, right: thin };
+  const last = VEHICLE_MIS_COLUMNS.length + 1; // data runs B..U
+  ws.getColumn(1).width = 0.6; // spacer column, as in the reference
+  VEHICLE_MIS_COLUMNS.forEach((c, i) => { ws.getColumn(i + 2).width = c.width; });
+
+  ws.mergeCells(1, 1, 1, last);
+  const title = ws.getCell(1, 1);
+  title.value = "Vehicle MIS";
+  title.font = { ...font, bold: true };
+  title.alignment = { horizontal: "center", vertical: "middle" };
+  ws.getRow(1).height = 18;
+  ws.getRow(2).height = 3;
+
+  const head = ws.getRow(3);
+  VEHICLE_MIS_COLUMNS.forEach((c, i) => {
+    const cell = head.getCell(i + 2);
+    cell.value = c.header;
+    cell.font = { ...font, bold: true };
+    cell.alignment = { horizontal: "center", vertical: "top", wrapText: true };
+    cell.border = border;
+  });
+  head.height = 30;
+
+  rows.forEach((r: any, ri) => {
+    const row = ws.getRow(4 + ri);
+    VEHICLE_MIS_COLUMNS.forEach((c, i) => {
+      const cell = row.getCell(i + 2);
+      const v = r[c.key];
+      if (c.kind === "date") {
+        cell.value = v ? new Date(`${v}T00:00:00Z`) : null; // real Excel date; blank when not recorded
+        cell.numFmt = "dd-mmm-yyyy";
+      } else if (c.kind === "int") {
+        cell.value = v === "" ? null : v;
+        cell.numFmt = "0";
+      } else cell.value = v || null;
+      cell.font = font;
+      // "General" horizontal (text left, numbers right) as in the reference; dates are real dates but left-aligned like the reference's date text
+      cell.alignment = { vertical: "top", wrapText: c.kind === "text", ...(c.kind === "date" ? { horizontal: "left" as const } : {}) };
+      cell.border = border;
+    });
+  });
+  return Buffer.from(await wb.xlsx.writeBuffer());
+}
 export async function driverSalaryRows(q: ReportQuery) {
   const filter: any = { category: "FINAL", status: { $in: ["APPROVED", "COMPLETED"] } };
   if (q.from && YMD.test(q.from)) filter.toDate = { $gte: q.from };
@@ -148,14 +222,7 @@ export async function reportWorkbook(kind: string, q: ReportQuery): Promise<{ na
     const rows = await approvedPaymentRows(q);
     return { name: "approved-payment-report", buffer: await workbook("Approved Payments", [...PAYMENT_COLS, { header: "Payment Ref", key: "referenceNumber", width: 18 }, { header: "Paid On", key: "paymentDate" }, { header: "Mode", key: "paymentMode" }], rows) };
   }
-  if (kind === "vehicle-mis")
-    return { name: "vehicle-mis-report", buffer: await workbook("Vehicle MIS", [
-      { header: "Trackup No", key: "trackupNumber", width: 16 }, { header: "PIF No", key: "pifNumber", width: 16 }, { header: "Client", key: "clientName", width: 24 }, { header: "Type", key: "projectType" },
-      { header: "Vehicle No", key: "vehicleNo", width: 14 }, { header: "Driver Code", key: "driverNumber" }, { header: "Driver", key: "driverName", width: 22 }, { header: "Allotment", key: "allotmentStatus" },
-      { header: "Allotted On", key: "allottedAt", date: true, width: 18 }, { header: "Budget Status", key: "budgetStatus" }, { header: "Approved Budget", key: "approvedBudget", money: true },
-      { header: "Daily Approved", key: "dailyApproved", money: true }, { header: "Daily Pending", key: "dailyPending", money: true }, { header: "Final Approved", key: "finalApproved", money: true },
-      { header: "Total Paid", key: "totalPaid", money: true }, { header: "Budget Balance", key: "budgetBalance", money: true },
-    ], await vehicleMisRows(q)) };
+  if (kind === "vehicle-mis") return { name: "vehicle-mis", buffer: await vehicleMisWorkbook(await vehicleMisRows(q)) };
   if (kind === "driver-list")
     return { name: "driver-list-report", buffer: await workbook("Drivers", [
       { header: "Driver Code", key: "driverNumber" }, { header: "Driver Name", key: "driverName", width: 22 }, { header: "Type", key: "driverType", width: 18 }, { header: "Mobile", key: "mobileNumber", width: 16 },
