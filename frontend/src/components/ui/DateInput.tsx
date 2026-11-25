@@ -61,7 +61,10 @@ export default function DateInput(props: DateInputProps) {
   const panel = useRef<HTMLDivElement>(null);
   const pos = usePopoverPosition(open, trigger, panel, 280);
 
+  // A value outside min / max is never changed here (it may be a legitimately saved historical date); forms clear or
+  // re-validate dependent dates themselves. It is only flagged so the user can see it needs attention.
   const outOfRange = useCallback((s: string) => (!!min && YMD.test(min) && s < min) || (!!max && YMD.test(max) && s > max), [min, max]);
+  const invalid = !!value && YMD.test(value) && outOfRange(value);
   const close = useCallback((focus = true) => {
     setOpen(false);
     setView("days");
@@ -124,7 +127,7 @@ export default function DateInput(props: DateInputProps) {
   const canNext = !max || !YMD.test(max) || ymd(c.y, c.m, daysIn(c.y, c.m)) < max;
 
   return (
-    <span className={`ui-date${open ? " is-open" : ""}${disabled ? " is-disabled" : ""}${readOnly ? " is-readonly" : ""}${className ? ` ${className}` : ""}`} style={style} title={title}>
+    <span className={`ui-date${open ? " is-open" : ""}${disabled ? " is-disabled" : ""}${readOnly ? " is-readonly" : ""}${invalid ? " is-invalid" : ""}${className ? ` ${className}` : ""}`} style={style} title={invalid ? `${title ? `${title} · ` : ""}Outside the allowed dates` : title}>
       <input className="ui-native" type="date" tabIndex={-1} aria-hidden="true" value={value} min={min} max={max} name={name} required={required} disabled={disabled} readOnly
         aria-label={props["aria-label"]} />
       <button

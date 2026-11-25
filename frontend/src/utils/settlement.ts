@@ -1,5 +1,6 @@
 import { amountPaise } from "./rsa";
 import { countDays } from "./format";
+import { inYmdRange, isYmd } from "./dates";
 
 // ---------------------------------------------------------------- API types
 export type PaymentCategory = "DAILY" | "FINAL";
@@ -12,8 +13,31 @@ export interface SettlementRow {
   bank: { accountName: string | null; bankName: string | null; ifscCode: string | null; accountMasked: string | null } | null;
   submittedBy: string; submittedAt: string; reviewedBy: string | null; reviewedRole: string | null; reviewedAt: string | null; rejectionReason: string | null;
   approver: "RSOM" | "RSO"; exportedAt: string | null; exportCount: number;
-  completion: null | { referenceNumber: string; paymentDate: string; paymentMode: string; bankName: string; transactionMasked: string | null; remarks: string | null; completedBy: string; completedAt: string };
+  completion: null | { referenceNumber: string; referenceDate?: string | null; paymentDate: string; paymentMode: string; bankName: string | null; transactionMasked: string | null; remarks: string | null; completedBy: string; completedAt: string };
 }
+/** Payment modes of the RSA payment Entry popup. Older completed records may carry NEFT / RTGS / IMPS / UPI. */
+export const ENTRY_MODES = [{ v: "CASH", l: "Cash" }, { v: "CHEQUE", l: "Cheque" }, { v: "DD", l: "DD" }, { v: "EPAYMENT", l: "ePayment" }] as const;
+export const modeLabel = (m: string | null | undefined) => (m ? ENTRY_MODES.find((x) => x.v === m)?.l ?? m : "-");
+/** Reference number as typed: letters, digits, / - _ only (spaces and other characters are dropped while typing). */
+export const cleanReference = (v: string) => v.replace(/[^A-Za-z0-9/_-]/g, "").slice(0, 60);
+
+export interface PaymentEntryForm { paymentMode: string; paymentDate: string; bankName: string; referenceNumber: string; referenceDate: string }
+/** Same rules as the server's validateCompletion: mode, payment date and reference are required; bank except for Cash. */
+export function validatePaymentEntry(f: PaymentEntryForm, today: string, approvedOn = ""): Record<string, string> {
+  const e: Record<string, string> = {};
+  if (!f.paymentMode) e.paymentMode = "Choose the payment mode";
+  if (!f.paymentDate) e.paymentDate = "Enter the payment date";
+  else if (!isYmd(f.paymentDate)) e.paymentDate = "Payment date must be a valid date";
+  else if (f.paymentDate > today) e.paymentDate = "Payment date cannot be in the future";
+  else if (approvedOn && f.paymentDate < approvedOn) e.paymentDate = "Payment date cannot be before the approval date";
+  if (f.paymentMode && f.paymentMode !== "CASH" && !f.bankName.trim()) e.bankName = "Enter the bank name";
+  else if (/[<>]/.test(f.bankName)) e.bankName = "Bank name contains invalid characters";
+  if (!f.referenceNumber.trim()) e.referenceNumber = "Enter the reference number of this payment";
+  if (f.referenceDate && !isYmd(f.referenceDate)) e.referenceDate = "Reference date must be a valid date";
+  else if (f.referenceDate && f.referenceDate > today) e.referenceDate = "Reference date cannot be in the future";
+  return e;
+}
+
 export interface HistoryEntry { action: string; version: number; fromStatus: string | null; toStatus: string | null; username: string; role: string; comment: string | null; amount: number | null; createdAt: string }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface SettlementDetail extends SettlementRow { data: Record<string, any>; history: HistoryEntry[] }
@@ -24,7 +48,7 @@ export interface SettlementContext {
   approvedBudgetAmount: number | null; budgetVersion: number | null;
   campaign: { fromDate: string | null; toDate: string | null; totalDays: number | null; location: string | null; jsNumber: string | null; reportingDate: string | null; sundayHalt?: boolean };
   advances?: { source: string; date: string; amount: number; note: string }[];
-  previousPayments?: { source: string; paymentNumber: string; status: string; date: string; amount: number; mode: string; bankName: string | null }[];
+  previousPayments?: { source: string; paymentNumber: string; status: string; date: string; amount: number; mode: string; bankName: string | null; referenceNumber?: string | null }[];
   dailyPayments?: { paymentNumber: string; status: string; fromDate: string; toDate: string; amount: number; salaryAdvance: number; diesel: number; food: number }[];
   bank: { accountName: string | null; bankName: string | null; ifscCode: string | null; accountMasked: string | null };
   existingFinal: { paymentNumber: string; status: string } | null;
@@ -34,7 +58,7 @@ export interface SettlementOptions {
   dailyExpenseOptions: { key: string; label: string; descriptionRequired?: boolean }[];
   finalExpenseCategories: { key: string; label: string; descriptionRequired: boolean }[];
   deductions: { key: string; label: string }[];
-  paymentModes: string[];
+  paymentModes: { value: string; label: string }[];
 }
 
 // ---------------------------------------------------------------- labels
@@ -164,8 +188,12 @@ export function finalTotals(f: FinalForm) {
   return { resultKm, expectedLitres, variationLitres, mileageShortSuggested, earnings, earningsTotal, rows, claimed, approved, rejected: claimed - approved, gross, totalDeduction, net };
 }
 
-export function validateFinalForm(f: FinalForm, totalDays: number | null): string[] {
+export function validateFinalForm(f: FinalForm, totalDays: number | null, campaign?: { fromDate: string | null; toDate: string | null }): string[] {
   const e: string[] = [];
+  if (!f.reportingDate) e.push("Reporting Date is required");
+  else if (!isYmd(f.reportingDate)) e.push("Reporting Date must be a valid date");
+  else if (campaign && isYmd(campaign.fromDate) && isYmd(campaign.toDate) && !inYmdRange(f.reportingDate, campaign.fromDate, campaign.toDate))
+    e.push("Reporting Date must be within the campaign start and end dates");
   const v = (s: string) => amountPaise(s);
   for (const k of FINAL_NUMBER_FIELDS) if (v(f.n[k]) === null) e.push(`${k} must contain digits only`);
   if (!(v(f.n.fixedMileage) ?? 0)) e.push("Fixed Mileage must be greater than zero");

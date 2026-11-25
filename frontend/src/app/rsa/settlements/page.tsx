@@ -1,38 +1,9 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { useState } from "react";
-import AppShell from "@/components/AppShell";
-import { PaymentQueue } from "@/components/settlement/PaymentQueue";
-import { useToast } from "@/context/ToastContext";
-import { downloadFile } from "@/services/api";
-
-/** RSA: pending and approved settlement payments. Approved ones are exported for accounts, then completed with the payment reference. */
-export default function RsaSettlements() {
-  const toast = useToast();
-  const [busy, setBusy] = useState(false);
-  const [tick, setTick] = useState(0);
-  const exportApproved = async () => {
-    setBusy(true);
-    try {
-      await downloadFile("/settlements/export/approved", "approved-payments.xlsx");
-      toast("Approved payments exported");
-      setTick((t) => t + 1);
-    } catch (e) {
-      toast((e as Error).message, "error");
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <AppShell role="RSA">
-      <div className="page-head">
-        <div>
-          <h1>Settlement Payments</h1>
-          <p className="muted">Export approved daily and final payments for the accounts team. When accounts return the payment reference, open the payment and mark it completed.</p>
-        </div>
-        <button type="button" className="btn btn-primary" disabled={busy} onClick={exportApproved}>{busy ? "Exporting…" : "Export Approved (Excel)"}</button>
-      </div>
-      <PaymentQueue mode="queue" reloadKey={tick} />
-    </AppShell>
-  );
+/**
+ * The separate Settlement Payments page was folded into Driver Payments (the single place to manage and export payments,
+ * including Export Approved (Excel)). Old links and bookmarks land there. Payment Completed (/rsa/settlements/completed) stays.
+ */
+export default function RsaSettlementsMoved(): never {
+  redirect("/rsa/driver-payments");
 }

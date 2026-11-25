@@ -38,6 +38,7 @@ export interface PrevDriverAvailability {
 }
 
 const blank = (v: unknown) => v === undefined || v === null || (typeof v === "string" && v.trim() === "");
+// eslint-disable-next-line no-control-regex -- intentionally rejects control characters in free text
 const SAFE_TEXT = /^[^<>\u0000-\u001f\u007f]+$/u;
 const REF_TEXT = /^[A-Za-z0-9 \-_/.]+$/;
 const HEX = /^[a-f0-9]{24}$/i;

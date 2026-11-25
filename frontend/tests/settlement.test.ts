@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { actionsFor, emptyQueueFilters, finalFormFrom, finalPayload, finalTotals, queueQuery, validateFinalForm, type FinalForm, type SettlementContext } from "../src/utils/settlement";
+import { ENTRY_MODES, actionsFor, cleanReference, emptyQueueFilters, modeLabel, validatePaymentEntry, finalFormFrom, finalPayload, finalTotals, queueQuery, validateFinalForm, type FinalForm, type SettlementContext } from "../src/utils/settlement";
 
 const ctx = {
   trackingVehicle: "a".repeat(24), trackupNumber: "TRK-1", pifNumber: "PIF-1", clientName: "Client", projectType: "ROADSHOW", vehicleNo: "MH12AB1234", driverNumber: "DR-1", driverName: "Ravi",
@@ -85,4 +85,21 @@ test("Driver Payments is shared: RBP and RSA enter and correct the same records 
   assert.equal(actionsFor("RBP", rejected).canResubmit, true);
   assert.equal(actionsFor("RSOM", rejected).canResubmit, false);
   assert.equal(actionsFor("RBP", { ...rejected, status: "APPROVED" }).canComplete, false, "completion stays with RSA");
+});
+
+test("payment Entry popup: Cash / Cheque / DD / ePayment, mandatory reference, bank except for cash", () => {
+  const ok = { paymentMode: "EPAYMENT", paymentDate: "2026-11-24", bankName: "Axis Bank", referenceNumber: "EP-001", referenceDate: "" };
+  assert.deepEqual(ENTRY_MODES.map((m) => m.l), ["Cash", "Cheque", "DD", "ePayment"]);
+  assert.deepEqual(validatePaymentEntry(ok, "2026-11-25", "2026-11-20"), {});
+  for (const r of ["", "   "]) assert.ok(validatePaymentEntry({ ...ok, referenceNumber: r }, "2026-11-25").referenceNumber, JSON.stringify(r));
+  assert.ok(validatePaymentEntry({ ...ok, paymentMode: "" }, "2026-11-25").paymentMode);
+  assert.ok(validatePaymentEntry({ ...ok, paymentDate: "" }, "2026-11-25").paymentDate);
+  assert.ok(validatePaymentEntry({ ...ok, paymentDate: "2026-11-26" }, "2026-11-25").paymentDate, "no future payment date");
+  assert.ok(validatePaymentEntry({ ...ok, paymentDate: "2026-11-19" }, "2026-11-25", "2026-11-20").paymentDate, "not before approval");
+  assert.ok(validatePaymentEntry({ ...ok, bankName: " " }, "2026-11-25").bankName, "bank needed unless cash");
+  assert.deepEqual(validatePaymentEntry({ ...ok, paymentMode: "CASH", bankName: "" }, "2026-11-25"), {});
+  assert.ok(validatePaymentEntry({ ...ok, referenceDate: "2026-11-30" }, "2026-11-25").referenceDate);
+  assert.equal(cleanReference(" UTR 12/ab_-<x> "), "UTR12/ab_-x");
+  assert.equal(modeLabel("EPAYMENT"), "ePayment");
+  assert.equal(modeLabel("NEFT"), "NEFT", "older completed records keep their mode");
 });

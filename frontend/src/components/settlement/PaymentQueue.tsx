@@ -15,14 +15,27 @@ import { useSessionState } from "@/hooks/useSessionState";
 import { downloadFile, request } from "@/services/api";
 import { formatDate, formatDateTime, formatInr } from "@/utils/format";
 import {
-  ACTION_LABEL, CATEGORY_SHORT, STATUS_LABEL, actionsFor, paymentsBase, emptyQueueFilters, queueQuery, type PaymentCategory, type QueueFilters, type SettlementDetail, type SettlementPage,
-  type SettlementStatus,
+  ACTION_LABEL, CATEGORY_SHORT, STATUS_LABEL, actionsFor, modeLabel, paymentsBase, emptyQueueFilters, queueQuery, type PaymentCategory, type QueueFilters, type SettlementDetail, type SettlementPage,
+  type SettlementRow, type SettlementStatus,
 } from "@/utils/settlement";
+import { PaymentEntryForm, PaymentEntryModal } from "@/components/settlement/PaymentEntry";
 
 const d = (v: unknown) => (v === null || v === undefined || v === "" ? "-" : String(v));
 
 export const SettlementBadge = ({ status }: { status: SettlementStatus }) => <span className={`ds-badge ds-${status.toLowerCase()}`}>{STATUS_LABEL[status]}</span>;
-export const CategoryTag = ({ c }: { c: PaymentCategory }) => <span className={`ds-tag ds-tag-${c.toLowerCase()}`}>{CATEGORY_SHORT[c]}</span>;
+/** Shown in place of Entry once the payment is recorded (from the saved COMPLETED status, so it survives refresh). */
+export function EntryCompletedBadge({ p }: { p: SettlementRow }) {
+  const c = p.completion;
+  const tip = c ? `Ref ${c.referenceNumber} · ${modeLabel(c.paymentMode)}${c.bankName ? ` · ${c.bankName}` : ""} · paid ${formatDate(c.paymentDate)}` : "Payment recorded";
+  return (
+    <span className="ds-entry-done" aria-label={`Entry completed. ${tip}`} tabIndex={0}>
+      <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor" opacity=".16" /><path d="m7.5 12.2 3 3 6-6.4" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      Entry Completed
+      {c && <span className="ds-entry-tip" role="tooltip">{tip}</span>}
+    </span>
+  );
+}
+export const CategoryTag =({ c }: { c: PaymentCategory }) => <span className={`ds-tag ds-tag-${c.toLowerCase()}`}>{CATEGORY_SHORT[c]}</span>;
 
 /** Status filter choices per screen. The completed table is a separate screen. */
 const STATUS_OPTIONS: Record<string, { v: string; l: string }[]> = {
@@ -77,7 +90,11 @@ export function PaymentQueue({ mode, defaultCategory = "", toolbar, reloadKey = 
   const setPage = (n: number) => setPaging((x) => ({ ...x, page: n }));
   const setLimit = (n: number) => setPaging((x) => ({ ...x, limit: n }));
   const [openId, setOpenId] = useState<string | null>(null);
+  const [entryRow, setEntryRow] = useState<SettlementRow | null>(null);
   const [tick, setTick] = useState(0);
+  const { user } = useAuth();
+  // RSA records the actual payment of an approved entry from Driver Payments (Entry), which moves it to Payment Completed
+  const canEnter = (p: SettlementRow) => mode === "rbp" && user?.role === "RSA" && p.status === "APPROVED";
   const dq = useDebounce(f.q);
   const list = useApi<SettlementPage>(`/settlements?${queueQuery({ ...f, q: dq }, page, limit)}${mode === "rbp" ? "&scope=all" : ""}&_=${reloadKey}-${tick}`);
   const change = (next: QueueFilters) => {
@@ -124,7 +141,8 @@ export function PaymentQueue({ mode, defaultCategory = "", toolbar, reloadKey = 
               <table className="table ds-table">
                 <thead>
                   <tr>
-                    {(mode === "completed" ? [...COLS.slice(0, 8), { key: "ref", label: "Payment Ref" }, { key: "paid", label: "Paid On" }, COLS[9]] : COLS).map((c) => (
+                    {/* completed: the payment details replace Period / Submitted (both stay in View) so they fit without scrolling */}
+                    {(mode === "completed" ? [COLS[0], COLS[2], { key: "drv", label: "Driver / Vehicle", sort: "driverName" }, COLS[6], { key: "ref", label: "Reference No." }, { key: "paid", label: "Paid On · Mode / Bank" }, COLS[9]] : COLS).map((c) => (
                       <th key={c.key} aria-sort={"sort" in c && c.sort && f.sort === c.sort ? (f.dir === "asc" ? "ascending" : "descending") : undefined}>
                         {"sort" in c && c.sort ? (
                           <button type="button" className="ds-sort" onClick={() => sortBy(c.sort)}>
@@ -139,23 +157,35 @@ export function PaymentQueue({ mode, defaultCategory = "", toolbar, reloadKey = 
                 <tbody>
                   {list.data.items.map((p) => (
                     <tr key={p._id}>
-                      <td><strong className="num">{p.paymentNumber}</strong>{p.version > 1 && <small className="muted"> v{p.version}</small>}</td>
-                      <td><CategoryTag c={p.category} /></td>
+                      <td><strong className="num">{p.paymentNumber}</strong>{p.version > 1 && <small className="muted"> v{p.version}</small>}{mode === "completed" && <div className="ds-cat-under"><CategoryTag c={p.category} /></div>}</td>
+                      {mode !== "completed" && <td><CategoryTag c={p.category} /></td>}
                       <td><div>{d(p.clientName)}</div><small className="muted">{p.trackupNumber}</small></td>
-                      <td>{d(p.vehicleNo)}</td>
-                      <td><div>{d(p.driverName)}</div><small className="muted">{d(p.driverNumber)}</small></td>
-                      <td className="ds-nowrap">{formatDate(p.fromDate)}<br /><small className="muted">to {formatDate(p.toDate)}</small></td>
+                      {mode === "completed" ? (
+                        <td><div>{d(p.driverName)}</div><small className="muted">{d(p.driverNumber)} · {d(p.vehicleNo)}</small></td>
+                      ) : (
+                        <>
+                          <td>{d(p.vehicleNo)}</td>
+                          <td><div>{d(p.driverName)}</div><small className="muted">{d(p.driverNumber)}</small></td>
+                        </>
+                      )}
+                      {mode !== "completed" && <td className="ds-nowrap">{formatDate(p.fromDate)}<br /><small className="muted">to {formatDate(p.toDate)}</small></td>}
                       <td className="ds-amt">{formatInr(p.amount)}</td>
-                      <td><div>{p.submittedBy}{p.submittedRole && p.submittedRole !== p.submittedBy && <small className="muted"> · {p.submittedRole}</small>}</div><small className="muted">{formatDateTime(p.submittedAt)}</small></td>
+                      {mode !== "completed" && <td><div>{p.submittedBy}{p.submittedRole && p.submittedRole !== p.submittedBy && <small className="muted"> · {p.submittedRole}</small>}</div><small className="muted">{formatDateTime(p.submittedAt)}</small></td>}
                       {mode === "completed" ? (
                         <>
-                          <td>{p.completion?.referenceNumber}</td>
-                          <td className="ds-nowrap">{formatDate(p.completion?.paymentDate)}<br /><small className="muted">{p.completion?.paymentMode}</small></td>
+                          <td><strong className="num">{p.completion?.referenceNumber}</strong>{p.completion?.referenceDate && <><br /><small className="muted">Ref. {formatDate(p.completion.referenceDate)}</small></>}</td>
+                          <td className="ds-paid"><div className="ds-nowrap">{formatDate(p.completion?.paymentDate)}</div><small className="muted"><b>{modeLabel(p.completion?.paymentMode)}</b> · {p.completion?.bankName ?? "no bank (cash)"}</small></td>
                         </>
                       ) : (
                         <td><SettlementBadge status={p.status} /></td>
                       )}
-                      <td><button type="button" className="btn btn-outline btn-sm" onClick={() => setOpenId(p._id)}>View</button></td>
+                      <td>
+                        <span className="ds-row-actions">
+                          {canEnter(p) && <button type="button" className="btn btn-primary btn-sm" onClick={() => setEntryRow(p)} aria-label={`Payment entry for ${p.paymentNumber}`}>Entry</button>}
+                          {mode === "rbp" && p.status === "COMPLETED" && <EntryCompletedBadge p={p} />}
+                          <button type="button" className="btn btn-outline btn-sm" onClick={() => setOpenId(p._id)}>View</button>
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -166,6 +196,7 @@ export function PaymentQueue({ mode, defaultCategory = "", toolbar, reloadKey = 
         )}
       </div>
       {openId && <PaymentDetailModal id={openId} onClose={() => setOpenId(null)} onChanged={() => setTick((t) => t + 1)} />}
+      {entryRow && <PaymentEntryModal p={entryRow} onClose={() => setEntryRow(null)} onSaved={() => { setEntryRow(null); setTick((t) => t + 1); }} />}
     </>
   );
 }
@@ -223,12 +254,21 @@ export function PaymentDetailModal({ id, onClose, onChanged }: { id: string; onC
           </section>
           {p.category === "DAILY" ? <DailyBreakdown data={p.data} /> : <FinalBreakdown data={p.data} />}
 
+          {p.status === "APPROVED" && !p.completion && (
+            <section className="ds-sec">
+              <h4>Payment Detail</h4>
+              <KV items={[["Reference No.", "Awaiting payment. RSA records it with Entry in Driver Payments."]]} />
+            </section>
+          )}
           {p.completion && (
             <section className="ds-sec">
-              <h4>Payment completion</h4>
+              <h4>Payment Detail (paid)</h4>
               <KV items={[
-                ["Reference No", p.completion.referenceNumber], ["Payment Date", formatDate(p.completion.paymentDate)], ["Mode", p.completion.paymentMode], ["Bank", p.completion.bankName],
-                ["Transaction", p.completion.transactionMasked], ["Remarks", p.completion.remarks], ["Recorded by", `${p.completion.completedBy} · ${formatDateTime(p.completion.completedAt)}`],
+                ["Reference No.", p.completion.referenceNumber], ["Reference Date", p.completion.referenceDate ? formatDate(p.completion.referenceDate) : "-"],
+                ["Payment Mode", modeLabel(p.completion.paymentMode)], ["Payment Date", formatDate(p.completion.paymentDate)], ["Bank Name", d(p.completion.bankName)],
+                ...(p.completion.transactionMasked ? [["Transaction", p.completion.transactionMasked] as [string, string]] : []),
+                ...(p.completion.remarks ? [["Remarks", p.completion.remarks] as [string, string]] : []),
+                ["Recorded by", `${p.completion.completedBy} · ${formatDateTime(p.completion.completedAt)}`],
               ]} />
             </section>
           )}
@@ -252,11 +292,11 @@ export function PaymentDetailModal({ id, onClose, onChanged }: { id: string; onC
               {can.canResubmit && <Link className="btn btn-primary" href={`${paymentsBase(user?.role)}/${p.category === "DAILY" ? "daily" : "final"}?id=${p._id}&tv=${p.trackingVehicle}`}>Correct &amp; Resubmit</Link>}
               {can.canDecide && <button type="button" className="btn btn-danger" onClick={() => setMode("reject")}>Reject</button>}
               {can.canDecide && <button type="button" className="btn btn-primary" onClick={() => setMode("approve")}>Approve</button>}
-              {can.canComplete && <button type="button" className="btn btn-primary" onClick={() => setMode("complete")}>Mark Payment Completed</button>}
+              {can.canComplete && <button type="button" className="btn btn-primary" onClick={() => setMode("complete")}>Payment Entry</button>}
             </div>
           )}
           {(mode === "approve" || mode === "reject") && <DecisionForm p={p} decision={mode} onCancel={() => setMode(null)} onDone={done} />}
-          {mode === "complete" && <CompletionForm p={p} onCancel={() => setMode(null)} onDone={done} />}
+          {mode === "complete" && <PaymentEntryForm inline p={p} onCancel={() => setMode(null)} onDone={done} />}
         </div>
       )}
     </Modal>
@@ -351,53 +391,6 @@ function DecisionForm({ p, decision, onCancel, onDone }: { p: SettlementDetail; 
         <button type="button" className={`btn ${decision === "reject" ? "btn-danger" : "btn-primary"}`} onClick={submit} disabled={busy}>
           {busy ? "Please wait…" : decision === "reject" ? "Confirm Reject" : `Approve ${formatInr(p.amount)}`}
         </button>
-      </div>
-    </div>
-  );
-}
-
-const MODES = ["NEFT", "RTGS", "IMPS", "UPI", "CHEQUE", "CASH"];
-function CompletionForm({ p, onCancel, onDone }: { p: SettlementDetail; onCancel: () => void; onDone: () => void }) {
-  const toast = useToast();
-  const [today] = useState(() => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10)); // IST date, fixed when the form opens
-  const [f, setF] = useState({ referenceNumber: "", paymentDate: today, paymentMode: "NEFT", bankName: "", transactionDetails: "", remarks: "" });
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-  const set = (k: keyof typeof f, v: string) => setF({ ...f, [k]: v });
-  const submit = async () => {
-    const e: string[] = [];
-    if (!f.referenceNumber.trim()) e.push("Payment reference number is required");
-    if (!f.bankName.trim()) e.push("Bank is required");
-    if (f.paymentMode !== "CASH" && !f.transactionDetails.trim()) e.push("Transaction details are required");
-    if (f.paymentDate > today) e.push("Payment date cannot be in the future");
-    if (e.length) return setErr(e.join("; "));
-    setBusy(true);
-    setErr("");
-    try {
-      await request(`/settlements/${p._id}/complete`, "POST", f);
-      toast(`${p.paymentNumber} marked as paid`);
-      onDone();
-    } catch (x) {
-      setErr((x as Error).message);
-      setBusy(false);
-    }
-  };
-  return (
-    <div className="ds-inline-form">
-      <h4>Record accounts payment</h4>
-      <div className="ds-grid">
-        <label className="field">Payment reference no *<input value={f.referenceNumber} maxLength={60} onChange={(e) => set("referenceNumber", e.target.value.replace(/[^A-Za-z0-9/_-]/g, ""))} /></label>
-        <label className="field">Payment date *<DateInput value={f.paymentDate} max={today} onChange={(e) => set("paymentDate", e.target.value)} /></label>
-        <label className="field">Payment mode *<Select value={f.paymentMode} onChange={(e) => set("paymentMode", e.target.value)}>{MODES.map((m) => <option key={m}>{m}</option>)}</Select></label>
-        <label className="field">Bank *<input value={f.bankName} maxLength={120} onChange={(e) => set("bankName", e.target.value)} placeholder="Paying bank" /></label>
-        <label className="field ds-span2">Transaction details {f.paymentMode !== "CASH" && "*"}<input value={f.transactionDetails} maxLength={300} onChange={(e) => set("transactionDetails", e.target.value)} placeholder="UTR / cheque no / UPI ref" /></label>
-        <label className="field ds-span2">Remarks<input value={f.remarks} maxLength={500} onChange={(e) => set("remarks", e.target.value)} /></label>
-      </div>
-      <p className="muted ds-note">Amount {formatInr(p.amount)} to {p.bank?.accountName ?? p.driverName} · {p.bank?.bankName ?? ""} {p.bank?.accountMasked ?? ""}. Transaction details are stored encrypted.</p>
-      {err && <div className="alert" role="alert">{err}</div>}
-      <div className="actions-row">
-        <button type="button" className="btn btn-outline" onClick={onCancel} disabled={busy}>Cancel</button>
-        <button type="button" className="btn btn-primary" onClick={submit} disabled={busy}>{busy ? "Saving…" : "Mark Completed"}</button>
       </div>
     </div>
   );

@@ -21,12 +21,23 @@ export const daysBetween = (from: string, to: string) => Math.round((Date.parse(
 export interface DailyInput extends PaymentInput { fromDate: string; toDate: string }
 
 /** Daily Vehicle Payment: the same fields and Total Payable rule as the existing RSA payment entry, plus the payment period. */
-export function validateDailyInput(input: unknown): { errors: string[]; data: DailyInput | null } {
+export interface DailyDateBounds {
+  campaignFrom?: string | null;
+  campaignTo?: string | null;
+  /** The period saved on the payment being corrected: an unchanged period is accepted even if it predates this rule. */
+  previous?: { fromDate?: string; toDate?: string };
+}
+
+export function validateDailyInput(input: unknown, bounds: DailyDateBounds = {}): { errors: string[]; data: DailyInput | null } {
   const b = (input && typeof input === "object" && !Array.isArray(input) ? input : {}) as Obj;
   const errors: string[] = [];
   if (!isDate(b.fromDate)) errors.push("From Date must be a valid date");
   if (!isDate(b.toDate)) errors.push("To Date must be a valid date");
   if (isDate(b.fromDate) && isDate(b.toDate) && b.toDate < b.fromDate) errors.push("To Date cannot be before From Date");
+  const unchanged = b.fromDate === bounds.previous?.fromDate && b.toDate === bounds.previous?.toDate;
+  const { campaignFrom: cf, campaignTo: ct } = bounds;
+  if (!unchanged && isDate(b.fromDate) && isDate(cf) && b.fromDate < cf) errors.push("From Date cannot be before the campaign start date");
+  if (!unchanged && isDate(b.toDate) && isDate(ct) && b.toDate > ct) errors.push("To Date cannot be after the campaign end date");
   if (isDate(b.fromDate) && isDate(b.toDate) && b.toDate >= b.fromDate && daysBetween(b.fromDate, b.toDate) > 62) errors.push("A daily payment can cover at most 62 days");
   const v = validatePaymentInput(b);
   errors.push(...v.errors);
@@ -79,7 +90,7 @@ export interface FinalInput {
 
 const KEY = /^[A-Za-z0-9_-]{8,64}$/;
 
-export function validateFinalInput(input: unknown, ctx: { totalDays: number | null }): { errors: string[]; data: FinalInput | null } {
+export function validateFinalInput(input: unknown, ctx: { totalDays: number | null; fromDate?: string; toDate?: string }): { errors: string[]; data: FinalInput | null } {
   const b = (input && typeof input === "object" && !Array.isArray(input) ? input : {}) as Obj;
   const errors: string[] = [];
   const num = (raw: unknown, label: string) => {
@@ -109,6 +120,8 @@ export function validateFinalInput(input: unknown, ctx: { totalDays: number | nu
   if (n.overtimeHours > 0 && !n.overtimeRate) errors.push("Enter the overtime rate per hour");
 
   const reportingDate = blank(b.reportingDate) ? null : isDate(b.reportingDate) ? (b.reportingDate as string) : (errors.push("Reporting Date must be a valid date"), null);
+  if (reportingDate && ctx.fromDate && ctx.toDate && isDate(ctx.fromDate) && isDate(ctx.toDate) && (reportingDate < ctx.fromDate || reportingDate > ctx.toDate))
+    errors.push("Reporting Date must be within the campaign start and end dates");
 
   const expenses: FinalExpenseIn[] = [];
   if (b.expenses !== undefined && b.expenses !== null) {

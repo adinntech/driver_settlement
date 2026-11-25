@@ -1,6 +1,6 @@
 import { TrackingProject } from "../models/TrackingProject.js";
 import { TrackingVehicle } from "../models/TrackingVehicle.js";
-import { validateTracking } from "../validators/tracking.validator.js";
+import { validateTracking, type TrackingValidationOptions } from "../validators/tracking.validator.js";
 import { allocateOne, type NumberStore } from "./numberAllocator.js";
 import { Budget } from "../models/Budget.js";
 import { AppError } from "../utils/AppError.js";
@@ -13,8 +13,9 @@ interface Actor {
 export async function createTracking(
   actor: Actor,
   body: { projectType?: unknown; details?: unknown; requestId?: unknown },
+  opts: Pick<TrackingValidationOptions, "allowPastStart"> = {}, // internal callers only (dev seed); the API never passes it
 ) {
-  const v = validateTracking(body.projectType, body.details);
+  const v = validateTracking(body.projectType, body.details, opts);
   if (v.errors.length) throw new AppError(v.errors.join("; "), 400);
 
   const requestId = typeof body.requestId === "string" && body.requestId ? body.requestId : undefined;

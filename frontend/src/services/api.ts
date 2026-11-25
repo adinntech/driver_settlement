@@ -1,7 +1,7 @@
 import { API_BASE_URL } from "@/utils/config";
 import type { ApiResponse } from "@/types/api";
 
-const TOKEN_KEY = "ds_token";
+export const TOKEN_KEY = "ds_token";
 
 // ---------------------------------------------------------------- shared GET cache + in-flight dedupe + activity
 /**

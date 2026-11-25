@@ -1,10 +1,14 @@
 import { countDays } from "./format";
+import { isYmd } from "./dates";
+import { rateOrigin, type TollPlazaRef, type TollVehicleClass } from "./tolls";
 
 export type Unit = "PER_DAY" | "PER_CAMPAIGN";
 export interface TollRow {
   id: string;
   location: string;
   rate: string;
+  /** Set when the row was picked from the toll directory; cleared when the location is typed over. */
+  plaza?: TollPlazaRef | null;
 }
 
 export interface ChargeRow {
@@ -27,6 +31,7 @@ export interface Draft {
   foodUnit: Unit;
   haltFood: string;
   tolls: TollRow[];
+  tollVehicleClass: TollVehicleClass | "";
   others: ChargeRow[];
   fromLocation: string;
   toLocation: string;
@@ -41,7 +46,7 @@ export interface DraftContext {
 }
 
 let seq = 0;
-export const newTollRow = (location = "", rate = ""): TollRow => ({ id: `t${++seq}`, location, rate });
+export const newTollRow = (location = "", rate = "", plaza: TollPlazaRef | null = null): TollRow => ({ id: `t${++seq}`, location, rate, plaza });
 
 export const newChargeRow = (description = "", amount = ""): ChargeRow => ({ id: `c${++seq}`, description, amount });
 
@@ -65,7 +70,7 @@ export function emptyDraft(ctx: DraftContext): Draft {
     sundayHalt: ctx.sundayHalt,
     numberOfDays: autoDays(ctx.campaignFrom, ctx.campaignTo, ctx.sundayHalt),
     dieselAmount: "", salaryAmount: "", salaryUnit: "PER_DAY", foodAmount: "", foodUnit: "PER_DAY",
-    haltFood: "", tolls: [newTollRow()], others: [newChargeRow()],
+    haltFood: "", tolls: [newTollRow()], tollVehicleClass: "", others: [newChargeRow()],
     fromLocation: "", toLocation: "", totalKm: "", upDownValue: "",
   };
 }
@@ -84,7 +89,7 @@ function restoreCharges(data: Record<string, unknown>): ChargeRow[] {
 /** Restores every saved value. Legacy (pre-redesign) records fall back to a fresh prefilled form. */
 export function draftFromData(data: Stored | undefined | null, ctx: DraftContext): Draft {
   if (!data || data.schemaVersion !== 2) return emptyDraft(ctx);
-  const tolls = Array.isArray(data.tolls) ? (data.tolls as { location: string; rate: number }[]) : [];
+  const tolls = Array.isArray(data.tolls) ? (data.tolls as { location: string; rate: number; plaza?: TollPlazaRef }[]) : [];
   return {
     mileage: s(data.mileage), estimatedKmPerDay: s(data.estimatedKmPerDay),
     onRoadDate: s(data.onRoadDate), completionDate: s(data.completionDate),
@@ -93,7 +98,8 @@ export function draftFromData(data: Stored | undefined | null, ctx: DraftContext
     salaryAmount: s(data.salaryAmount), salaryUnit: data.salaryUnit === "PER_CAMPAIGN" ? "PER_CAMPAIGN" : "PER_DAY",
     foodAmount: s(data.foodAmount), foodUnit: data.foodUnit === "PER_CAMPAIGN" ? "PER_CAMPAIGN" : "PER_DAY",
     haltFood: s(data.haltFood),
-    tolls: tolls.length ? tolls.map((t) => newTollRow(t.location, s(t.rate))) : [newTollRow()],
+    tolls: tolls.length ? tolls.map((t) => newTollRow(t.location, s(t.rate), t.plaza ?? null)) : [newTollRow()],
+    tollVehicleClass: typeof data.tollVehicleClass === "string" ? (data.tollVehicleClass as TollVehicleClass) : "",
     others: restoreCharges(data),
     fromLocation: s(data.fromLocation), toLocation: s(data.toLocation),
     totalKm: s(data.totalKm), upDownValue: s(data.upDownValue),
@@ -138,10 +144,27 @@ export function computeValues(d: Draft) {
   return { dieselValue, salaryValue, foodValue, tollAmount, totalValue };
 }
 
-export function validateDraft(d: Draft): string[] {
+export interface DraftDateBounds {
+  campaignFrom?: string | null;
+  campaignTo?: string | null;
+  /** Dates saved on the version being edited: unchanged values are accepted even if they predate the campaign rule (as on the server). */
+  previous?: { onRoadDate?: unknown; completionDate?: unknown };
+}
+
+/** Same date rules as the server: both dates inside the campaign period, completion on or after on road. */
+export function validateDraft(d: Draft, bounds: DraftDateBounds = {}): string[] {
   const e: string[] = [];
+  const { campaignFrom: cf, campaignTo: ct } = bounds;
+  const unchanged = (k: "onRoadDate" | "completionDate") => isYmd(bounds.previous?.[k]) && bounds.previous?.[k] === d[k];
   if (!d.onRoadDate) e.push("On road date is required");
+  else if (!isYmd(d.onRoadDate)) e.push("On road date must be a valid date");
+  else if (!unchanged("onRoadDate")) {
+    if (isYmd(cf) && d.onRoadDate < cf) e.push("On road date cannot be before the campaign start date");
+    if (isYmd(ct) && d.onRoadDate > ct) e.push("On road date cannot be after the campaign end date");
+  }
   if (!d.completionDate) e.push("Completion date is required");
+  else if (!isYmd(d.completionDate)) e.push("Completion date must be a valid date");
+  else if (!unchanged("completionDate") && isYmd(ct) && d.completionDate > ct) e.push("Completion date cannot be after the campaign end date");
   if (d.onRoadDate && d.completionDate && d.completionDate < d.onRoadDate) e.push("Completion date cannot be before on road date");
   if (!(Number.isInteger(Number(d.numberOfDays)) && Number(d.numberOfDays) >= 1)) e.push("Number of days must be at least 1");
   const amounts: [string, string][] = [
@@ -152,7 +175,9 @@ export function validateDraft(d: Draft): string[] {
   for (const [v, label] of amounts) if (v !== "" && !(Number(v) >= 0)) e.push(`${label} must be a valid amount`);
   filledTolls(d).forEach((t, i) => {
     if (!t.location.trim()) e.push(`Toll entry ${i + 1}: location is required`);
-    if (t.rate === "" || !(Number(t.rate) >= 0)) e.push(`Toll entry ${i + 1}: enter a valid rate`);
+    if (t.rate === "" || !(Number(t.rate) >= 0))
+      e.push(t.plaza && t.plaza.fetchedRate === null ? `Toll entry ${i + 1}: no published rate for this plaza, enter the rate manually` : `Toll entry ${i + 1}: enter a valid rate`);
+    if (t.plaza && t.plaza.vehicleClass !== d.tollVehicleClass) e.push(`Toll entry ${i + 1}: vehicle class changed, select the plaza again`);
   });
   filledCharges(d).forEach((c, i) => {
     if (c.amount !== "" && !(Number(c.amount) >= 0)) e.push(`Others ${i + 1}: enter a valid amount`);
@@ -171,9 +196,13 @@ export function toPayload(d: Draft) {
     salaryAmount: num(d.salaryAmount), salaryUnit: d.salaryUnit,
     foodAmount: num(d.foodAmount), foodUnit: d.foodUnit,
     haltFood: num(d.haltFood),
-    tolls: filledTolls(d).map((t) => ({ location: t.location.trim(), rate: Number(t.rate) })),
+    tolls: filledTolls(d).map((t) => ({ location: t.location.trim(), rate: Number(t.rate), ...(t.plaza ? { plaza: t.plaza } : {}) })),
+    tollVehicleClass: d.tollVehicleClass || null,
     others: filledCharges(d).map((c) => ({ description: c.description.trim(), amount: num(c.amount) })),
     fromLocation: d.fromLocation, toLocation: d.toLocation,
     totalKm: num(d.totalKm), upDownValue: num(d.upDownValue),
   };
 }
+
+/** Toll rows linked to a plaza whose rate the user changed from the fetched value (shown to the user and to RSOM). */
+export const editedTolls = (d: Draft): TollRow[] => filledTolls(d).filter((t) => rateOrigin(t.rate, t.plaza) === "AUTO_EDITED");

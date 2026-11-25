@@ -14,6 +14,7 @@ import { request } from "@/services/api";
 import { useAuth } from "@/context/AuthContext";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { formatDate, formatDateTime, formatInr } from "@/utils/format";
+import { earlierOf, keepInRange, laterOf } from "@/utils/dates";
 import { amountPaise, money, newSubmissionKey, rowId, sanitizeAmount, type RsaProjectRow } from "@/utils/rsa";
 import {
   DEDUCTION_KEYS, campaignDays, paymentsBase, finalFormFrom, finalPayload, finalTotals, validateFinalForm, type FinalForm, type FinalNumberKey, type SettlementContext, type SettlementDetail, type SettlementOptions,
@@ -183,12 +184,25 @@ function DailyInner({ ctx, existing, expenseOptions }: { ctx: SettlementContext;
   const s = existing?.data;
   const [today] = useState(() => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10));
   const paymentFor = ctx.projectType;
-  const [fromDate, setFrom] = useState<string>(s?.fromDate ?? today);
-  const [toDate, setTo] = useState<string>(s?.toDate ?? today);
+  // The payment period lies inside the campaign; today is the default only while the campaign is running.
+  const campFrom = ctx.campaign.fromDate || undefined;
+  const campTo = ctx.campaign.toDate || undefined;
+  const defaultDay = keepInRange(today, campFrom, campTo);
+  const [fromDate, setFromDate] = useState<string>(s?.fromDate ?? defaultDay);
+  const [toDate, setTo] = useState<string>(s?.toDate ?? defaultDay);
+  const [periodNote, setPeriodNote] = useState("");
+  const setFrom = (v: string) => {
+    setFromDate(v);
+    if (toDate && v && toDate < v) {
+      setTo("");
+      setPeriodNote("To Date was cleared because it is before the new From Date. Pick it again.");
+    } else setPeriodNote("");
+  };
+  const dieselMax = earlierOf(toDate, today);
   const [cashInHand, setCash] = useState<boolean>(!!s?.cashInHand);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [diesel, setDiesel] = useState<DieselLine[]>((s?.dieselEntries ?? []).map((x: any) => ({ id: rowId(), amount: String(x.amount), bunk: x.reference ?? "", date: "" })));
-  const [dDraft, setDDraft] = useState({ amount: "", bunk: "", date: today });
+  const [dDraft, setDDraft] = useState({ amount: "", bunk: "", date: defaultDay });
   const [food, setFood] = useState<string>(s?.foodAmount ? String(s.foodAmount) : "");
   const [advance, setAdvance] = useState<string>(s?.salaryAdvance ? String(s.salaryAdvance) : "");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -213,6 +227,10 @@ function DailyInner({ ctx, existing, expenseOptions }: { ctx: SettlementContext;
     if (!p(dDraft.amount)) e.push("Enter the diesel cost");
     if (!dDraft.bunk.trim()) e.push("Enter the diesel / petrol bunk name");
     if (/[<>]/.test(dDraft.bunk)) e.push("Bunk name contains invalid characters");
+    if (dDraft.date) {
+      if (dDraft.date > today) e.push("Diesel date cannot be in the future");
+      else if ((fromDate && dDraft.date < fromDate) || (toDate && dDraft.date > toDate)) e.push("Diesel date must be within the payment From and To dates");
+    }
     if (e.length) return setErrors(e);
     setErrors([]);
     setDiesel([...diesel, { id: rowId(), amount: dDraft.amount, bunk: dDraft.bunk.trim(), date: dDraft.date }]);
@@ -242,6 +260,12 @@ function DailyInner({ ctx, existing, expenseOptions }: { ctx: SettlementContext;
     const e: string[] = [];
     if (!fromDate || !toDate) e.push("From Date and To Date are required");
     else if (toDate < fromDate) e.push("To Date cannot be before From Date");
+    else if (!(s && fromDate === s.fromDate && toDate === s.toDate)) {
+      // same rule as the server; an unchanged period of a payment being corrected is accepted
+      if (campFrom && fromDate < campFrom) e.push("From Date cannot be before the campaign start date");
+      if (campTo && toDate > campTo) e.push("To Date cannot be after the campaign end date");
+    }
+    if (diesel.some((r) => r.date && (r.date > today || r.date < fromDate || r.date > toDate))) e.push("Every diesel date must be within the payment period and not in the future");
     for (const [label, v] of [["Food", food], ["Salary Advance", advance]] as const) if (amountPaise(v) === null) e.push(`${label} must contain digits only`);
     if (p(dDraft.amount)) e.push("Click + to add the diesel cost entered, or clear it");
     if (!total) e.push("Enter at least one amount");
@@ -283,18 +307,19 @@ function DailyInner({ ctx, existing, expenseOptions }: { ctx: SettlementContext;
             <label>Payment For</label>
             <Select className="dsf-in" value={paymentFor} disabled aria-label="Payment For"><option value="ROADSHOW">RoadShow</option><option value="SIGNAGE">Signage</option></Select>
             <label>From Date</label>
-            <DateInput className="dsf-in dsf-w-date" value={fromDate} max={toDate || undefined} onChange={(e) => setFrom(e.target.value)} aria-label="From Date" />
+            <DateInput className="dsf-in dsf-w-date" value={fromDate} min={campFrom} max={campTo} onChange={(e) => setFrom(e.target.value)} aria-label="From Date" />
             <label>To Date</label>
             <span className="vp-inline">
-              <DateInput className="dsf-in dsf-w-date" value={toDate} min={fromDate || undefined} onChange={(e) => setTo(e.target.value)} aria-label="To Date" />
+              <DateInput className="dsf-in dsf-w-date" value={toDate} min={laterOf(fromDate, campFrom)} max={campTo} onChange={(e) => { setTo(e.target.value); setPeriodNote(""); }} aria-label="To Date" />
               <label className="vp-check"><input type="checkbox" checked={cashInHand} onChange={(e) => setCash(e.target.checked)} /> Cash In Hand</label>
             </span>
+            {(periodNote || campFrom) && <><span /><small className={periodNote ? "toll-warn" : "muted"} role="status">{periodNote || `Campaign ${formatDate(campFrom)} → ${formatDate(campTo)}`}</small></>}
             <label>Diesel Cost</label>
             <span className="vp-inline">
               <input className="dsf-in num-input dsf-w-s" inputMode="decimal" placeholder="0.00" aria-label="Diesel cost" value={dDraft.amount} onChange={(e) => setDDraft({ ...dDraft, amount: sanitizeAmount(e.target.value) })} />
               <input className="dsf-in vp-bunk" placeholder="Diesel / petrol bunk name" aria-label="Bunk name" maxLength={90} value={dDraft.bunk} onChange={(e) => setDDraft({ ...dDraft, bunk: e.target.value })} onKeyDown={(e) => e.key === "Enter" && addDiesel()} />
               <button type="button" className="dsf-btn dsf-btn-plain vp-plus" onClick={addDiesel} aria-label="Add diesel entry">+</button>
-              <DateInput className="dsf-in dsf-w-date" aria-label="Diesel date" value={dDraft.date} onChange={(e) => setDDraft({ ...dDraft, date: e.target.value })} />
+              <DateInput className="dsf-in dsf-w-date" aria-label="Diesel date" value={dDraft.date} min={fromDate || campFrom} max={dieselMax} onChange={(e) => setDDraft({ ...dDraft, date: e.target.value })} />
             </span>
             <label>Food</label>
             <span className="vp-inline">
@@ -446,8 +471,7 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
   };
 
   const submit = async () => {
-    const e = validateFinalForm(f, days?.calendar ?? null);
-    if (!f.reportingDate) e.push("Reporting Date is required");
+    const e = validateFinalForm(f, days?.calendar ?? null, { fromDate: ctx.campaign.fromDate, toDate: ctx.campaign.toDate });
     setErrors(e);
     if (e.length) return;
     setBusy(true);
@@ -485,7 +509,7 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
             <span className="dsf-period"><b>From:</b>{ro(formatDate(ctx.campaign.fromDate), "dsf-w-date")}<b>To:</b>{ro(formatDate(ctx.campaign.toDate), "dsf-w-date")}</span>
           </div>
           <div className="dsf-row"><label>Estimated KM Per Day</label>{num("estimatedKmPerDay")}<label className="dsf-inl">Reporting Date</label>
-            <DateInput className="dsf-in dsf-w-date" aria-label="Reporting Date" value={f.reportingDate} min={ctx.campaign.fromDate ? addDaysYmd(ctx.campaign.fromDate, -15) : undefined} max={ctx.campaign.toDate ?? undefined} onChange={(e) => setF({ ...f, reportingDate: e.target.value })} />
+            <DateInput className="dsf-in dsf-w-date" aria-label="Reporting Date" value={f.reportingDate} min={ctx.campaign.fromDate || undefined} max={ctx.campaign.toDate || undefined} onChange={(e) => setF({ ...f, reportingDate: e.target.value })} />
           </div>
           <div className="dsf-row"><label>Location</label><input className="dsf-in" aria-label="Location" value={f.location} maxLength={120} onChange={(e) => setF({ ...f, location: e.target.value })} />
             <label className="dsf-inl">Fixed Milage</label>{num("fixedMileage", { w: "dsf-w-s" })}<label className="dsf-inl">Fuel Rate</label>{num("dieselCost", { w: "dsf-w-s" })}
@@ -640,5 +664,3 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
     </div>
   );
 }
-
-const addDaysYmd = (ymd: string, n: number) => new Date(Date.parse(`${ymd}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);

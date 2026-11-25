@@ -4,7 +4,7 @@ import PDFDocument from "pdfkit";
 import { fileURLToPath } from "node:url";
 import { config } from "../config/index.js";
 import { Driver } from "../models/Driver.js";
-import { SettlementPayment } from "../models/SettlementPayment.js";
+import { PAYMENT_MODE_LABEL, SettlementPayment } from "../models/SettlementPayment.js";
 import { Vehicle } from "../models/Vehicle.js";
 import { AppError } from "../utils/AppError.js";
 import { maskTail, unseal } from "../utils/secureField.js";
@@ -22,6 +22,16 @@ const dmy = (ymd: string | null | undefined) => (ymd && YMD.test(ymd) ? `${ymd.s
 
 export interface ReportQuery { from?: string; to?: string; category?: string; q?: string }
 
+/** Payment details recorded by RSA's payment Entry (blank while the payment is not yet paid). */
+const payRef = (p: any) => {
+  const c = p.completion ?? {};
+  return { referenceNumber: c.referenceNumber ?? "", referenceDate: c.referenceDate ?? "", paymentDate: c.paymentDate ?? "", paymentMode: PAYMENT_MODE_LABEL[c.paymentMode] ?? c.paymentMode ?? "", paymentBank: c.bankName ?? "" };
+};
+const REF_COLS: Col[] = [
+  { header: "Ref. No.", key: "referenceNumber", width: 20 }, { header: "Ref. Date", key: "referenceDate" }, { header: "Pay. Date", key: "paymentDate" },
+  { header: "Payment Mode", key: "paymentMode", width: 14 }, { header: "Paid From Bank", key: "paymentBank", width: 20 },
+];
+
 export async function approvedPaymentRows(q: ReportQuery, statuses: string[] = ["APPROVED", "COMPLETED"]) {
   const filter: any = { status: { $in: statuses } };
   if (q.category === "DAILY" || q.category === "FINAL") filter.category = q.category;
@@ -33,7 +43,7 @@ export async function approvedPaymentRows(q: ReportQuery, statuses: string[] = [
     clientName: p.clientName ?? "", projectType: p.projectType, vehicleNo: p.vehicleNo ?? "", driverNumber: p.driverNumber ?? "", driverName: p.driverName ?? "", fromDate: p.fromDate, toDate: p.toDate,
     amount: p.amount, accountName: p.bank?.accountName ?? "", bankName: p.bank?.bankName ?? "", ifscCode: p.bank?.ifscCode ?? "", accountNumber: p.bank?.accountMasked ?? "",
     submittedBy: p.submittedBy, approvedBy: p.reviewedBy ?? "", approvedAt: p.reviewedAt ?? null,
-    referenceNumber: p.completion?.referenceNumber ?? "", paymentDate: p.completion?.paymentDate ?? "", paymentMode: p.completion?.paymentMode ?? "",
+    ...payRef(p),
   }));
 }
 
@@ -168,7 +178,7 @@ export async function driverSalaryRows(q: ReportQuery) {
     _id: String(p._id), paymentNumber: p.paymentNumber, status: p.status, driverNumber: p.driverNumber, driverName: p.driverName, vehicleNo: p.vehicleNo, trackupNumber: p.trackupNumber, jsNumber: p.jsNumber ?? "",
     clientName: p.clientName ?? "", fromDate: p.fromDate, toDate: p.toDate, onRoadDays: p.data?.days?.onRoadDays ?? 0, onRoadSundays: p.data?.days?.onRoadSundays ?? 0, haltDays: p.data?.days?.haltDays ?? 0,
     earnings: p.data?.earningsTotal ?? 0, approvedExpenses: p.data?.approvedTotal ?? 0, gross: p.data?.gross ?? 0, totalDeduction: p.data?.totalDeduction ?? 0, suspenseAmount: p.data?.suspenseAmount ?? 0,
-    netAmount: p.amount, approvedBy: p.reviewedBy ?? "", approvedAt: p.reviewedAt ?? null, referenceNumber: p.completion?.referenceNumber ?? "",
+    netAmount: p.amount, approvedBy: p.reviewedBy ?? "", approvedAt: p.reviewedAt ?? null, ...payRef(p),
   }));
 }
 
@@ -220,7 +230,7 @@ export async function accountsExport(rows: any[]) {
 export async function reportWorkbook(kind: string, q: ReportQuery): Promise<{ name: string; buffer: Buffer }> {
   if (kind === "approved-payments") {
     const rows = await approvedPaymentRows(q);
-    return { name: "approved-payment-report", buffer: await workbook("Approved Payments", [...PAYMENT_COLS, { header: "Payment Ref", key: "referenceNumber", width: 18 }, { header: "Paid On", key: "paymentDate" }, { header: "Mode", key: "paymentMode" }], rows) };
+    return { name: "approved-payment-report", buffer: await workbook("Approved Payments", [...PAYMENT_COLS, ...REF_COLS], rows) };
   }
   if (kind === "vehicle-mis") return { name: "vehicle-mis", buffer: await vehicleMisWorkbook(await vehicleMisRows(q)) };
   if (kind === "driver-list")
@@ -236,7 +246,7 @@ export async function reportWorkbook(kind: string, q: ReportQuery): Promise<{ na
       { header: "From", key: "fromDate" }, { header: "To", key: "toDate" }, { header: "On Road Days", key: "onRoadDays" }, { header: "On Road Sundays", key: "onRoadSundays" }, { header: "Halt Days", key: "haltDays" },
       { header: "Earnings", key: "earnings", money: true }, { header: "Approved Expenses", key: "approvedExpenses", money: true }, { header: "Gross", key: "gross", money: true },
       { header: "Total Deduction", key: "totalDeduction", money: true }, { header: "Suspense", key: "suspenseAmount", money: true }, { header: "Net Amount", key: "netAmount", money: true },
-      { header: "Approved By", key: "approvedBy" }, { header: "Approved On", key: "approvedAt", date: true, width: 18 }, { header: "Payment Ref", key: "referenceNumber", width: 18 },
+      { header: "Approved By", key: "approvedBy" }, { header: "Approved On", key: "approvedAt", date: true, width: 18 }, ...REF_COLS,
     ], await driverSalaryRows(q)) };
   throw new AppError("Unknown report", 404);
 }
@@ -296,6 +306,7 @@ export async function driverSalaryPdf(id: string): Promise<{ name: string; buffe
   doc.image(LOGO, R - logoW - 8, 48, { width: logoW });
   txt(`Accounted on : ${dmySlash(p.reviewedAt)}`, 360, 116, { size: 6.5, w: R - 360, align: "right" });
   txt(`Accounted by : ${p.reviewedBy ?? "__________________"}`, 360, 126, { size: 6.5, w: R - 360, align: "right" });
+  if (p.completion?.referenceNumber) txt(`Payment Ref : ${p.completion.referenceNumber}  (${dmy(p.completion.paymentDate)})`, 360, 136, { size: 6.5, bold: true, w: R - 360, align: "right" });
   hline(L, 337, 137);
 
   // ---- campaign details (two columns)

@@ -1,6 +1,7 @@
 "use client";
 
 import DateInput from "@/components/ui/DateInput";
+import { laterOf, todayIst } from "@/utils/dates";
 import { useRef, useState, type ReactNode } from "react";
 import DriverBankSection from "@/components/DriverBank";
 import DriverPicker, { DriverCard } from "@/components/DriverPicker";
@@ -24,9 +25,9 @@ export const Field = ({ label, req, children }: { label: string; req?: boolean; 
     <div className="b-ctl">{children}</div>
   </div>
 );
-const DT = ({ d, t, onD, onT, label }: { d: string; t: string; onD: (v: string) => void; onT: (v: string) => void; label: string }) => (
+const DT = ({ d, t, onD, onT, label, min, max }: { d: string; t: string; onD: (v: string) => void; onT: (v: string) => void; label: string; min?: string; max?: string }) => (
   <div className="dt-pair">
-    <DateInput value={d} onChange={(e) => onD(e.target.value)} aria-label={`${label} date`} />
+    <DateInput value={d} min={min} max={max} onChange={(e) => onD(e.target.value)} aria-label={`${label} date`} />
     <input type="time" value={t} onChange={(e) => onT(e.target.value)} aria-label={`${label} time`} />
   </div>
 );
@@ -159,13 +160,13 @@ export function AllotModal({ project, onClose, onDone }: { project: AllotmentPro
       )}
       <h4 className="sub">Schedule (IST)</h4>
       <Field label="Allotment Date & Time" req>
-        <DT d={f.allottedDate} t={f.allottedTime} onD={(v) => set("allottedDate", v)} onT={(v) => set("allottedTime", v)} label="Allotment" />
+        <DT d={f.allottedDate} t={f.allottedTime} onD={(v) => set("allottedDate", v)} onT={(v) => set("allottedTime", v)} label="Allotment" max={todayIst()} />
       </Field>
       <Field label="Expected Release">
-        <DT d={f.expectedReleaseDate} t={f.expectedReleaseTime} onD={(v) => set("expectedReleaseDate", v)} onT={(v) => set("expectedReleaseTime", v)} label="Expected release" />
+        <DT d={f.expectedReleaseDate} t={f.expectedReleaseTime} onD={(v) => set("expectedReleaseDate", v)} onT={(v) => set("expectedReleaseTime", v)} label="Expected release" min={f.allottedDate || undefined} />
       </Field>
       <Field label="Next Available" req>
-        <DT d={f.nextAvailableDate} t={f.nextAvailableTime} onD={(v) => set("nextAvailableDate", v)} onT={(v) => set("nextAvailableTime", v)} label="Next available" />
+        <DT d={f.nextAvailableDate} t={f.nextAvailableTime} onD={(v) => set("nextAvailableDate", v)} onT={(v) => set("nextAvailableTime", v)} label="Next available" min={laterOf(todayIst(), f.expectedReleaseDate)} />
       </Field>
       <Field label="Remarks">
         <textarea rows={3} value={f.remarks} maxLength={300} onChange={(e) => set("remarks", e.target.value)} placeholder="Optional allotment instructions" />

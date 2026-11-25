@@ -98,7 +98,7 @@ function Dashboard() {
             <option value="SIGNAGE">Signage</option>
           </Select>
           <DateInput value={from} onChange={(e) => setFrom(e.target.value)} aria-label="Created from" />
-          <DateInput value={to} onChange={(e) => setTo(e.target.value)} aria-label="Created to" />
+          <DateInput value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} aria-label="Created to" />
           {(q || type || from || to) && (
             <button
               className="btn btn-ghost"

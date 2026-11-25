@@ -1,11 +1,38 @@
+import { isYmd } from "../utils/dates.js";
+import { cleanText, isTollVehicleClass, type TollVehicleClass } from "../services/toll.service.js";
+
 type Obj = Record<string, unknown>;
 
 export const SCHEMA_VERSION = 2;
 export type Unit = "PER_DAY" | "PER_CAMPAIGN";
 
+/** Where a toll row's rate came from. Derived on the server, never taken from the browser. */
+export type TollRateSource = "MANUAL" | "AUTO" | "AUTO_EDITED";
+export type TollJourney = "SINGLE" | "RETURN";
+
+/** Toll plaza picked from the directory: kept with the row so reviewers see exactly what was used. */
+export interface TollPlazaRef {
+  id: number;
+  name: string;
+  state: string | null;
+  nh: string | null;
+  source: string;
+  sourceType: "nhai" | "state";
+  confidence: string;
+  vehicleClass: TollVehicleClass;
+  journey: TollJourney;
+  fetchedRate: number | null; // the directory's rate for the class + journey (null = none published)
+  rateStatus: string; // OK | UNAVAILABLE | UNVERIFIED | OUTDATED | INACTIVE at the time of selection
+  rateEffectiveDate: string | null;
+  datasetUpdated: string | null;
+  verified: boolean; // true only when the server re-read the plaza from the directory on save
+}
+
 export interface TollEntry {
   location: string;
   rate: number;
+  plaza?: TollPlazaRef; // absent on manual rows and on budgets saved before the toll directory
+  rateSource?: TollRateSource;
 }
 
 /** Inputs of the Budget screen (see reference screenshot). Computed values are derived. */
@@ -33,6 +60,7 @@ export interface BudgetInput {
   foodUnit: Unit;
   haltFood: number;
   tolls: TollEntry[]; // paired Location + Rate
+  tollVehicleClass: TollVehicleClass | null; // NHAI fee class the toll rates are for (null = not chosen / legacy)
   others: OtherCharge[]; // repeatable description + amount rows
   fromLocation: string | null;
   toLocation: string | null;
@@ -51,10 +79,15 @@ export interface BudgetComputed {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const isBlank = (v: unknown) => v === undefined || v === null || v === "";
-const isDate = (v: unknown) =>
-  typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v));
+const isDate = isYmd;
 
-export function validateBudget(input: unknown): { errors: string[]; data: BudgetInput } {
+export interface BudgetDateBounds {
+  campaignFrom?: unknown;
+  campaignTo?: unknown;
+  previous?: { onRoadDate?: unknown; completionDate?: unknown };
+}
+
+export function validateBudget(input: unknown, bounds: BudgetDateBounds = {}): { errors: string[]; data: BudgetInput } {
   const b = (input && typeof input === "object" ? input : {}) as Obj;
   const errors: string[] = [];
 
@@ -86,12 +119,22 @@ export function validateBudget(input: unknown): { errors: string[]; data: Budget
   if (!isDate(b.completionDate)) errors.push("Completion date must be a valid date (YYYY-MM-DD)");
   if (isDate(b.onRoadDate) && isDate(b.completionDate) && String(b.completionDate) < String(b.onRoadDate))
     errors.push("Completion date cannot be before on road date");
+  const unchanged = (field: "onRoadDate" | "completionDate", value: string) =>
+    isYmd(bounds.previous?.[field]) && String(bounds.previous?.[field]) === value;
+  if (isDate(b.onRoadDate) && isYmd(bounds.campaignFrom) && !unchanged("onRoadDate", String(b.onRoadDate)) && String(b.onRoadDate) < String(bounds.campaignFrom))
+    errors.push("On road date cannot be before the campaign start date");
+  if (isDate(b.onRoadDate) && isYmd(bounds.campaignTo) && !unchanged("onRoadDate", String(b.onRoadDate)) && String(b.onRoadDate) > String(bounds.campaignTo))
+    errors.push("On road date cannot be after the campaign end date");
+  if (isDate(b.completionDate) && isYmd(bounds.campaignTo) && !unchanged("completionDate", String(b.completionDate)) && String(b.completionDate) > String(bounds.campaignTo))
+    errors.push("Completion date cannot be after the campaign end date");
   if (b.sundayHalt !== undefined && typeof b.sundayHalt !== "boolean")
     errors.push("Sunday halt must be true or false");
 
   const days = Number(b.numberOfDays);
   if (!Number.isInteger(days) || days < 1) errors.push("Number of days must be a whole number of at least 1");
 
+  const tollVehicleClass = isBlank(b.tollVehicleClass) ? null : isTollVehicleClass(b.tollVehicleClass) ? b.tollVehicleClass : null;
+  if (!isBlank(b.tollVehicleClass) && !tollVehicleClass) errors.push("Toll vehicle class is not valid");
   const rawTolls = Array.isArray(b.tolls) ? b.tolls : b.tolls === undefined ? [] : null;
   if (rawTolls === null) errors.push("Toll details must be a list");
   const tolls: TollEntry[] = [];
@@ -104,7 +147,18 @@ export function validateBudget(input: unknown): { errors: string[]; data: Budget
     const rate = Number(e.rate);
     if (isBlank(e.rate) || !Number.isFinite(rate) || rate < 0)
       return void errors.push(`Toll entry ${i + 1}: rate must be a non-negative number`);
-    tolls.push({ location, rate: round2(rate) });
+    const entry: TollEntry = { location, rate: round2(rate) };
+    if (e.plaza !== undefined && e.plaza !== null) {
+      const plaza = tollPlazaRef(e.plaza, `Toll entry ${i + 1}`, errors);
+      if (plaza) {
+        if (!tollVehicleClass) return void errors.push(`Toll entry ${i + 1}: choose the toll vehicle class for the selected plaza`);
+        if (plaza.vehicleClass !== tollVehicleClass)
+          return void errors.push(`Toll entry ${i + 1}: the plaza rate is for a different vehicle class; select the plaza again`);
+        entry.plaza = plaza;
+        entry.rateSource = rateSourceOf(entry.rate, plaza.fetchedRate);
+      }
+    }
+    tolls.push(entry);
   });
   if (tolls.length > 100) errors.push("Too many toll entries (max 100)");
 
@@ -159,6 +213,7 @@ export function validateBudget(input: unknown): { errors: string[]; data: Budget
     foodUnit: unit("foodUnit", "Food"),
     haltFood: num("haltFood", "Halt food"),
     tolls,
+    tollVehicleClass,
     others,
     fromLocation: text("fromLocation", "From location"),
     toLocation: text("toLocation", "To location"),
@@ -167,6 +222,34 @@ export function validateBudget(input: unknown): { errors: string[]; data: Budget
     otherDetails,
   };
   return { errors, data };
+}
+
+/** AUTO = the directory's rate was kept; AUTO_EDITED = a plaza was picked but the rate was changed; MANUAL = no published rate. */
+export const rateSourceOf = (rate: number, fetched: number | null): TollRateSource =>
+  fetched === null ? "MANUAL" : fetched === rate ? "AUTO" : "AUTO_EDITED";
+
+const shortText = (v: unknown, max: number): string | null => {
+  if (typeof v !== "string" && typeof v !== "number") return null;
+  const t = cleanText(String(v)).trim();
+  return t ? t.slice(0, max) : null;
+};
+
+function tollPlazaRef(v: unknown, label: string, errors: string[]): TollPlazaRef | null {
+  const p = (v && typeof v === "object" ? v : {}) as Obj;
+  const id = Number(p.id);
+  const name = shortText(p.name, 120);
+  if (!Number.isInteger(id) || id <= 0 || !name) return (errors.push(`${label}: toll plaza reference is invalid`), null);
+  if (!isTollVehicleClass(p.vehicleClass)) return (errors.push(`${label}: toll plaza vehicle class is invalid`), null);
+  const fetched = p.fetchedRate === null || p.fetchedRate === undefined || p.fetchedRate === "" ? null : Number(p.fetchedRate);
+  if (fetched !== null && (!Number.isFinite(fetched) || fetched < 0)) return (errors.push(`${label}: fetched toll rate is invalid`), null);
+  return {
+    id, name, state: shortText(p.state, 60), nh: shortText(p.nh, 20), source: shortText(p.source, 160) ?? "Toll directory",
+    sourceType: p.sourceType === "nhai" ? "nhai" : "state", confidence: shortText(p.confidence, 20) ?? "partial",
+    vehicleClass: p.vehicleClass, journey: p.journey === "RETURN" ? "RETURN" : "SINGLE",
+    fetchedRate: fetched === null ? null : round2(fetched), rateStatus: shortText(p.rateStatus, 20) ?? "UNAVAILABLE",
+    rateEffectiveDate: isYmd(p.rateEffectiveDate) ? p.rateEffectiveDate : null, datasetUpdated: isYmd(p.datasetUpdated) ? p.datasetUpdated : null,
+    verified: false,
+  };
 }
 
 /** Per-day items multiply by number of days; per-campaign items are taken as is. */

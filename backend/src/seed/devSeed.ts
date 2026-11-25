@@ -389,7 +389,7 @@ async function seedVehiclePlan(plan: VehiclePlan, tv: any, project: any, a: Acto
 async function ensureProject(spec: ProjectSpec, a: Actors, t: Tally) {
   const requestId = `${SEED_TAG}:${spec.key}`;
   const had = await TrackingProject.exists({ requestId });
-  const loaded: any = await createTracking(a.RSOP, { projectType: spec.type, details: spec.details, requestId }); // idempotent on requestId
+  const loaded: any = await createTracking(a.RSOP, { projectType: spec.type, details: spec.details, requestId }, { allowPastStart: true }); // idempotent on requestId; seed campaigns may have started already
   t.add("projects", !had);
   return loaded;
 }

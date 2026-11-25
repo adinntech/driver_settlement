@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import { useBackendStatus } from "@/hooks/useBackendStatus";
@@ -62,6 +62,21 @@ export default function LoginPage() {
   useEffect(() => {
     if (ready && user) router.replace(homeFor(user.role));
   }, [ready, user, router]);
+
+  // cacheComponents keeps this page alive (hidden) after sign-in. Reset the form when it is hidden, so it never comes back
+  // still "Signing in…" with every workspace disabled, and the password does not stay in memory.
+  useLayoutEffect(() => {
+    return () => {
+      setBusy(false);
+      setPassword("");
+      setShow(false);
+      setError("");
+      setTouched(false);
+      setRole(null);
+      setDemoPinned(false);
+      setDemoPeek(false);
+    };
+  }, []);
 
   const available = WORKSPACES.filter((w) => !roles.data || roles.data[w.role]);
 

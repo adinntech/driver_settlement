@@ -3,7 +3,8 @@ import { randomInt } from "node:crypto";
 import { Budget, BudgetVersion } from "../models/Budget.js";
 import { TrackingVehicle } from "../models/TrackingVehicle.js";
 import { TrackingProject } from "../models/TrackingProject.js";
-import { budgetTotal, diffBudget, toStored, validateBudget } from "../validators/budget.validator.js";
+import { budgetTotal, diffBudget, rateSourceOf, toStored, validateBudget, type BudgetInput } from "../validators/budget.validator.js";
+import { tollDirectory } from "./toll.service.js";
 import { recordEvent, statusOf } from "./budgetEvents.js";
 import { buildActivity } from "./budgetActivity.js";
 import { AppError } from "../utils/AppError.js";
@@ -45,6 +46,29 @@ async function contextFor(vehicleId: string) {
   return { vehicle, project, context: buildContext(project, vehicle) };
 }
 
+/**
+ * Toll rows linked to a directory plaza are re-read from the server's copy of the directory, so the stored plaza details and
+ * the "fetched" rate never come from the browser. When the directory is unavailable the row is kept but marked unverified.
+ */
+async function verifyTollPlazas(data: BudgetInput) {
+  for (const t of data.tolls) {
+    if (!t.plaza) continue;
+    const hit = await tollDirectory().find(t.plaza.id, t.plaza.vehicleClass);
+    if (!hit) {
+      t.plaza.verified = false;
+      continue;
+    }
+    const r = hit.result;
+    const fetched = t.plaza.journey === "RETURN" ? r.rate.return : r.rate.single;
+    Object.assign(t.plaza, {
+      name: r.name, state: r.state, nh: r.nh, source: hit.source.name, sourceType: r.sourceType, confidence: r.confidence,
+      fetchedRate: fetched, rateStatus: fetched === null ? "UNAVAILABLE" : r.rate.status, rateEffectiveDate: r.rateEffectiveDate,
+      datasetUpdated: hit.source.datasetUpdated, verified: true,
+    });
+    t.rateSource = rateSourceOf(t.rate, fetched);
+  }
+}
+
 export async function getVehicleBudget(vehicleId: string) {
   const { context } = await contextFor(vehicleId);
   const budget = await Budget.findOne({ vehicle: vehicleId }).lean();
@@ -54,8 +78,9 @@ export async function getVehicleBudget(vehicleId: string) {
 
 export async function createBudget(vehicleId: string, input: unknown, username: string) {
   const { vehicle, project, context } = await contextFor(vehicleId);
-  const v = validateBudget(input);
+  const v = validateBudget(input, { campaignFrom: context.campaignFrom, campaignTo: context.campaignTo });
   if (v.errors.length) throw new AppError(v.errors.join("; "), 400);
+  await verifyTollPlazas(v.data);
   const total = budgetTotal(v.data);
 
   for (let i = 0; i < 20; i++) {
@@ -100,8 +125,14 @@ export async function updateBudget(budgetId: string, input: unknown, username: s
   const st = statusOf(existing);
   if (st === "PENDING") throw new AppError("This budget is waiting for approval and cannot be edited", 409);
   if (st === "APPROVED") throw new AppError("An approved budget cannot be edited", 409);
-  const v = validateBudget(input);
+  const { context } = await contextFor(String(existing.vehicle));
+  const v = validateBudget(input, {
+    campaignFrom: context.campaignFrom,
+    campaignTo: context.campaignTo,
+    previous: { onRoadDate: (existing.data as Record<string, unknown> | undefined)?.onRoadDate, completionDate: (existing.data as Record<string, unknown> | undefined)?.completionDate },
+  });
   if (v.errors.length) throw new AppError(v.errors.join("; "), 400);
+  await verifyTollPlazas(v.data);
 
   const changes = diffBudget(existing.data as Record<string, unknown>, v.data);
   if (changes.length === 0) throw new AppError("No changes to save", 400);

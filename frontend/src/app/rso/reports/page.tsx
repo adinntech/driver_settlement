@@ -21,7 +21,8 @@ const REPORTS: { kind: Kind; label: string; hint: string; dates: boolean; cols: 
     cols: [
       { key: "paymentNumber", label: "Payment No" }, { key: "category", label: "Category" }, { key: "status", label: "Status" }, { key: "clientName", label: "Client" }, { key: "vehicleNo", label: "Vehicle" },
       { key: "driverName", label: "Driver" }, { key: "fromDate", label: "From", type: "date" }, { key: "toDate", label: "To", type: "date" }, { key: "amount", label: "Amount", type: "money" },
-      { key: "approvedBy", label: "Approved By" }, { key: "approvedAt", label: "Approved On", type: "datetime" }, { key: "referenceNumber", label: "Payment Ref" },
+      { key: "approvedBy", label: "Approved By" }, { key: "approvedAt", label: "Approved On", type: "datetime" }, { key: "referenceNumber", label: "Ref. No." },
+      { key: "referenceDate", label: "Ref. Date", type: "date" }, { key: "paymentMode", label: "Mode" }, { key: "paymentDate", label: "Pay. Date", type: "date" },
     ],
   },
   {

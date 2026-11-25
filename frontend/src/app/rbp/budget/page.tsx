@@ -4,7 +4,7 @@ import Select from "@/components/ui/Select";
 import DateInput from "@/components/ui/DateInput";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, createContext, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+import { Suspense, createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import AppShell from "@/components/AppShell";
 import CopyButton from "@/components/ui/CopyButton";
 import { DecimalInput, IntInput } from "@/components/ui/Inputs";
@@ -19,6 +19,11 @@ import {
   type Draft, type Unit,
 } from "@/utils/budgetForm";
 import RbpApprovalPanel from "@/components/RbpApprovalPanel";
+import TollPlazaInput from "@/components/TollPlazaInput";
+import { keepInRange, laterOf } from "@/utils/dates";
+import {
+  STATUS_TEXT, TOLL_VEHICLE_CLASSES, applyPlaza, rateOrigin, sourceLine, tollClassLabel, type TollJourney, type TollSourceInfo, type TollVehicleClass,
+} from "@/utils/tolls";
 import { canEdit, describeBudget, statusOf } from "@/utils/budgetDescribe";
 import { formatDate, formatDateTime, formatInr } from "@/utils/format";
 
@@ -196,12 +201,39 @@ function BudgetForm({
   const v = useMemo(() => computeValues(f), [f]);
 
   const set = <K extends keyof Draft>(k: K, val: Draft[K]) => setF((s) => ({ ...s, [k]: val }));
+  const [dateNote, setDateNote] = useState("");
+  // Both dates stay inside the campaign period. Changing the On Road Date clears a Completion Date that no longer fits (never moves it).
   // Dates / Sunday halt re-calculate days unless the user typed a manual value.
-  const setSchedule = (patch: Partial<Pick<Draft, "onRoadDate" | "completionDate" | "sundayHalt">>) =>
+  const setSchedule = (patch: Partial<Pick<Draft, "onRoadDate" | "completionDate" | "sundayHalt">>) => {
+    if (patch.onRoadDate !== undefined && f.completionDate) {
+      const kept = keepInRange(f.completionDate, patch.onRoadDate || context.campaignFrom, context.campaignTo);
+      setDateNote(kept ? "" : "Completion date was cleared because it is before the new on road date. Pick it again.");
+      if (!kept) patch = { ...patch, completionDate: "" };
+    } else if (patch.completionDate !== undefined) setDateNote("");
     setF((s) => {
       const n = { ...s, ...patch };
       return daysManual ? n : { ...n, numberOfDays: autoDays(n.onRoadDate, n.completionDate, n.sundayHalt) };
     });
+  };
+  const bounds = { campaignFrom: context.campaignFrom, campaignTo: context.campaignTo, previous: budget?.data as Record<string, unknown> | undefined };
+
+  // ---- toll lookup
+  const [journey, setJourney] = useState<TollJourney>(() => (f.tolls.find((t) => t.plaza)?.plaza?.journey === "RETURN" ? "RETURN" : "SINGLE"));
+  const [tollSource, setTollSource] = useState<TollSourceInfo | null>(null);
+  const [tollNote, setTollNote] = useState("");
+  const onSource = useCallback((src: TollSourceInfo | null) => setTollSource(src), []);
+  const savedSource = f.tolls.find((t) => t.plaza)?.plaza;
+  /** Class / journey decide the rate: rows picked for the old choice lose their plaza link, and untouched fetched rates are cleared. */
+  const changeTollBasis = (cls: TollVehicleClass | "", j: TollJourney) => {
+    const linked = f.tolls.filter((t) => t.plaza).length;
+    setJourney(j);
+    setTollNote(linked ? `${linked} toll plaza row(s) were unlinked because the vehicle class or journey changed. Search the plaza again to fetch the new rate.` : "");
+    setF((s) => ({
+      ...s,
+      tollVehicleClass: cls,
+      tolls: s.tolls.map((t) => (t.plaza ? { ...t, plaza: null, rate: rateOrigin(t.rate, t.plaza) === "AUTO" ? "" : t.rate } : t)),
+    }));
+  };
 
   const places = useMemo(() => {
     const base = ["Chennai", "Madurai", "Coimbatore", "Salem", "Trichy", "Vellore", "Hosur", "Thanjavur", "Tirunelveli"];
@@ -210,7 +242,7 @@ function BudgetForm({
   }, [context.location]);
 
   async function save() {
-    const e = validateDraft(f);
+    const e = validateDraft(f, bounds);
     setErrors(e);
     if (e.length) return setConfirm(false);
     if (saving.current) return;
@@ -251,13 +283,19 @@ function BudgetForm({
         <div className="b-col">
           <Row label="Mileage" k="mileage"><DecimalInput value={f.mileage} onChange={(x) => set("mileage", x)} placeholder="0" /></Row>
           <Row label="Estimated KM per day" k="estimatedKmPerDay"><DecimalInput value={f.estimatedKmPerDay} onChange={(x) => set("estimatedKmPerDay", x)} placeholder="0" /></Row>
-          <Row label="On Road Date" k="onRoadDate"><DateInput value={f.onRoadDate} onChange={(e) => setSchedule({ onRoadDate: e.target.value })} /></Row>
+          <Row label="On Road Date" k="onRoadDate">
+            <DateInput value={f.onRoadDate} min={context.campaignFrom || undefined} max={context.campaignTo || undefined} onChange={(e) => setSchedule({ onRoadDate: e.target.value })} aria-label="On Road Date" />
+          </Row>
           <Row label="Completion Date" k="completionDate">
-            <DateInput value={f.completionDate} min={f.onRoadDate} onChange={(e) => setSchedule({ completionDate: e.target.value })} />
+            <DateInput value={f.completionDate} min={laterOf(f.onRoadDate, context.campaignFrom)} max={context.campaignTo || undefined} onChange={(e) => setSchedule({ completionDate: e.target.value })} aria-label="Completion Date" />
             <label className="check">
               <input type="checkbox" checked={f.sundayHalt} onChange={(e) => setSchedule({ sundayHalt: e.target.checked })} /> Sunday Halt
             </label>
           </Row>
+          <p className="muted b-date-hint">
+            Campaign period {formatDate(context.campaignFrom)} → {formatDate(context.campaignTo)}.{" "}
+            {dateNote && <strong className="toll-warn" role="status">{dateNote}</strong>}
+          </p>
           <Row label="Number of days" k="numberOfDays">
             <IntInput value={f.numberOfDays} onChange={(x) => { setDaysManual(true); set("numberOfDays", x); }} />
           </Row>
@@ -281,29 +319,81 @@ function BudgetForm({
 
         <div className="b-col">
           <h4 className={`sub${rejected.has("tolls") ? " kv-rej-h" : ""}`}>Toll Detail{rejected.has("tolls") && <small className="rej-note"> — Rejected: {rejected.get("tolls")}</small>}</h4>
+          <div className="toll-basis">
+            <label>
+              <span>Toll vehicle class</span>
+              <Select value={f.tollVehicleClass} onChange={(e) => changeTollBasis(e.target.value as TollVehicleClass | "", journey)} aria-label="Toll vehicle class">
+                <option value="">Choose class (needed for rate lookup)</option>
+                {TOLL_VEHICLE_CLASSES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+              </Select>
+            </label>
+            <label>
+              <span>Journey</span>
+              <Select value={journey} onChange={(e) => changeTollBasis(f.tollVehicleClass, e.target.value as TollJourney)} aria-label="Toll journey">
+                <option value="SINGLE">Single journey</option>
+                <option value="RETURN">Return within 24 hours</option>
+              </Select>
+            </label>
+            <small className="muted">
+              {f.tollVehicleClass
+                ? TOLL_VEHICLE_CLASSES.find((c) => c.key === f.tollVehicleClass)?.hint
+                : "Pick the NHAI fee class of the vehicle that will run this campaign. Most branded vans are LCV; 2-axle trucks above the LCV range are Bus / Truck."}
+            </small>
+          </div>
+          {tollNote && <p className="toll-warn" role="status">{tollNote}</p>}
           <div className="toll">
             <div className="toll-head"><span>Location</span><span>Rate</span><span /></div>
-            {f.tolls.map((t, i) => (
-              <div key={t.id} className="toll-row fade-in">
-                <input
-                  value={t.location}
-                  maxLength={120}
-                  placeholder={`Location ${i + 1}`}
-                  aria-label={`Toll location ${i + 1}`}
-                  onChange={(e) => setF((s) => updateToll(s, t.id, { location: e.target.value }))}
-                />
-                <DecimalInput value={t.rate} placeholder="0.00" aria-label={`Toll rate ${i + 1}`} onChange={(x) => setF((s) => updateToll(s, t.id, { rate: x }))} />
-                <button type="button" className="icon-btn rm" onClick={() => setF((s) => removeToll(s, t.id))} aria-label={`Remove toll entry ${i + 1}`}>
-                  ×
-                </button>
-              </div>
-            ))}
+            {f.tolls.map((t, i) => {
+              const origin = rateOrigin(t.rate, t.plaza);
+              const suggested = t.plaza && t.plaza.fetchedRate !== null && t.rate === "" ? t.plaza.fetchedRate : null;
+              return (
+                <div key={t.id} className="toll-row fade-in">
+                  <TollPlazaInput
+                    value={t.location}
+                    index={i}
+                    vehicleClass={f.tollVehicleClass}
+                    journey={journey}
+                    onSource={onSource}
+                    onType={(location) => setF((s) => updateToll(s, t.id, { location, plaza: null }))}
+                    onPick={(r, src) => setF((s) => updateToll(s, t.id, applyPlaza(r, journey, src)))}
+                  />
+                  <DecimalInput value={t.rate} placeholder="0.00" aria-label={`Toll rate ${i + 1}`} onChange={(x) => setF((s) => updateToll(s, t.id, { rate: x }))} />
+                  <button type="button" className="icon-btn rm" onClick={() => setF((s) => removeToll(s, t.id))} aria-label={`Remove toll entry ${i + 1}`}>
+                    ×
+                  </button>
+                  {t.plaza && (
+                    <small className={`toll-origin${origin === "AUTO" && t.plaza.rateStatus === "OK" ? "" : " toll-warn"}`}>
+                      {origin === "AUTO" && `Auto-filled: ${tollClassLabel(t.plaza.vehicleClass)}, ${t.plaza.journey === "RETURN" ? "return" : "single"} journey`}
+                      {origin === "AUTO_EDITED" && suggested === null && `Edited manually (published rate ${formatInr(t.plaza.fetchedRate)})`}
+                      {origin === "AUTO_EDITED" && suggested !== null && "Rate not filled automatically"}
+                      {origin === "MANUAL" && "No published rate for this class: enter the rate manually"}
+                      {t.plaza.rateStatus !== "OK" && t.plaza.rateStatus !== "UNAVAILABLE" && ` · ${STATUS_TEXT[t.plaza.rateStatus] ?? t.plaza.rateStatus}`}
+                      {suggested !== null && (
+                        <>
+                          {" · "}
+                          <button type="button" className="ui-cal-link" onClick={() => setF((s) => updateToll(s, t.id, { rate: String(suggested) }))}>
+                            Use {formatInr(suggested)} after verifying
+                          </button>
+                        </>
+                      )}
+                    </small>
+                  )}
+                </div>
+              );
+            })}
           </div>
           <div className="toll-actions">
             <button type="button" className="btn btn-outline btn-sm" onClick={() => setF(addToll)}>+ Add Location</button>
             <button type="button" className="btn btn-outline btn-sm" onClick={() => setF(addToll)}>+ Add Rate</button>
-            <span className="muted">Each row keeps its Location and Rate together.</span>
+            <span className="muted">Each row keeps its Location and Rate together. Fetched rates can be edited; edits are shown to the approver.</span>
           </div>
+          {(tollSource || savedSource) && (
+            <p className="muted toll-source">
+              {tollSource
+                ? sourceLine(tollSource)
+                : `Source: ${savedSource!.source}${savedSource!.datasetUpdated ? ` · data updated ${formatDate(savedSource!.datasetUpdated)}` : ""}`}
+            </p>
+          )}
 
           <Row label="Toll Amount" k="tolls"><Out value={v.tollAmount} /></Row>
           <div className={`b-row b-row-top${rejected.has("others") ? " b-rej" : ""}`}>

@@ -3,6 +3,7 @@ import { ALLOWED_MIME, KEY_PATTERN, type Attachment } from "../services/storage.
 
 type Obj = Record<string, unknown>;
 const blank = (v: unknown) => v === undefined || v === null || (typeof v === "string" && v.trim() === "");
+// eslint-disable-next-line no-control-regex -- intentionally rejects control characters in free text
 const SAFE_TEXT = /^[^<>\u0000-\u001f\u007f]+$/u;
 const toInstant = (d: string, t: string) => new Date(`${d}T${t}:00+05:30`);
 

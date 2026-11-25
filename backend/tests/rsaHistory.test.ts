@@ -32,8 +32,6 @@ const { TrackingVehicle } = await import("../src/models/TrackingVehicle.js");
 const { Budget, BudgetVersion } = await import("../src/models/Budget.js");
 const { VehicleAllotment, AllotmentEvent } = await import("../src/models/VehicleAllotment.js");
 const { RsaPayment, Counter } = await import("../src/models/RsaPayment.js");
-const { calculatePayable, parseAmountPaise, validatePaymentInput } = await import("../src/utils/rsaPayment.js");
-const { EXPENSE_OPTIONS } = await import("../src/config/rsaOptions.js");
 const { addDays, todayYmd } = await import("../src/validators/vehicle.validator.js");
 
 const today = todayYmd();
@@ -105,7 +103,7 @@ let sig: any; // signage project, 10 vehicles
 let road: any; // roadshow project, 2 vehicles
 {
   sig = await mkProject({ projectType: "SIGNAGE", details: { client: "Kensign Lifestyles", jobSheetNumber: "ZZRSA-1", location: "Coimbatore", date: d(0), fromDate: d(2), toDate: d(9), numberOfVehicles: 10 } });
-  road = await mkProject({ projectType: "ROADSHOW", details: { billingName: "Ken Roadshow Pvt", stateCode: "33", startDate: d(3), endDate: d(8), reportingDate: d(2), sundayHalt: "NO", numberOfVans: 2, reportingLocations: ["Chennai", "Trichy"] } });
+  road = await mkProject({ projectType: "ROADSHOW", details: { billingName: "Ken Roadshow Pvt", stateCode: "33", startDate: d(3), endDate: d(8), reportingDate: d(3), sundayHalt: "NO", numberOfVans: 2, reportingLocations: ["Chennai", "Trichy"] } });
 }
 // fixtures: a signage project and a roadshow project, each with approved budget + vehicle + driver
 const A = sig.vehicles[0];
@@ -118,7 +116,7 @@ const drvA = await mkDriver({ driverName: "Sampath Madhu" });
 const drvA2 = await mkDriver({ driverName: "Ilango Kumar" });
 const drvB = await mkDriver({ driverName: "Karthik Raja" });
 const alA = await allotTo(A, drvA);
-const alA2 = await allotTo(A2, drvA2);
+await allotTo(A2, drvA2);
 const alB = await allotTo(B, drvB);
 const tv = (x: any) => String(x._id);
 const savePay = async (x: any, over: Record<string, unknown> = {}) =>

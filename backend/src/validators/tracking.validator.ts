@@ -1,4 +1,5 @@
 import { countDays } from "../utils/days.js";
+import { isYmd, todayIst } from "../utils/dates.js";
 import { normalizeIndianPhone } from "../utils/phone.js";
 
 type Obj = Record<string, unknown>;
@@ -9,13 +10,20 @@ export interface ValidationResult {
   details: Obj;
 }
 
-const isDate = (v: unknown) =>
-  typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v));
+const isDate = isYmd;
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 const yesNo = (v: unknown) => v === "YES" || v === "NO";
 
-export function validateTracking(projectType: unknown, input: unknown): ValidationResult {
+export interface TrackingValidationOptions {
+  /** Reference "now" (tests). */
+  now?: Date;
+  /** Historical imports (dev seed) may record campaigns that already started. Never set from the API. */
+  allowPastStart?: boolean;
+}
+
+export function validateTracking(projectType: unknown, input: unknown, opts: TrackingValidationOptions = {}): ValidationResult {
   const errors: string[] = [];
+  const today = todayIst(opts.now);
   const b = (input && typeof input === "object" ? input : {}) as Obj;
   const req = (k: string, label: string) => {
     if (!str(b[k])) errors.push(`${label} is required`);
@@ -25,6 +33,7 @@ export function validateTracking(projectType: unknown, input: unknown): Validati
     errors.push("Number of vehicles must be a whole number between 1 and 100");
 
   const details: Obj = { ...b };
+  if (projectType === "ROADSHOW") delete details.model;
   let clientName = "";
 
   if (projectType === "ROADSHOW") {
@@ -42,8 +51,23 @@ export function validateTracking(projectType: unknown, input: unknown): Validati
       "invoiceDate",
     ])
       if (b[k] && !isDate(b[k])) errors.push(`${k} must be a valid date (YYYY-MM-DD)`);
+    if (isDate(b.startDate) && !opts.allowPastStart && String(b.startDate) < today)
+      errors.push("Start date cannot be in the past");
     if (isDate(b.startDate) && isDate(b.endDate) && String(b.endDate) < String(b.startDate))
       errors.push("End date cannot be before start date");
+    if (isDate(b.reportingDate) && isDate(b.startDate) && isDate(b.endDate)) {
+      const reporting = String(b.reportingDate);
+      if (reporting < String(b.startDate) || reporting > String(b.endDate))
+        errors.push("Reporting date must be within the campaign start and end dates");
+    }
+    // Production order: arts file -> printing -> fabrication -> vehicle delivery. Supporting and invoice dates have no fixed order.
+    const milestones = ["artsFileDate", "printingDate", "fabricationDate", "vehicleDeliveryDate"] as const;
+    for (let i = 1; i < milestones.length; i++) {
+      const previous = b[milestones[i - 1]];
+      const current = b[milestones[i]];
+      if (isDate(previous) && isDate(current) && String(current) < String(previous))
+        errors.push(`${milestones[i]} cannot be before ${milestones[i - 1]}`);
+    }
     if (!yesNo(b.sundayHalt)) errors.push("Sunday halt must be YES or NO");
     for (const k of ["paSystem", "mike", "tv", "promoter", "leaflet", "extraKmAllowed"])
       if (b[k] && !yesNo(b[k])) errors.push(`${k} must be YES or NO`);
@@ -64,6 +88,7 @@ export function validateTracking(projectType: unknown, input: unknown): Validati
     req("location", "Location");
     for (const k of ["date", "fromDate", "toDate"])
       if (!isDate(b[k])) errors.push(`${k} must be a valid date (YYYY-MM-DD)`);
+    if (isDate(b.date) && String(b.date) > today) errors.push("Date cannot be in the future");
     if (isDate(b.fromDate) && isDate(b.toDate) && String(b.toDate) < String(b.fromDate))
       errors.push("To date cannot be before from date");
     if (b.arrivedBudget !== undefined && b.arrivedBudget !== "" && !(Number(b.arrivedBudget) >= 0))

@@ -1,5 +1,6 @@
 import { formatDate, formatInr, labelize } from "./format";
 import { formatList } from "./historyFormat";
+import { tollClassLabel } from "./tolls";
 
 export interface DescribedField {
   /** Backend field key (used for rejection highlighting); null for derived totals. */
@@ -28,7 +29,7 @@ function othersText(data: Record<string, unknown>): string {
 export const FIELD_LABELS: Record<string, string> = {
   mileage: "Mileage", estimatedKmPerDay: "Estimated KM per day", onRoadDate: "On Road Date", completionDate: "Completion Date",
   sundayHalt: "Sunday Halt", numberOfDays: "Number of days", dieselAmount: "Diesel Cost", salaryAmount: "Salary", salaryUnit: "Salary unit",
-  foodAmount: "Food", foodUnit: "Food unit", haltFood: "Halt Food", tolls: "Toll Detail (Location & Rate)", others: "Others",
+  foodAmount: "Food", foodUnit: "Food unit", haltFood: "Halt Food", tolls: "Toll Detail (Location & Rate)", tollVehicleClass: "Toll Vehicle Class", others: "Others",
   fromLocation: "From", toLocation: "To", totalKm: "Total Km", upDownValue: "Up/Down Value", otherDetails: "Other Details",
 };
 export const fieldLabel = (key: string): string => FIELD_LABELS[key] ?? labelize(key);
@@ -63,6 +64,7 @@ export function describeBudget(data: Record<string, unknown>): DescribedField[] 
     { key: "salaryAmount", label: "Salary", value: `${money(data.salaryAmount)} (${unitLabel(data.salaryUnit)}) = ${money(c.salaryValue)}` },
     { key: "foodAmount", label: "Food", value: `${money(data.foodAmount)} (${unitLabel(data.foodUnit)}) = ${money(c.foodValue)}` },
     { key: "haltFood", label: "Halt Food", value: money(data.haltFood) },
+    ...(data.tollVehicleClass ? [{ key: "tolls", label: "Toll Vehicle Class", value: tollClassLabel(String(data.tollVehicleClass)) || show(data.tollVehicleClass) }] : []),
     { key: "tolls", label: "Toll Detail", value: formatList(data.tolls) },
     { key: "tolls", label: "Toll Amount", value: money(c.tollAmount) },
     { key: "others", label: "Others", value: othersText(data) },

@@ -105,7 +105,7 @@ let sig: any; // signage project, 10 vehicles
 let road: any; // roadshow project, 2 vehicles
 {
   sig = await mkProject({ projectType: "SIGNAGE", details: { client: "Kensign Lifestyles", jobSheetNumber: "ZZRSA-1", location: "Coimbatore", date: d(0), fromDate: d(2), toDate: d(9), numberOfVehicles: 10 } });
-  road = await mkProject({ projectType: "ROADSHOW", details: { billingName: "Ken Roadshow Pvt", stateCode: "33", startDate: d(3), endDate: d(8), reportingDate: d(2), sundayHalt: "NO", numberOfVans: 2, reportingLocations: ["Chennai", "Trichy"] } });
+  road = await mkProject({ projectType: "ROADSHOW", details: { billingName: "Ken Roadshow Pvt", stateCode: "33", startDate: d(3), endDate: d(8), reportingDate: d(3), sundayHalt: "NO", numberOfVans: 2, reportingLocations: ["Chennai", "Trichy"] } });
 }
 // A = signage + vehicle + driver (eligible); B = roadshow + vehicle + driver (eligible)
 const A = sig.vehicles[0];

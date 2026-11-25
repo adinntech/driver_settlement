@@ -13,16 +13,21 @@ export type PaymentCategory = (typeof PAYMENT_CATEGORIES)[number];
 export const SETTLEMENT_STATUSES = ["PENDING", "APPROVED", "REJECTED", "COMPLETED"] as const;
 export type SettlementStatus = (typeof SETTLEMENT_STATUSES)[number];
 export const SETTLEMENT_ACTIONS = ["SUBMITTED", "RESUBMITTED", "APPROVED", "REJECTED", "EXPORTED", "COMPLETED"] as const;
-export const PAYMENT_MODES = ["NEFT", "RTGS", "IMPS", "UPI", "CHEQUE", "CASH"] as const;
+/** Modes RSA chooses in the payment Entry popup. */
+export const ENTRY_PAYMENT_MODES = ["CASH", "CHEQUE", "DD", "EPAYMENT"] as const;
+export const PAYMENT_MODE_LABEL: Record<string, string> = { CASH: "Cash", CHEQUE: "Cheque", DD: "DD", EPAYMENT: "ePayment", NEFT: "NEFT", RTGS: "RTGS", IMPS: "IMPS", UPI: "UPI" };
+/** Every stored mode: the Entry modes plus the earlier accounts modes, kept so completed records stay valid. */
+export const PAYMENT_MODES = [...ENTRY_PAYMENT_MODES, "NEFT", "RTGS", "IMPS", "UPI"] as const;
 
 const encrypted = new Schema({ iv: String, tag: String, data: String }, { _id: false }); // AES-256-GCM, never returned by the API
 
 const completionSchema = new Schema(
   {
     referenceNumber: { type: String, required: true },
+    referenceDate: String, // YYYY-MM-DD, optional (Ref. Date)
     paymentDate: { type: String, required: true }, // YYYY-MM-DD
     paymentMode: { type: String, enum: PAYMENT_MODES, required: true },
-    bankName: { type: String, required: true },
+    bankName: String, // required by the API except for Cash
     transactionDetails: encrypted, // UTR / cheque details, encrypted at rest
     transactionMasked: String,
     remarks: String,

@@ -17,7 +17,7 @@ import { normalizeIndianPhone } from "../src/utils/phone.js";
 
 const valid = {
   mileage: 12, estimatedKmPerDay: 150,
-  onRoadDate: "2026-10-22", completionDate: "2026-10-23", sundayHalt: false, numberOfDays: 2,
+  onRoadDate: "2027-10-22", completionDate: "2027-10-23", sundayHalt: false, numberOfDays: 2,
   dieselAmount: 5000, salaryAmount: 800, salaryUnit: "PER_DAY", foodAmount: 300, foodUnit: "PER_DAY",
   haltFood: 200, tolls: [{ location: "Salem", rate: 120 }, { location: "Madurai", rate: 80.5 }],
   othersDescription: "Parking", othersAmount: 100, fromLocation: "Chennai", toLocation: "Madurai",
@@ -26,7 +26,7 @@ const valid = {
 
 test("budget validation: valid sample and defaults for blank amounts", () => {
   assert.deepEqual(validateBudget(valid).errors, []);
-  const min = validateBudget({ onRoadDate: "2026-10-22", completionDate: "2026-10-22", numberOfDays: 1 });
+  const min = validateBudget({ onRoadDate: "2027-10-22", completionDate: "2027-10-22", numberOfDays: 1 });
   assert.deepEqual(min.errors, []);
   assert.equal(min.data.dieselAmount, 0);
   assert.deepEqual(min.data.tolls, []);
@@ -178,12 +178,12 @@ const login = async (role: string, u: string, p: string) =>
 
 const roadshow = {
   billingName: "Sapphire Foods (KFC)", stateCode: "33", numberOfVans: 2,
-  startDate: "2026-10-22", endDate: "2026-10-23", reportingDate: "2026-10-22",
+  startDate: "2027-10-22", endDate: "2027-10-23", reportingDate: "2027-10-22",
   sundayHalt: "NO", paSystem: "YES", reportingLocations: ["Madurai", "Salem"],
 };
 const signage = {
   date: "2026-10-20", client: "DALMIA", jobSheetNumber: "22403", location: "RAMNAD",
-  numberOfVehicles: 1, fromDate: "2026-10-21", toDate: "2026-10-26",
+  numberOfVehicles: 1, fromDate: "2027-10-21", toDate: "2027-10-26",
 };
 
 test("roadshow contact number is stored as +91; invalid phone rejected by the API", async () => {
@@ -207,9 +207,9 @@ test("budget context keeps existing fields; adds jobSheet / PA system; reporting
   assert.equal(rc.context.client, "Sapphire Foods (KFC)");
   assert.equal(rc.context.projectType, "ROADSHOW");
   assert.equal(rc.context.displayNumber, r.vehicles[0].displayNumber);
-  assert.equal(rc.context.campaignFrom, "2026-10-22");
-  assert.equal(rc.context.campaignTo, "2026-10-23");
-  assert.equal(rc.context.reportingDate, "2026-10-22");
+  assert.equal(rc.context.campaignFrom, "2027-10-22");
+  assert.equal(rc.context.campaignTo, "2027-10-23");
+  assert.equal(rc.context.reportingDate, "2027-10-22");
   assert.equal(rc.context.location, "Madurai, Salem");
   assert.equal(rc.context.paSystem, "YES");
   assert.equal(rc.context.jobSheetNumber, null);
@@ -391,6 +391,76 @@ test("concurrent edits from the same version: only one wins, versions stay consi
   const vs = (await call(`/budgets/${b._id}/versions`, "GET", undefined, rbp)).body.data;
   assert.equal(vs.length, 1 + ok);
   assert.deepEqual(vs.map((x: any) => x.version), Array.from({ length: vs.length }, (_, i) => i + 1));
+});
+
+test("toll lookup API + budget save: server re-reads the plaza, flags edits, works with the source down; RBP only", async () => {
+  const { createTollDirectory, setTollDirectory } = await import("../src/services/toll.service.js");
+  const row = (id: number, name: string, lcv: string | null) => ({
+    data_source: "nhai", data_confidence: "complete", tollplaza_id: id, tollplaza_name: name, state_name: "TAMIL NADU", nh_no: "44", location: name,
+    car_single: "85", car_return: "125", lcv_single: lcv, lcv_return: lcv ? "205" : null, rate_effective_date: "2026-03-31T18:30:00.000Z",
+    rate_revision_date: "2099-03-30T18:30:00.000Z", active: true, last_updated: "2026-07-07T08:52:02.630Z",
+  });
+  const data = [row(1, "Krishnagiri", "135"), row(2, "Krishnagiri Bypass", null), ...Array.from({ length: 120 }, (_, i) => row(100 + i, `Filler ${i}`, "160"))];
+  let down = false;
+  setTollDirectory(createTollDirectory({ url: "fixture", cacheFile: null, ttlMs: 1, fetchJson: async () => { if (down) throw new Error("offline"); return data; } }));
+  try {
+    const rsop = await login("RSOP", "RSOP", "pass2");
+    const rbp = await login("RBP", "RBP", "123123");
+    assert.equal((await call("/tolls/search?q=krish&vehicleClass=LCV", "GET", undefined, rsop)).status, 403);
+    assert.equal((await call("/tolls/search?q=krish&vehicleClass=LCV")).status, 401);
+    assert.equal((await call("/tolls/search?q=krish", "GET", undefined, rbp)).status, 400); // class first
+    const s = (await call("/tolls/search?q=krishnagiri&vehicleClass=LCV", "GET", undefined, rbp)).body.data;
+    assert.deepEqual(s.results.map((r: any) => r.id), [1, 2]);
+    assert.equal(s.results[0].rate.single, 135);
+    assert.equal(s.results[0].rate.status, "OK");
+    assert.equal(s.results[1].rate.status, "UNAVAILABLE");
+    assert.equal(s.source.datasetUpdated, "2026-07-07");
+
+    const p = (await call("/tracking", "POST", { projectType: "ROADSHOW", details: roadshow }, rsop)).body.data;
+    const plaza = (id: number, fetchedRate: number | null) => ({ id, name: "x", vehicleClass: "LCV", journey: "SINGLE", fetchedRate, sourceType: "nhai", confidence: "complete" });
+    const body = {
+      ...valid, tollVehicleClass: "LCV",
+      tolls: [
+        { location: "Krishnagiri · NH 44", rate: 135, plaza: plaza(1, 135) },
+        { location: "Krishnagiri · NH 44", rate: 135, plaza: plaza(1, 999) }, // browser claims another fetched rate
+        { location: "Krishnagiri Bypass", rate: 70, plaza: plaza(2, null) }, // no published rate: manual
+        { location: "Salem", rate: 80 },
+      ],
+    };
+    const c = await call("/budgets", "POST", { vehicleId: p.vehicles[0]._id, ...body }, rbp);
+    assert.equal(c.status, 201, c.body.message);
+    const t = c.body.data.budget.data.tolls;
+    assert.equal(t[0].rateSource, "AUTO");
+    assert.equal(t[0].plaza.name, "Krishnagiri"); // from the directory, not the browser's "x"
+    assert.equal(t[0].plaza.verified, true);
+    assert.equal(t[1].plaza.fetchedRate, 135); // server value wins
+    assert.equal(t[1].rateSource, "AUTO");
+    assert.equal(t[2].rateSource, "MANUAL");
+    assert.deepEqual(t[3], { location: "Salem", rate: 80 });
+    assert.equal(c.body.data.budget.data.computed.tollAmount, 420);
+    assert.equal(c.body.data.budget.data.tollVehicleClass, "LCV");
+
+    // edit: rate changed by the user -> recorded as edited; source down -> still saves, marked unverified
+    down = true;
+    await new Promise((r) => setTimeout(r, 5)); // TTL (1 ms) passed: the directory tries to refresh and fails
+    const e = await call(`/budgets/${c.body.data.budget._id}`, "PUT", { ...body, tolls: [{ ...body.tolls[0], rate: 150 }] }, rbp);
+    assert.equal(e.status, 200, e.body.message);
+    assert.equal(e.body.data.data.tolls[0].rateSource, "AUTO_EDITED");
+    assert.equal(e.body.data.data.computed.tollAmount, 150);
+    assert.equal((await call("/tolls/search?q=krishnagiri&vehicleClass=LCV", "GET", undefined, rbp)).body.data.source.stale, true);
+
+    const fresh = createTollDirectory({ url: "fixture", cacheFile: null, ttlMs: 1, fetchJson: async () => { throw new Error("offline"); } });
+    setTollDirectory(fresh);
+    const un = await call("/tolls/search?q=krishnagiri&vehicleClass=LCV", "GET", undefined, rbp);
+    assert.equal(un.status, 503);
+    assert.match(un.body.message, /manually/);
+    const p2 = (await call("/tracking", "POST", { projectType: "ROADSHOW", details: roadshow }, rsop)).body.data;
+    const saved = await call("/budgets", "POST", { vehicleId: p2.vehicles[0]._id, ...body }, rbp);
+    assert.equal(saved.status, 201);
+    assert.equal(saved.body.data.budget.data.tolls[0].plaza.verified, false);
+  } finally {
+    setTollDirectory(null);
+  }
 });
 
 test("cleanup", async () => {

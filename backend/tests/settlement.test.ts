@@ -123,10 +123,25 @@ describe("calculations", () => {
 
   test("completion details are validated", () => {
     const now = new Date("2026-11-24T06:00:00Z");
-    assert.deepEqual(validateCompletion({ referenceNumber: "UTR123", paymentDate: "2026-11-24", paymentMode: "NEFT", bankName: "HDFC", transactionDetails: "UTR123 HDFC0001" }, new Date("2026-11-20T00:00:00Z"), now).errors, []);
+    assert.deepEqual(validateCompletion({ referenceNumber: "UTR123", paymentDate: "2026-11-24", paymentMode: "EPAYMENT", bankName: "HDFC", transactionDetails: "UTR123 HDFC0001" }, new Date("2026-11-20T00:00:00Z"), now).errors, []);
     const e = validateCompletion({ referenceNumber: "", paymentDate: "2026-12-30", paymentMode: "BITCOIN", bankName: "" }, null, now).errors.join(" | ");
-    for (const m of [/reference number is required/, /cannot be in the future/, /Payment mode must be/, /Bank is required/]) assert.match(e, m);
+    for (const m of [/reference number is required/, /cannot be in the future/, /Payment mode is required/, /Bank name is required/]) assert.match(e, m);
     assert.match(validateCompletion({ referenceNumber: "R1", paymentDate: "2026-11-10", paymentMode: "CASH", bankName: "Cash" }, new Date("2026-11-20T00:00:00Z"), now).errors.join(), /before the approval date/);
+  });
+
+  test("payment Entry popup: modes Cash / Cheque / DD / ePayment, mandatory reference, bank except for cash", () => {
+    const now = new Date("2026-11-24T06:00:00Z");
+    const approved = new Date("2026-11-20T00:00:00Z");
+    const ok = { paymentMode: "CHEQUE", paymentDate: "2026-11-24", bankName: "SBI", referenceNumber: "CHQ-004512", referenceDate: "2026-11-23" };
+    for (const m of ["CASH", "CHEQUE", "DD", "EPAYMENT"]) assert.deepEqual(validateCompletion({ ...ok, paymentMode: m }, approved, now).errors, [], m);
+    assert.match(validateCompletion({ ...ok, paymentMode: "NEFT" }, approved, now).errors.join(), /Payment mode is required \(Cash, Cheque, DD, ePayment\)/, "older modes are no longer offered");
+    for (const r of [undefined, "", "    ", "\t \n"]) assert.match(validateCompletion({ ...ok, referenceNumber: r }, approved, now).errors.join(), /Payment reference number is required/, JSON.stringify(r));
+    assert.match(validateCompletion({ ...ok, referenceNumber: "CHQ 12" }, approved, now).errors.join(), /letters, digits/);
+    assert.match(validateCompletion({ ...ok, bankName: " " }, approved, now).errors.join(), /Bank name is required/);
+    assert.deepEqual(validateCompletion({ ...ok, paymentMode: "CASH", bankName: "" }, approved, now).errors, [], "no bank needed for cash");
+    assert.match(validateCompletion({ ...ok, referenceDate: "2026-12-01" }, approved, now).errors.join(), /Reference date cannot be in the future/);
+    assert.match(validateCompletion({ ...ok, referenceDate: "2026-13-01" }, approved, now).errors.join(), /Reference date must be a valid date/);
+    assert.equal(validateCompletion({ ...ok, transactionDetails: "" }, approved, now).errors.length, 0, "transaction details are optional");
   });
 });
 
@@ -179,7 +194,7 @@ describe("workflow across RBP, RSOM, RSO and RSA", () => {
     assert.equal((await api("RSO", "POST", `/settlements/${dailyId}/approve`, {})).status, 403, "RSO cannot approve a daily payment");
     assert.equal((await api("RSA", "POST", `/settlements/${dailyId}/approve`, {})).status, 403);
     assert.equal((await api("RBP", "POST", `/settlements/${dailyId}/approve`, {})).status, 403);
-    assert.equal((await api("RSA", "POST", `/settlements/${dailyId}/complete`, { referenceNumber: "X1", paymentDate: "2026-01-01", paymentMode: "NEFT", bankName: "SBI", transactionDetails: "x" })).status, 409, "cannot complete a pending payment");
+    assert.equal((await api("RSA", "POST", `/settlements/${dailyId}/complete`, { referenceNumber: "X1", paymentDate: "2026-01-01", paymentMode: "EPAYMENT", bankName: "SBI", transactionDetails: "x" })).status, 409, "cannot complete a pending payment");
     const [a, b] = await Promise.all([api("RSOM", "POST", `/settlements/${dailyId}/approve`, { version: 1 }), api("RSOM", "POST", `/settlements/${dailyId}/reject`, { reason: "Wrong toll", version: 1 })]);
     assert.deepEqual([a.status, b.status].sort(), [200, 409], "two simultaneous decisions: exactly one wins");
     const p = (await api("RSOM", "GET", `/settlements/${dailyId}`)).body.data;
@@ -290,18 +305,28 @@ describe("workflow across RBP, RSOM, RSO and RSA", () => {
     const approvedNow: any[] = await SettlementPayment.find({ status: "APPROVED" }).lean();
     assert.deepEqual(numbers, new Set(approvedNow.map((p) => p.paymentNumber)), "exactly the approved entries");
     assert.ok(approvedNow.some((p) => p.category === "DAILY") && approvedNow.some((p) => p.category === "FINAL"));
-    for (const role of ["RBP", "RSOM", "RSO"]) assert.equal((await api(role, "GET", "/settlements/export/approved")).status, 403);
+    for (const role of ["RSOP", "RBP", "RSOM", "RSO"]) assert.equal((await api(role, "GET", "/settlements/export/approved")).status, 403, `${role} cannot export`);
+    assert.deepEqual(header, ["Payment No", "Category", "Status", "Trackup No", "JS No", "Client", "Project Type", "Vehicle No", "Driver Code", "Driver Name", "From", "To", "Amount (INR)", "Account Name", "Bank", "IFSC", "Account Number", "Submitted By", "Approved By", "Approved On"], "the accounts export keeps its columns");
 
     const today = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
-    const bad = await api("RSA", "POST", `/settlements/${dailyId}/complete`, { referenceNumber: "", paymentDate: today, paymentMode: "NEFT", bankName: "SBI" });
+    const bad = await api("RSA", "POST", `/settlements/${dailyId}/complete`, { referenceNumber: "", paymentDate: today, paymentMode: "EPAYMENT", bankName: "SBI" });
     assert.equal(bad.status, 400);
-    const c = await api("RSA", "POST", `/settlements/${dailyId}/complete`, { referenceNumber: "UTR-998877", paymentDate: today, paymentMode: "NEFT", bankName: "State Bank of India", transactionDetails: "UTR998877 SBIN0001234" });
+    const c = await api("RSA", "POST", `/settlements/${dailyId}/complete`, { referenceNumber: "UTR-998877", paymentDate: today, paymentMode: "EPAYMENT", bankName: "State Bank of India", transactionDetails: "UTR998877 SBIN0001234" });
     assert.equal(c.status, 200, JSON.stringify(c.body));
     assert.equal(c.body.data.status, "COMPLETED");
     assert.equal(c.body.data.completion.transactionMasked.endsWith("1234"), true);
     assert.ok(!JSON.stringify(c.body).includes("UTR998877 SBIN0001234"), "transaction details are not echoed back in full");
-    assert.equal((await api("RSA", "POST", `/settlements/${dailyId}/complete`, { referenceNumber: "UTR-1", paymentDate: today, paymentMode: "NEFT", bankName: "SBI", transactionDetails: "x" })).status, 409, "cannot complete twice");
-    const dupRef = await api("RSA", "POST", `/settlements/${finalId}/complete`, { referenceNumber: "UTR-998877", paymentDate: today, paymentMode: "NEFT", bankName: "SBI", transactionDetails: "x" });
+    assert.equal((await api("RSA", "POST", `/settlements/${dailyId}/complete`, { referenceNumber: "UTR-1", paymentDate: today, paymentMode: "EPAYMENT", bankName: "SBI", transactionDetails: "x" })).status, 409, "cannot complete twice");
+    const again = await api("RSA", "GET", "/settlements/export/approved");
+    if (again.status === 200) {
+      const wb2 = new ExcelJS.Workbook();
+      await wb2.xlsx.load(again.buf! as any);
+      const nos: string[] = [];
+      wb2.worksheets[0].eachRow((row, i) => { if (i > 1) nos.push(String(row.getCell(1).value)); });
+      const paidNo = ((await SettlementPayment.findById(dailyId).lean()) as any).paymentNumber;
+      assert.ok(!nos.includes(paidNo), "a paid (completed) payment is no longer exported");
+    } else assert.equal(again.status, 404, "nothing left to export");
+    const dupRef = await api("RSA", "POST", `/settlements/${finalId}/complete`, { referenceNumber: "UTR-998877", paymentDate: today, paymentMode: "EPAYMENT", bankName: "SBI", transactionDetails: "x" });
     assert.equal(dupRef.status, 200, "a reference may repeat across categories (one bank batch)");
     const queue = (await api("RSA", "GET", "/settlements?limit=100")).body.data.items.map((p: any) => p._id);
     assert.ok(!queue.includes(dailyId), "completed entries leave the approval queue");
@@ -309,6 +334,82 @@ describe("workflow across RBP, RSOM, RSO and RSA", () => {
     assert.ok(completed.includes(dailyId) && completed.includes(finalId));
     await assert.rejects(SettlementPayment.deleteOne({ _id: dailyId }), /cannot be deleted/);
     assert.equal((await api("RSO", "GET", `/settlements/${finalId}/salary-pdf`)).status, 200, "PDF still available after payment completion");
+  });
+
+  test("RSA payment Entry on approved daily and final payments: saved on the same record, moved to Payment Completed, no duplicates", async () => {
+    const today = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
+    // approved payments of both categories (inserted copies: the duplicate-final lock allows one real final per driver + allotment)
+    const copy = async (srcId: string, n: number) => {
+      const src: any = await SettlementPayment.findById(srcId).lean();
+      const { _id, completion, finalLock, dseNumber, createdAt, updatedAt, __v, ...rest } = src;
+      void [_id, completion, finalLock, dseNumber, createdAt, updatedAt, __v];
+      const [doc]: any[] = await SettlementPayment.create([{ ...rest, status: "APPROVED", paymentNumber: `${src.paymentNumber}-E${n}-${Date.now()}`, idempotencyKey: `entry-test-${n}-${Date.now()}` }]);
+      await SettlementPaymentEvent.create([{ payment: doc._id, paymentNumber: doc.paymentNumber, category: doc.category, version: doc.version, action: "APPROVED", fromStatus: "PENDING", toStatus: "APPROVED", username: "rsom", role: "RSOM", amount: doc.amount }]);
+      return String(doc._id);
+    };
+    const [daily, final, finalB, finalC] = [await copy(dailyId, 1), await copy(finalId, 2), await copy(finalId, 3), await copy(finalId, 4)];
+    const before: any = await SettlementPayment.findById(daily).lean();
+    const count = await SettlementPayment.countDocuments();
+    const entry = (referenceNumber: unknown, extra: Record<string, unknown> = {}) => ({ paymentMode: "EPAYMENT", paymentDate: today, bankName: "Axis Bank", referenceNumber, referenceDate: today, ...extra });
+
+    // listed with an Entry action in Driver Payments (approved)
+    const inDriverPayments = async (id: string) => (await api("RSA", "GET", "/settlements?scope=all&limit=100")).body.data.items.some((x: any) => x._id === id);
+    assert.ok(await inDriverPayments(daily) && await inDriverPayments(final));
+
+    // validation: nothing is saved while the required fields are missing
+    for (const blank of [undefined, "", "     "]) {
+      const r = await api("RSA", "POST", `/settlements/${daily}/complete`, entry(blank));
+      assert.equal(r.status, 400, `reference ${JSON.stringify(blank)} refused`);
+      assert.match(r.body.message, /Payment reference number is required/);
+    }
+    assert.match((await api("RSA", "POST", `/settlements/${daily}/complete`, entry("EP-1", { paymentMode: "" }))).body.message, /Payment mode is required/);
+    assert.match((await api("RSA", "POST", `/settlements/${daily}/complete`, entry("EP-1", { bankName: "" }))).body.message, /Bank name is required/);
+    assert.match((await api("RSA", "POST", `/settlements/${daily}/complete`, entry("EP-1", { paymentDate: "" }))).body.message, /Payment date must be a valid date/);
+    assert.equal(((await SettlementPayment.findById(daily).lean()) as any).status, "APPROVED", "refused entries leave the payment approved");
+
+    // duplicate reference within the category (any case)
+    const dupDaily = await api("RSA", "POST", `/settlements/${daily}/complete`, entry("utr-998877"));
+    assert.equal(dupDaily.status, 409);
+    assert.match(dupDaily.body.message, /already recorded on DVP-/);
+
+    // save (double click: the second request is refused, one completion only)
+    const [s1, s2] = await Promise.all([api("RSA", "POST", `/settlements/${daily}/complete`, entry("  EP-DAILY-0001  ")), api("RSA", "POST", `/settlements/${daily}/complete`, entry("EP-DAILY-0001"))]);
+    assert.deepEqual([s1.status, s2.status].sort(), [200, 409], [s1.body?.message, s2.body?.message].join(" | "));
+    const after: any = await SettlementPayment.findById(daily).lean();
+    assert.equal(after.status, "COMPLETED");
+    assert.equal(after.completion.referenceNumber, "EP-DAILY-0001", "trimmed reference saved on the same approved record");
+    assert.equal(after.completion.paymentMode, "EPAYMENT");
+    assert.equal(after.completion.bankName, "Axis Bank");
+    assert.equal(after.completion.referenceDate, today);
+    assert.equal(after.amount, before.amount, "approved amount unchanged");
+    assert.equal(after.category, before.category);
+    assert.deepEqual(after.data, before.data, "approved figures unchanged");
+    assert.equal(after.version, before.version);
+    const hist = (await api("RSA", "GET", `/settlements/${daily}`)).body.data.history.map((h: any) => h.action);
+    assert.deepEqual(hist.slice(-2), ["APPROVED", "COMPLETED"], "approval history kept, completion appended");
+
+    // final settlement, cash (no bank), then visible in Payment Completed only
+    const fc = await api("RSA", "POST", `/settlements/${final}/complete`, entry("CASH-VCH-77", { paymentMode: "CASH", bankName: "" }));
+    assert.equal(fc.status, 200, JSON.stringify(fc.body));
+    assert.equal(fc.body.data.completion.bankName, null);
+    const shared = (await api("RSA", "GET", "/settlements?scope=all&limit=100")).body.data.items;
+    for (const id of [daily, final]) assert.equal(shared.find((x: any) => x._id === id)?.status, "COMPLETED", "paid entries stay in Driver Payments with their saved (completed) status");
+    const rbpView = (await api("RBP", "GET", "/settlements?scope=all&limit=100")).body.data.items.find((x: any) => x._id === daily);
+    assert.equal(rbpView?.completion?.referenceNumber, "EP-DAILY-0001", "RBP sees the same paid entry");
+    assert.ok(!(await api("RSA", "GET", "/settlements?limit=100")).body.data.items.some((x: any) => x._id === daily), "but not in RSA's accounts queue");
+    assert.equal((await api("RSA", "POST", `/settlements/${daily}/complete`, entry("EP-DAILY-0002"))).status, 409, "a completed entry cannot be entered again");
+    const completed = (await api("RSA", "GET", "/settlements?status=COMPLETED&limit=100")).body.data.items;
+    const row = completed.find((x: any) => x._id === daily);
+    assert.deepEqual({ ref: row.completion.referenceNumber, mode: row.completion.paymentMode, bank: row.completion.bankName, paid: row.completion.paymentDate, refDate: row.completion.referenceDate }, { ref: "EP-DAILY-0001", mode: "EPAYMENT", bank: "Axis Bank", paid: today, refDate: today });
+    assert.ok(completed.some((x: any) => x._id === final), "final settlement in Payment Completed");
+    assert.ok((await api("RSA", "GET", "/settlements?status=COMPLETED&q=ep-daily-0001")).body.data.items.some((x: any) => x._id === daily), "searchable by reference");
+    const report = (await api("RSO", "GET", "/settlements/reports/approved-payments")).body.data.find((r: any) => r._id === daily);
+    assert.deepEqual([report.referenceNumber, report.paymentMode, report.paymentBank], ["EP-DAILY-0001", "ePayment", "Axis Bank"], "reference details in the report / Excel rows");
+
+    // two RSA users saving the same reference at the same moment on two final payments: exactly one wins
+    const race = await Promise.all([api("RSA", "POST", `/settlements/${finalB}/complete`, entry("DD-555")), api("RSA", "POST", `/settlements/${finalC}/complete`, entry("dd-555", { paymentMode: "DD" }))]);
+    assert.deepEqual(race.map((r) => r.status).sort(), [200, 409], race.map((r) => r.body?.message).join(" | "));
+    assert.equal(await SettlementPayment.countDocuments(), count, "no payment record was created by the entries");
   });
 
   test("RSO reports: in-app data and an Excel file per report", async () => {

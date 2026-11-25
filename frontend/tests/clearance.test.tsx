@@ -19,7 +19,7 @@ const fin = (over: Partial<ClearanceFinancial> = {}): ClearanceFinancial => ({
 });
 
 test("sidebar: RSA gets Vehicle & Driver Clearance, RBP gets On-Road Vehicles last; RSOP / RSOM unchanged", () => {
-  assert.deepEqual(NAV.RSA.map((n) => n.label), ["Payments", "Vehicle & Driver Clearance", "Driver Payments", "Settlement Payments", "Payment Completed"]); // settlement pages appended
+  assert.deepEqual(NAV.RSA.map((n) => n.label), ["Payments", "Vehicle & Driver Clearance", "Driver Payments", "Payment Completed"]); // settlement pages appended
   assert.equal(NAV.RSA[1].href, "/rsa/clearance");
   assert.deepEqual(NAV.RBP.map((n) => n.label), ["Projects & Budgets", "Vehicle Management", "Driver Management", "Vehicle Deliver", "Driver Payments"]); // payments appended after the existing entries
   assert.equal(NAV.RBP[3].href, "/rbp/on-road");

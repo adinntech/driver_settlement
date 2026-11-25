@@ -195,10 +195,10 @@ export interface ProjectSpec {
 // ---- helpers for the (repetitive) RSOP forms
 interface RoadshowIn {
   client: string; state: string; vans: number; start: number; end: number; reporting: number; halt: "YES" | "NO"; locations: string[];
-  person: string; contact: string; email: string; address: string; km: string; model: string; innovation: string; timing: string; extra: Record<string, unknown>;
+  person: string; contact: string; email: string; address: string; km: string; innovation: string; timing: string; extra: Record<string, unknown>;
 }
 const roadshow = (r: RoadshowIn): Record<string, unknown> => ({
-  billingName: r.client, stateCode: r.state, numberOfVans: r.vans, model: r.model, innovationModel: r.innovation, sundayHalt: r.halt,
+  billingName: r.client, stateCode: r.state, numberOfVans: r.vans, innovationModel: r.innovation, sundayHalt: r.halt,
   startDate: d(r.start), endDate: d(r.end), reportingDate: d(r.reporting), reportingLocations: r.locations, reportingPerson: r.person,
   contactNumber: r.contact, email: r.email, address: r.address, kmAllotted: r.km, extraKmAllowed: "NO", timing: r.timing,
   paSystem: "YES", mike: "YES", tv: "NO", promoter: "YES", leaflet: "YES", otherElements: "As per approved creative, all required elements",
@@ -218,9 +218,9 @@ export const PROJECTS: ProjectSpec[] = [
   {
     key: "P01", type: "ROADSHOW", clientName: "Tata Motors Ltd",
     details: roadshow({
-      client: "Tata Motors Ltd", state: "27", vans: 2, start: -3, end: 21, reporting: -4, halt: "YES",
+      client: "Tata Motors Ltd", state: "27", vans: 2, start: -3, end: 21, reporting: -3, halt: "YES",
       locations: ["Pune – Pimpri Chinchwad", "Nashik", "Kolhapur"], person: "Amit Deshmukh", contact: "98220 55102", email: "amit.deshmukh@example.com",
-      address: "Plot 18, Chinchwad Industrial Area, Pune 411019", km: "90 KM per day", model: "LED Van", innovation: "2 Sided LED Van", timing: "9 Hours", extra: {},
+      address: "Plot 18, Chinchwad Industrial Area, Pune 411019", km: "90 KM per day", innovation: "2 Sided LED Van", timing: "9 Hours", extra: {},
     }),
     vehicles: [
       {
@@ -248,9 +248,9 @@ export const PROJECTS: ProjectSpec[] = [
   {
     key: "P02", type: "ROADSHOW", clientName: "Hindustan Unilever Ltd",
     details: roadshow({
-      client: "Hindustan Unilever Ltd", state: "33", vans: 1, start: -1, end: 14, reporting: -2, halt: "NO",
+      client: "Hindustan Unilever Ltd", state: "33", vans: 1, start: -1, end: 14, reporting: -1, halt: "NO",
       locations: ["Chennai – Tambaram", "Vellore", "Tiruvannamalai"], person: "Karthik Subramanian", contact: "98403 22471", email: "karthik.s@example.com",
-      address: "Door 22, Guindy Industrial Estate, Chennai 600032", km: "80 KM per day", model: "Backlit Van", innovation: "Surf Excel Sampling Van", timing: "8 Hours", extra: {},
+      address: "Door 22, Guindy Industrial Estate, Chennai 600032", km: "80 KM per day", innovation: "Surf Excel Sampling Van", timing: "8 Hours", extra: {},
     }),
     vehicles: [
       {
@@ -279,9 +279,9 @@ export const PROJECTS: ProjectSpec[] = [
   {
     key: "P04", type: "ROADSHOW", clientName: "Asian Paints Ltd",
     details: roadshow({
-      client: "Asian Paints Ltd", state: "24", vans: 2, start: 1, end: 25, reporting: 0, halt: "YES",
+      client: "Asian Paints Ltd", state: "24", vans: 2, start: 1, end: 25, reporting: 1, halt: "YES",
       locations: ["Ahmedabad – Naroda", "Vadodara", "Surat"], person: "Hardik Mehta", contact: "98250 61930", email: "hardik.mehta@example.com",
-      address: "Survey 112, Naroda GIDC, Ahmedabad 382330", km: "100 KM per day", model: "LED Van", innovation: "Colour Studio on Wheels", timing: "9 Hours", extra: {},
+      address: "Survey 112, Naroda GIDC, Ahmedabad 382330", km: "100 KM per day", innovation: "Colour Studio on Wheels", timing: "9 Hours", extra: {},
     }),
     vehicles: [
       {
@@ -321,9 +321,9 @@ export const PROJECTS: ProjectSpec[] = [
   {
     key: "P06", type: "ROADSHOW", clientName: "Mahindra & Mahindra Ltd",
     details: roadshow({
-      client: "Mahindra & Mahindra Ltd", state: "29", vans: 3, start: 6, end: 30, reporting: 5, halt: "YES",
+      client: "Mahindra & Mahindra Ltd", state: "29", vans: 3, start: 6, end: 30, reporting: 6, halt: "YES",
       locations: ["Bengaluru – Yelahanka", "Mysuru", "Mangaluru"], person: "Naveen Gowda", contact: "98450 77320", email: "naveen.gowda@example.com",
-      address: "No. 7, Yelahanka Industrial Area, Bengaluru 560064", km: "95 KM per day", model: "LED Van", innovation: "Thar Roxx Experience Van", timing: "9 Hours", extra: {},
+      address: "No. 7, Yelahanka Industrial Area, Bengaluru 560064", km: "95 KM per day", innovation: "Thar Roxx Experience Van", timing: "9 Hours", extra: {},
     }),
     vehicles: [
       {
@@ -360,9 +360,9 @@ export const PROJECTS: ProjectSpec[] = [
   {
     key: "P08", type: "ROADSHOW", clientName: "Bajaj Auto Ltd",
     details: roadshow({
-      client: "Bajaj Auto Ltd", state: "09", vans: 2, start: 0, end: 18, reporting: -1, halt: "YES",
+      client: "Bajaj Auto Ltd", state: "09", vans: 2, start: 0, end: 18, reporting: 0, halt: "YES",
       locations: ["Lucknow – Aminabad", "Kanpur", "Agra"], person: "Rohit Srivastava", contact: "94150 33218", email: "rohit.srivastava@example.com",
-      address: "12, Transport Nagar, Lucknow 226012", km: "85 KM per day", model: "LED Van", innovation: "Pulsar Fan Zone Van", timing: "8 Hours", extra: {},
+      address: "12, Transport Nagar, Lucknow 226012", km: "85 KM per day", innovation: "Pulsar Fan Zone Van", timing: "8 Hours", extra: {},
     }),
     vehicles: [
       {
@@ -396,9 +396,9 @@ export const PROJECTS: ProjectSpec[] = [
   {
     key: "P10", type: "ROADSHOW", clientName: "ITC Ltd",
     details: roadshow({
-      client: "ITC Ltd", state: "32", vans: 1, start: -2, end: 11, reporting: -3, halt: "NO",
+      client: "ITC Ltd", state: "32", vans: 1, start: -2, end: 11, reporting: -2, halt: "NO",
       locations: ["Kochi – Kakkanad", "Thrissur", "Kozhikode"], person: "Jithin Mathew", contact: "94478 15620", email: "jithin.mathew@example.com",
-      address: "Door 9/114, Infopark Road, Kakkanad, Kochi 682030", km: "75 KM per day", model: "Backlit Van", innovation: "Aashirvaad Sampling Van", timing: "8 Hours", extra: {},
+      address: "Door 9/114, Infopark Road, Kakkanad, Kochi 682030", km: "75 KM per day", innovation: "Aashirvaad Sampling Van", timing: "8 Hours", extra: {},
     }),
     vehicles: [
       {

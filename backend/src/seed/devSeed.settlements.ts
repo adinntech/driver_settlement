@@ -94,7 +94,7 @@ async function settle(p: any, outcome: Plan["final"], who: { rsom: any; rso: any
     p = await reviewSettlement(p._id, outcome === "REJECTED" ? "REJECT" : "APPROVE", approver, outcome === "REJECTED" ? { reason: rejectReason } : { comment: "Verified against bills" });
   if (p.status === "APPROVED" && outcome === "COMPLETED")
     await completeSettlement(p._id, {
-      referenceNumber: `UTR${p.paymentNumber.replace(/\D/g, "").slice(0, 12)}`, paymentDate: todayIst(), paymentMode: "NEFT", bankName: "HDFC Bank, Fort Branch",
+      referenceNumber: `UTR${p.paymentNumber.replace(/\D/g, "").slice(0, 12)}`, paymentDate: todayIst(), referenceDate: todayIst(), paymentMode: "EPAYMENT", bankName: "HDFC Bank, Fort Branch",
       transactionDetails: `NEFT UTR HDFCN${p.paymentNumber.replace(/\D/g, "")}`, remarks: "Batch paid by accounts",
     }, who.rsa.username);
 }

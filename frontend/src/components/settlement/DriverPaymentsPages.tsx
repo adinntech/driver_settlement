@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
+import { useToast } from "@/context/ToastContext";
+import { downloadFile } from "@/services/api";
 import AppShell from "@/components/AppShell";
 import { DailyPaymentForm, FinalSettlementForm, ProjectPicker } from "@/components/settlement/PaymentForms";
 import { PaymentQueue } from "@/components/settlement/PaymentQueue";
@@ -18,19 +20,40 @@ const OID = /^[a-f0-9]{24}$/i;
 
 export function DriverPaymentsList({ role }: { role: EntryRole }) {
   const base = paymentsBase(role);
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [tick, setTick] = useState(0);
+  // RSA's accounts export (moved here from the former Settlement Payments page): approved daily + final payments awaiting payment.
+  // Same endpoint, columns and filters as before; the server records each export on the rows, so the list is reloaded.
+  const exportApproved = async () => {
+    setBusy(true);
+    try {
+      await downloadFile("/settlements/export/approved", "approved-payments.xlsx");
+      toast("Approved payments exported");
+      setTick((t) => t + 1);
+    } catch (e) {
+      toast((e as Error).message, "error");
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <AppShell role={role}>
       <div className="page-head">
         <div>
           <h1>Driver Payments</h1>
-          <p className="muted">One shared list for RBP and RSA. Daily vehicle payments go to RSOM; final driver salary settlements go to RSO.</p>
+          <p className="muted">
+            One shared list for RBP and RSA. Daily vehicle payments go to RSOM; final driver salary settlements go to RSO.
+            {role === "RSA" && " Export approved payments for accounts, then record each payment with Entry."}
+          </p>
         </div>
         <div className="inline ds-gap">
           <Link href={`${base}/new?type=daily`} className="btn btn-outline">+ Daily Vehicle Payment</Link>
           <Link href={`${base}/new?type=final`} className="btn btn-primary">+ Final Driver Settlement</Link>
+          {role === "RSA" && <button type="button" className="btn btn-outline" disabled={busy} onClick={exportApproved}>{busy ? "Exporting…" : "Export Approved (Excel)"}</button>}
         </div>
       </div>
-      <PaymentQueue mode="rbp" />
+      <PaymentQueue mode="rbp" reloadKey={tick} />
     </AppShell>
   );
 }

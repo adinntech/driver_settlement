@@ -7,7 +7,7 @@ import { Budget } from "../models/Budget.js";
 import { Driver } from "../models/Driver.js";
 import { DriverAdvance } from "../models/DriverAdvance.js";
 import { Counter, RsaPayment } from "../models/RsaPayment.js";
-import { PAYMENT_MODES, SettlementPayment, SettlementPaymentEvent, type PaymentCategory } from "../models/SettlementPayment.js";
+import { ENTRY_PAYMENT_MODES, PAYMENT_MODE_LABEL, SettlementPayment, SettlementPaymentEvent, type PaymentCategory } from "../models/SettlementPayment.js";
 import { TrackingProject } from "../models/TrackingProject.js";
 import { AppError } from "../utils/AppError.js";
 import { financialYear } from "../utils/numbers.js";
@@ -128,8 +128,9 @@ export async function settlementContext(tvId: string) {
     previousPayments: [
       ...dailyAdvances.map((p: any) => ({
         source: "DAILY", paymentNumber: p.paymentNumber, status: p.status, date: p.completion?.paymentDate ?? p.fromDate, amount: p.amount,
-        mode: p.completion?.paymentMode ?? (p.data?.cashInHand ? "Cash" : ([...new Set((p.data?.dieselEntries ?? []).map((x: any) => x.mode).filter(Boolean))].join(", ") || "ePayment")),
+        mode: (p.completion ? PAYMENT_MODE_LABEL[p.completion.paymentMode] ?? p.completion.paymentMode : null) ?? (p.data?.cashInHand ? "Cash" : ([...new Set((p.data?.dieselEntries ?? []).map((x: any) => x.mode).filter(Boolean))].join(", ") || "ePayment")),
         bankName: p.completion?.bankName ?? ((p.data?.dieselEntries ?? []).map((x: any) => x.reference).filter(Boolean).join(", ") || null),
+        referenceNumber: p.completion?.referenceNumber ?? null,
       })),
       ...rsaEntries.map((p: any) => ({
         source: "RSA", paymentNumber: p.paymentNumber, status: "ENTERED", date: new Date(new Date(p.entryDateTime).getTime() + 5.5 * 3600_000).toISOString().slice(0, 10), amount: p.totalPayable,
@@ -159,7 +160,7 @@ const shape = (p: any) => ({
   bank: p.bank ? { accountName: p.bank.accountName ?? null, bankName: p.bank.bankName ?? null, ifscCode: p.bank.ifscCode ?? null, accountMasked: p.bank.accountMasked ?? null } : null,
   submittedBy: p.submittedBy, submittedRole: p.submittedRole ?? "RBP", submittedAt: p.submittedAt, reviewedBy: p.reviewedBy ?? null, reviewedRole: p.reviewedRole ?? null, reviewedAt: p.reviewedAt ?? null,
   rejectionReason: p.rejectionReason ?? null, approver: APPROVER[p.category as PaymentCategory], exportedAt: p.exportedAt ?? null, exportCount: p.exportCount ?? 0,
-  completion: p.completion ? { referenceNumber: p.completion.referenceNumber, paymentDate: p.completion.paymentDate, paymentMode: p.completion.paymentMode, bankName: p.completion.bankName, transactionMasked: p.completion.transactionMasked ?? null, remarks: p.completion.remarks ?? null, completedBy: p.completion.completedBy, completedAt: p.completion.completedAt } : null,
+  completion: p.completion ? { referenceNumber: p.completion.referenceNumber, referenceDate: p.completion.referenceDate ?? null, paymentDate: p.completion.paymentDate, paymentMode: p.completion.paymentMode, bankName: p.completion.bankName ?? null, transactionMasked: p.completion.transactionMasked ?? null, remarks: p.completion.remarks ?? null, completedBy: p.completion.completedBy, completedAt: p.completion.completedAt } : null,
 });
 export type SettlementView = ReturnType<typeof shape>;
 
@@ -181,10 +182,10 @@ const SORTS: Record<string, string> = { submittedAt: "submittedAt", amount: "amo
 export function listFilter(q: ListQuery, role: RoleKey) {
   const and: any[] = [];
   if (q.category === "DAILY" || q.category === "FINAL") and.push({ category: q.category });
-  // scope=all: the shared Driver Payments module (RBP and RSA see the same full list). RSA's accounts queue (no scope) stays
-  // pending + approved only; completed payments are listed with status=COMPLETED.
+  // scope=all: the shared Driver Payments module (RBP and RSA see the same full list, paid entries included: they stay there with
+  // "Entry Completed" and also appear in Payment Completed). RSA's accounts queue (no scope) stays pending + approved only.
   const shared = q.scope === "all" && (role === "RBP" || role === "RSA");
-  const queue = role === "RSA" && !shared ? ["PENDING", "APPROVED"] : ["PENDING", "APPROVED", "REJECTED"];
+  const queue = shared ? ["PENDING", "APPROVED", "REJECTED", "COMPLETED"] : role === "RSA" ? ["PENDING", "APPROVED"] : ["PENDING", "APPROVED", "REJECTED"];
   if (q.status === "COMPLETED") and.push({ status: "COMPLETED" });
   else if (q.status && queue.includes(q.status)) and.push({ status: q.status });
   else and.push({ status: { $in: queue } });
@@ -237,8 +238,8 @@ async function snapshotRefs(tvId: string) {
   };
 }
 
-function buildDaily(input: unknown, projectType: string) {
-  const v = validateDailyInput(input);
+function buildDaily(input: unknown, projectType: string, camp: { fromDate: string | null; toDate: string | null }, previous?: { fromDate?: string; toDate?: string }) {
+  const v = validateDailyInput(input, { campaignFrom: camp.fromDate, campaignTo: camp.toDate, previous });
   if (v.errors.length || !v.data) throw new AppError(v.errors.join("; "), 400);
   if (v.data.paymentFor && v.data.paymentFor !== projectType) throw new AppError(`Payment For must be ${projectType === "ROADSHOW" ? "RoadShow" : "Signage"} for this project`, 400);
   const data = dailyData({ ...v.data, paymentFor: (v.data.paymentFor ?? projectType) as any });
@@ -247,11 +248,22 @@ function buildDaily(input: unknown, projectType: string) {
 
 function buildFinal(input: unknown, camp: ReturnType<typeof campaignOf>) {
   if (!camp.fromDate || !camp.toDate) throw new AppError("The campaign period of this project is not set", 409);
-  const v = validateFinalInput(input, { totalDays: daysBetween(camp.fromDate, camp.toDate) }); // on-road + Sunday + halt days fit inside the campaign calendar
+  const v = validateFinalInput(input, { totalDays: daysBetween(camp.fromDate, camp.toDate), fromDate: camp.fromDate, toDate: camp.toDate }); // on-road + Sunday + halt days and reporting date fit inside the campaign calendar
   if (v.errors.length || !v.data) throw new AppError(v.errors.join("; "), 400);
   const data = finalData(v.data, { fromDate: camp.fromDate, toDate: camp.toDate, totalDays: camp.totalDays });
   return { data, key: v.data.idempotencyKey, fromDate: camp.fromDate, toDate: camp.toDate, amount: data.netAmount };
 }
+
+/**
+ * A payment reference identifies one payment of a category: it may not be recorded on another record of that category.
+ * Compared without case ("utr1" = "UTR1"). Callers hold `refLock(category, ref)` so two simultaneous saves cannot both pass.
+ */
+async function assertReferenceFree(category: PaymentCategory, ref: string, exceptId?: unknown) {
+  const rx = new RegExp(`^${esc(ref)}$`, "i");
+  const clash: any = await SettlementPayment.findOne({ category, "completion.referenceNumber": rx, ...(exceptId ? { _id: { $ne: exceptId } } : {}) }).select("paymentNumber").lean();
+  if (clash) throw new AppError(`Reference number ${ref} is already recorded on ${clash.paymentNumber}`, 409);
+}
+const refLock = (category: PaymentCategory, ref: string) => `ref:${category}:${ref.toUpperCase()}`;
 
 /** No two non-rejected daily payments of the same project vehicle and driver may cover the same day. */
 async function assertNoDailyOverlap(tvId: string, driver: string, from: string, to: string, exceptId?: string) {
@@ -300,7 +312,7 @@ export async function submitSettlement(category: PaymentCategory, tvId: string, 
   if (!ENTRY_ROLES.includes(role)) throw new AppError("Only RBP or RSA can enter driver payments", 403);
   const entryRole = role;
   const { ctx, camp, refs } = await snapshotRefs(tvId);
-  const built = category === "DAILY" ? buildDaily(input, ctx.projectType) : buildFinal(input, camp);
+  const built = category === "DAILY" ? buildDaily(input, ctx.projectType, camp) : buildFinal(input, camp);
   const same: any = await SettlementPayment.findOne({ idempotencyKey: built.key }).lean();
   if (same) {
     if (String(same.trackingVehicle) !== tvId || same.category !== category) throw new AppError("This submission key was already used", 409);
@@ -356,7 +368,7 @@ export async function resubmitSettlement(id: string, input: unknown, username: s
   if (String(ctx._raw.driver) !== String(p.driver) || String(ctx._raw.allotment) !== String(p.allotment))
     throw new AppError("The driver or allotment of this project vehicle has changed since this entry; create a new entry instead", 409);
   const body = { ...(input && typeof input === "object" ? input : {}), idempotencyKey: `resubmit-${id}-${p.version + 1}` };
-  const built = p.category === "DAILY" ? buildDaily(body, p.projectType) : buildFinal(body, camp);
+  const built = p.category === "DAILY" ? buildDaily(body, p.projectType, camp, { fromDate: p.fromDate, toDate: p.toDate }) : buildFinal(body, camp);
   let upd: any;
   try {
     upd = await withLock(`${p.category}:${p.trackingVehicle}:${p.driver}`, async () => {
@@ -422,7 +434,7 @@ export async function reviewSettlement(id: string, decision: "APPROVE" | "REJECT
   });
   if (decision === "APPROVE" && upd.category === "FINAL") await ensureDseNumber(id); // DSE No. is fixed at the moment RSO accounts it
   if (decision === "APPROVE")
-    await notifyRole("RSA", { type: "PAYMENT_APPROVED", title: `${CATEGORY_LABEL[upd.category as PaymentCategory]} approved`, message: `${upd.paymentNumber} · ₹${upd.amount} is ready for payment`, link: "/rsa/settlements", meta: { payment: id }, dedupeKey: `pay:${id}:v${upd.version}:rsa` });
+    await notifyRole("RSA", { type: "PAYMENT_APPROVED", title: `${CATEGORY_LABEL[upd.category as PaymentCategory]} approved`, message: `${upd.paymentNumber} · ₹${upd.amount} is ready for payment`, link: "/rsa/driver-payments", meta: { payment: id }, dedupeKey: `pay:${id}:v${upd.version}:rsa` });
   return getSettlement(id);
 }
 
@@ -453,8 +465,13 @@ export async function approvedForExport(q: { category?: string; from?: string; t
   return rows;
 }
 
-export interface CompletionInput { referenceNumber?: unknown; paymentDate?: unknown; paymentMode?: unknown; bankName?: unknown; transactionDetails?: unknown; remarks?: unknown }
+export interface CompletionInput { referenceNumber?: unknown; referenceDate?: unknown; paymentDate?: unknown; paymentMode?: unknown; bankName?: unknown; transactionDetails?: unknown; remarks?: unknown }
 
+/**
+ * The payment Entry popup (RSA, on an approved payment): Payment Mode (Cash / Cheque / DD / ePayment), Payment Date, Bank Name,
+ * Reference Number (mandatory, never blank) and Reference Date. Bank is required except for Cash. Transaction details and remarks
+ * remain optional extras. The approved amount and category are never taken from the input.
+ */
 export function validateCompletion(b: CompletionInput, approvedAt: Date | null, now = new Date()) {
   const errors: string[] = [];
   const text = (v: unknown, label: string, max: number, required: boolean) => {
@@ -473,11 +490,19 @@ export function validateCompletion(b: CompletionInput, approvedAt: Date | null, 
     if (paymentDate > todayIst) errors.push("Payment date cannot be in the future");
     if (approvedAt && paymentDate < new Date(approvedAt.getTime() + 5.5 * 3600_000).toISOString().slice(0, 10)) errors.push("Payment date cannot be before the approval date");
   }
-  const paymentMode = typeof b.paymentMode === "string" && (PAYMENT_MODES as readonly string[]).includes(b.paymentMode) ? b.paymentMode : (errors.push(`Payment mode must be one of ${PAYMENT_MODES.join(", ")}`), "");
-  const bankName = text(b.bankName, "Bank", 120, true);
-  const transactionDetails = text(b.transactionDetails, "Transaction details", 300, paymentMode !== "CASH");
+  const paymentMode = typeof b.paymentMode === "string" && (ENTRY_PAYMENT_MODES as readonly string[]).includes(b.paymentMode)
+    ? b.paymentMode
+    : (errors.push(`Payment mode is required (${ENTRY_PAYMENT_MODES.map((m) => PAYMENT_MODE_LABEL[m]).join(", ")})`), "");
+  const bankName = text(b.bankName, "Bank name", 120, paymentMode !== "CASH");
+  const transactionDetails = text(b.transactionDetails, "Transaction details", 300, false);
   const remarks = text(b.remarks, "Remarks", 500, false);
-  return { errors, data: { referenceNumber, paymentDate, paymentMode, bankName, transactionDetails, remarks } };
+  let referenceDate = "";
+  if (typeof b.referenceDate === "string" && b.referenceDate.trim()) {
+    referenceDate = b.referenceDate.trim();
+    if (!YMD.test(referenceDate) || Number.isNaN(Date.parse(referenceDate))) errors.push("Reference date must be a valid date");
+    else if (referenceDate > new Date(now.getTime() + 5.5 * 3600_000).toISOString().slice(0, 10)) errors.push("Reference date cannot be in the future");
+  }
+  return { errors, data: { referenceNumber, referenceDate, paymentDate, paymentMode, bankName, transactionDetails, remarks } };
 }
 
 /** RSA records the accounts team's payment reference: APPROVED -> COMPLETED. The entry is kept; it moves to the completed table. */
@@ -489,19 +514,22 @@ export async function completeSettlement(id: string, input: CompletionInput, use
   if (p.status !== "APPROVED") throw new AppError("Only an approved payment can be marked completed", 409);
   const v = validateCompletion(input ?? {}, p.reviewedAt ?? null, now);
   if (v.errors.length) throw new AppError(v.errors.join("; "), 400);
-  const dupRef: any = await SettlementPayment.findOne({ "completion.referenceNumber": v.data.referenceNumber, category: p.category, _id: { $ne: p._id } }).select("paymentNumber").lean();
-  if (dupRef) throw new AppError(`Reference number ${v.data.referenceNumber} is already recorded on ${dupRef.paymentNumber}`, 409);
+  // The reference is the one accounts returned: it may be recorded on one payment of a category only (its own entry's reference
+  // is fine). Checked under a lock on the reference, so two RSA users cannot record the same one at the same moment.
+  await withLock(refLock(p.category, v.data.referenceNumber), async () => {
+  await assertReferenceFree(p.category, v.data.referenceNumber, p._id);
   await inTxn(async (session) => {
     const u: any = await SettlementPayment.findOneAndUpdate(
       { _id: id, status: "APPROVED" },
       { $set: { status: "COMPLETED", completion: {
-        referenceNumber: v.data.referenceNumber, paymentDate: v.data.paymentDate, paymentMode: v.data.paymentMode, bankName: v.data.bankName,
-        transactionDetails: seal(v.data.transactionDetails), transactionMasked: maskTail(v.data.transactionDetails) ?? undefined, remarks: v.data.remarks || undefined, completedBy: username, completedAt: now,
+        referenceNumber: v.data.referenceNumber, referenceDate: v.data.referenceDate || undefined, paymentDate: v.data.paymentDate, paymentMode: v.data.paymentMode, bankName: v.data.bankName || undefined,
+        ...(v.data.transactionDetails ? { transactionDetails: seal(v.data.transactionDetails), transactionMasked: maskTail(v.data.transactionDetails) ?? undefined } : {}), remarks: v.data.remarks || undefined, completedBy: username, completedAt: now,
       } } },
       { returnDocument: "after", session },
     ).lean();
     if (!u) throw new AppError("This payment was just changed by someone else; refresh to see its status", 409);
-    await logEvent(u, "COMPLETED", username, "RSA", { fromStatus: "APPROVED", comment: `Ref ${v.data.referenceNumber} · ${v.data.paymentMode} · ${v.data.paymentDate}` }, session);
+    await logEvent(u, "COMPLETED", username, "RSA", { fromStatus: "APPROVED", comment: `Ref ${v.data.referenceNumber} · ${PAYMENT_MODE_LABEL[v.data.paymentMode] ?? v.data.paymentMode} · ${v.data.paymentDate}` }, session);
+  });
   });
   await notifyUsername(p.submittedBy, { type: "PAYMENT_COMPLETED", title: `${p.paymentNumber} paid`, message: `Payment reference ${v.data.referenceNumber} on ${v.data.paymentDate}`, link: paymentsHome(p.submittedRole), meta: { payment: id }, dedupeKey: `pay:${id}:completed` });
   return getSettlement(id);
@@ -513,5 +541,5 @@ export { listEligibleProjects, viewBudget, viewDriver, checkAdvanceEligibility, 
 export const settlementOptions = () => ({
   dailyExpenseOptions: rsaOptions().expenseOptions,
   finalExpenseCategories: FINAL_EXPENSE_CATEGORIES.map((c) => ({ key: c.key, label: c.label, descriptionRequired: c.key === "OTHERS" })),
-  deductions: Object.entries(DEDUCTION_LABELS).map(([key, label]) => ({ key, label })), paymentModes: PAYMENT_MODES,
+  deductions: Object.entries(DEDUCTION_LABELS).map(([key, label]) => ({ key, label })), paymentModes: ENTRY_PAYMENT_MODES.map((m) => ({ value: m, label: PAYMENT_MODE_LABEL[m] })),
 });

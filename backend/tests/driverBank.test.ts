@@ -28,15 +28,12 @@ const { TrackingProject } = await import("../src/models/TrackingProject.js");
 const { TrackingVehicle } = await import("../src/models/TrackingVehicle.js");
 const { Budget } = await import("../src/models/Budget.js");
 const { VehicleAllotment, AllotmentEvent } = await import("../src/models/VehicleAllotment.js");
-const { releaseDueVehicles } = await import("../src/services/availability.service.js");
-const { releaseDueDrivers } = await import("../src/services/driverAvailability.service.js");
 const { validateChangeDriver } = await import("../src/services/allotmentDriver.service.js");
 const { parseTravelDeduction, validateBank, maskAccount } = await import("../src/validators/driverBank.validator.js");
 const { addDays, todayYmd } = await import("../src/validators/vehicle.validator.js");
 
 const today = todayYmd();
 const d = (n: number) => addDays(today, n);
-const at = (ymd: string, hhmm = "10:00") => new Date(`${ymd}T${hhmm}:00+05:30`);
 
 let server: Server;
 let base = "";
@@ -100,7 +97,6 @@ const sched = (over: Record<string, unknown> = {}) => ({ expectedReleaseDate: d(
 const allot = async (vehicleId: string, driverId?: string | null, over: Record<string, unknown> = {}) =>
   call("/vehicle-allotments", "POST", { vehicleId, trackupNumber: nextTrk(), ...sched(), ...(driverId === undefined ? {} : { driverId }), ...over }, await rbp());
 const drv = async (id: string) => (await Driver.findById(id).lean()) as any;
-const veh = async (id: string) => (await Vehicle.findById(id).lean()) as any;
 const alt = async (id: string) => (await VehicleAllotment.findById(id).lean()) as any;
 const events = async (id: string) => (await AllotmentEvent.find({ allotment: id }).sort({ createdAt: 1, _id: 1 }).lean()) as any[];
 const dHist = async (id: string) => (await DriverHistory.find({ driver: id }).sort({ createdAt: 1, _id: 1 }).lean()) as any[];

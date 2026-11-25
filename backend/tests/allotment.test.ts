@@ -88,7 +88,7 @@ let projP: any; // pool of approved project vehicles held by "busy" fixture vehi
   projA = await mk({ projectType: "SIGNAGE", details: { client: "Alpha Foods", jobSheetNumber: "ZZALT-1", location: "Salem", date: d(0), fromDate: d(2), toDate: d(12), numberOfVehicles: 12 } });
   projB = await mk({ projectType: "SIGNAGE", details: { client: "Beta Drafts", jobSheetNumber: "ZZALT-2", location: "Erode", date: d(0), fromDate: d(2), toDate: d(5), numberOfVehicles: 1 } });
   projC = await mk({ projectType: "SIGNAGE", details: { client: "Gamma Versions", jobSheetNumber: "ZZALT-3", location: "Hosur", date: d(0), fromDate: d(2), toDate: d(5), numberOfVehicles: 1 } });
-  projR = await mk({ projectType: "ROADSHOW", details: { billingName: "Roadie Co", stateCode: "33", startDate: d(3), endDate: d(8), reportingDate: d(2), sundayHalt: "NO", numberOfVans: 2, reportingLocations: ["Chennai", "Trichy"] } });
+  projR = await mk({ projectType: "ROADSHOW", details: { billingName: "Roadie Co", stateCode: "33", startDate: d(3), endDate: d(8), reportingDate: d(3), sundayHalt: "NO", numberOfVans: 2, reportingLocations: ["Chennai", "Trichy"] } });
   projP = await mk({ projectType: "SIGNAGE", details: { client: "Pool Holders", jobSheetNumber: "ZZALT-4", location: "Karur", date: d(0), fromDate: d(2), toDate: d(5), numberOfVehicles: 8 } });
   const approved = { approvalStatus: "APPROVED", approvedVersion: 1 };
   for (const tv of projP.vehicles) await mkBudget(tv, projP._id, approved);

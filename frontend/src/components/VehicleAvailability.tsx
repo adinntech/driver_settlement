@@ -2,6 +2,7 @@
 
 import Select from "@/components/ui/Select";
 import DateInput from "@/components/ui/DateInput";
+import { todayIst } from "@/utils/dates";
 import { useState, type ReactNode } from "react";
 import { useApi } from "@/hooks/useApi";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -18,9 +19,9 @@ const Row = ({ label, req, children }: { label: string; req?: boolean; children:
     <div className="b-ctl">{children}</div>
   </div>
 );
-const DateTime = ({ d, t, onD, onT, minD }: { d: string; t: string; onD: (v: string) => void; onT: (v: string) => void; minD?: string }) => (
+const DateTime = ({ d, t, onD, onT, minD, maxD }: { d: string; t: string; onD: (v: string) => void; onT: (v: string) => void; minD?: string; maxD?: string }) => (
   <div className="dt-pair">
-    <DateInput value={d} min={minD} onChange={(e) => onD(e.target.value)} aria-label="date" />
+    <DateInput value={d} min={minD} max={maxD} onChange={(e) => onD(e.target.value)} aria-label="date" />
     <input type="time" value={t} onChange={(e) => onT(e.target.value)} aria-label="time" />
   </div>
 );
@@ -208,7 +209,7 @@ export default function VehicleAvailability({ value: a, onChange }: { value: AvF
                 <textarea rows={3} value={a.issue.description} maxLength={500} onChange={(e) => iss("description", e.target.value)} placeholder="What is wrong with the vehicle?" />
               </Row>
               <Row label="Issue Reported">
-                <DateTime d={a.issue.reportedDate} t={a.issue.reportedTime} onD={(v) => iss("reportedDate", v)} onT={(v) => iss("reportedTime", v)} />
+                <DateTime d={a.issue.reportedDate} t={a.issue.reportedTime} maxD={todayIst()} onD={(v) => iss("reportedDate", v)} onT={(v) => iss("reportedTime", v)} />
               </Row>
               <Row label="Issue Status">
                 <Select value={a.issue.issueStatus} onChange={(e) => iss("issueStatus", e.target.value)}>

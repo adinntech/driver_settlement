@@ -36,7 +36,7 @@ const panel = (f: PaymentForm = form(), c: RsaContext = ctx()) => renderToStatic
 test("RSA is the fourth login: own home, own sidebar; the other three logins are unchanged", () => {
   assert.equal(homeFor("RSA"), "/rsa");
   assert.deepEqual(NAV.RSA.slice(0, 2), [{ href: "/rsa", label: "Payments" }, { href: "/rsa/clearance", label: "Vehicle & Driver Clearance" }]); // original entries first, unchanged
-  assert.deepEqual(NAV.RSA.slice(2).map((n) => n.href), ["/rsa/driver-payments", "/rsa/settlements", "/rsa/settlements/completed"]);
+  assert.deepEqual(NAV.RSA.slice(2).map((n) => n.href), ["/rsa/driver-payments", "/rsa/settlements/completed"]);
   assert.equal(homeFor("RSO"), "/rso"); // RSO is a separate login from RSOM
   assert.deepEqual(NAV.RSO.map((n) => n.href), ["/rso", "/rso/reports"]);
   assert.equal(homeFor("RSOP"), "/rsop");

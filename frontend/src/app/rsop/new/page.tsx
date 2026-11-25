@@ -11,6 +11,7 @@ import { useToast } from "@/context/ToastContext";
 import { request } from "@/services/api";
 import type { Project, ProjectType } from "@/types/domain";
 import { countDays } from "@/utils/format";
+import { inYmdRange, isYmd, keepInRange, todayIst } from "@/utils/dates";
 import { PhoneInput } from "@/components/ui/Inputs";
 import { isValidPhone, toFullPhone } from "@/utils/phone";
 
@@ -201,6 +202,19 @@ function RoadshowForm() {
     photos: "REQUIRED",
   });
   const [locs, setLocs] = useState<string[]>([]);
+  const today = todayIst();
+  const [dateNote, setDateNote] = useState("");
+  // Campaign dates drive the Reporting Date: when they change, a Reporting Date outside the new period is cleared (never moved).
+  const setCampaign = (k: "startDate" | "endDate", v: string) => {
+    const start = k === "startDate" ? v : f.startDate;
+    const end = k === "endDate" ? v : f.endDate;
+    set(k, v);
+    const kept = keepInRange(f.reportingDate ?? "", start, end);
+    if (f.reportingDate && !kept) {
+      set("reportingDate", "");
+      setDateNote("Reporting date was cleared because it is outside the new campaign period. Pick it again.");
+    } else setDateNote("");
+  };
   const [step, setStep] = useState(0);
   const [confirm, setConfirm] = useState(false);
   const { submit, busy, done } = useSubmit("ROADSHOW");
@@ -218,8 +232,25 @@ function RoadshowForm() {
       const n = Number(f.numberOfVans);
       if (!Number.isInteger(n) || n < 1 || n > 100) e.push("Number of vans must be between 1 and 100");
       if (!f.startDate || !f.endDate) e.push("Start and end dates are required");
-      else if (f.endDate < f.startDate) e.push("End date cannot be before start date");
+      else if (!isYmd(f.startDate) || !isYmd(f.endDate)) e.push("Start and end dates must be valid dates");
+      else {
+        if (f.startDate < todayIst()) e.push("Start date cannot be in the past");
+        if (f.endDate < f.startDate) e.push("End date cannot be before start date");
+      }
       if (!f.reportingDate) e.push("Reporting date is required");
+      else if (!isYmd(f.reportingDate)) e.push("Reporting date must be a valid date");
+      else if (isYmd(f.startDate) && isYmd(f.endDate) && !inYmdRange(f.reportingDate, f.startDate, f.endDate))
+        e.push("Reporting date must be within the campaign start and end dates");
+    }
+    if (s === 2) {
+      // same order as the server: arts file -> printing -> fabrication -> vehicle delivery (supporting / invoice are free)
+      const chain = ["artsFileDate", "printingDate", "fabricationDate", "vehicleDeliveryDate"] as const;
+      for (let i = 1; i < chain.length; i++) {
+        const prev = f[chain[i - 1]];
+        const curr = f[chain[i]];
+        if (prev && curr && isYmd(prev) && isYmd(curr) && curr < prev)
+          e.push(`${chain[i].replace(/([A-Z])/g, " $1").toLowerCase()} cannot be before ${chain[i - 1].replace(/([A-Z])/g, " $1").toLowerCase()}`);
+      }
     }
     if (s === 1) {
       if (locs.length === 0) e.push("Add at least one reporting location");
@@ -236,7 +267,7 @@ function RoadshowForm() {
   }
 
   async function create() {
-    const e = [...stepErrors(0), ...stepErrors(1)];
+    const e = [...stepErrors(0), ...stepErrors(1), ...stepErrors(2)];
     if (e.length) {
       setErrors(e);
       setConfirm(false);
@@ -273,15 +304,16 @@ function RoadshowForm() {
           <Field label="Billing Name *"><input {...bind("billingName")} placeholder="Sapphire Foods (KFC)" /></Field>
           <Field label="State Code *"><input {...bind("stateCode")} placeholder="33" /></Field>
           <Field label="Number of Vans *"><input type="number" min={1} max={100} {...bind("numberOfVans")} /></Field>
-          <Field label="Model / Backlit or Nonlit"><input {...bind("model")} placeholder="LED Van" /></Field>
           <Field label="Innovation Model / LED Model"><input {...bind("innovationModel")} placeholder="2 Sided LED Van" /></Field>
           <Field label="Sunday Halt"><YesNo value={f.sundayHalt} onChange={(v) => set("sundayHalt", v)} /></Field>
-          <Field label="Start Date *"><DateInput {...bind("startDate")} /></Field>
-          <Field label="End Date *"><DateInput {...bind("endDate")} /></Field>
+          <Field label="Start Date *" hint="Today or later"><DateInput value={f.startDate ?? ""} min={today} max={f.endDate || undefined} onChange={(e) => setCampaign("startDate", e.target.value)} aria-label="Start Date" /></Field>
+          <Field label="End Date *" hint="On or after the start date"><DateInput value={f.endDate ?? ""} min={f.startDate || today} onChange={(e) => setCampaign("endDate", e.target.value)} aria-label="End Date" /></Field>
           <Field label="Number of Days" hint={f.sundayHalt === "YES" ? "Sundays excluded" : "Sundays included"}>
             <input value={days ? `${days} day${days > 1 ? "s" : ""}` : ""} readOnly />
           </Field>
-          <Field label="Reporting Date *"><DateInput {...bind("reportingDate")} /></Field>
+          <Field label="Reporting Date *" hint={dateNote || "Within the campaign start and end dates"}>
+            <DateInput {...bind("reportingDate")} min={f.startDate || today} max={f.endDate || undefined} disabled={!f.startDate || !f.endDate} aria-label="Reporting Date" />
+          </Field>
         </div>
       )}
 
@@ -312,10 +344,10 @@ function RoadshowForm() {
             </Select>
           </Field>
           <Field label="Other Elements" wide><input {...bind("otherElements")} placeholder="As per design, all required elements" /></Field>
-          <Field label="Arts File Date"><DateInput {...bind("artsFileDate")} /></Field>
-          <Field label="Printing Date"><DateInput {...bind("printingDate")} /></Field>
-          <Field label="Fabrication Date"><DateInput {...bind("fabricationDate")} /></Field>
-          <Field label="Vehicle Delivery Date"><DateInput {...bind("vehicleDeliveryDate")} /></Field>
+          <Field label="Arts File Date"><DateInput {...bind("artsFileDate")} max={f.printingDate || undefined} /></Field>
+          <Field label="Printing Date"><DateInput {...bind("printingDate")} min={f.artsFileDate || undefined} max={f.fabricationDate || undefined} /></Field>
+          <Field label="Fabrication Date"><DateInput {...bind("fabricationDate")} min={f.printingDate || undefined} max={f.vehicleDeliveryDate || undefined} /></Field>
+          <Field label="Vehicle Delivery Date"><DateInput {...bind("vehicleDeliveryDate")} min={f.fabricationDate || undefined} /></Field>
           <Field label="Supporting Date"><DateInput {...bind("supportingDate")} /></Field>
           <Field label="Invoice Date"><DateInput {...bind("invoiceDate")} /></Field>
         </div>
@@ -348,7 +380,7 @@ function RoadshowForm() {
 }
 
 function SignageForm() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIst();
   const { f, bind, set, errors, setErrors } = useFormState({ date: today });
   const [confirm, setConfirm] = useState(false);
   const [manualDays, setManualDays] = useState(false);
@@ -364,7 +396,10 @@ function SignageForm() {
     if (!f.location?.trim()) e.push("Location is required");
     const n = Number(f.numberOfVehicles);
     if (!Number.isInteger(n) || n < 1 || n > 100) e.push("Number of vehicles must be between 1 and 100");
+    if (!f.date || !isYmd(f.date)) e.push("Date must be a valid date");
+    else if (f.date > todayIst()) e.push("Date cannot be in the future");
     if (!f.fromDate || !f.toDate) e.push("From and To dates are required");
+    else if (!isYmd(f.fromDate) || !isYmd(f.toDate)) e.push("From and To dates must be valid dates");
     else if (f.toDate < f.fromDate) e.push("To date cannot be before from date");
     if (f.arrivedBudget && !(Number(f.arrivedBudget) >= 0)) e.push("Arrived budget must be a valid amount");
     if (manualDays && !(Number(f.totalDaysOfWork) >= 1)) e.push("Total days must be at least 1");
@@ -393,14 +428,14 @@ function SignageForm() {
         </div>
       )}
       <div className="grid">
-        <Field label="Date"><DateInput {...bind("date")} /></Field>
+        <Field label="Date"><DateInput {...bind("date")} max={today} /></Field>
         <Field label="Client *"><input {...bind("client")} placeholder="DALMIA" /></Field>
         <Field label="Job Sheet Number *"><input {...bind("jobSheetNumber")} placeholder="22070649" /></Field>
         <Field label="Location *"><input {...bind("location")} placeholder="RAMNAD" /></Field>
         <Field label="Number of Vehicles *"><input type="number" min={1} max={100} {...bind("numberOfVehicles")} /></Field>
         <Field label="Arrived Budget (₹)"><input type="number" min={0} {...bind("arrivedBudget")} placeholder="25000" /></Field>
-        <Field label="From Date *"><DateInput {...bind("fromDate")} /></Field>
-        <Field label="To Date *"><DateInput {...bind("toDate")} /></Field>
+        <Field label="From Date *"><DateInput {...bind("fromDate")} max={f.toDate || undefined} /></Field>
+        <Field label="To Date *"><DateInput {...bind("toDate")} min={f.fromDate || undefined} /></Field>
         <Field label="Total Days of Work" hint={manualDays ? "Manual value" : "Auto-calculated"}>
           <div className="inline">
             <input

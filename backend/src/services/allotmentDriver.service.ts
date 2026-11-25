@@ -195,6 +195,7 @@ const text = (o: Record<string, unknown>, k: string, label: string, max: number,
   }
   const t = v.trim().replace(/\s+/g, " ");
   if (t.length > max) errors.push(`${label} is too long (max ${max})`);
+  // eslint-disable-next-line no-control-regex -- intentionally rejects control characters in free text
   else if (!/^[^<>\u0000-\u001f\u007f]+$/u.test(t)) errors.push(`${label} contains invalid characters`);
   return t;
 };

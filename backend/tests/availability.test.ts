@@ -207,7 +207,7 @@ const mkBudget = (tv: any, projectId: string, state: Record<string, unknown>) =>
   proj = r.body.data;
   const rr = await call("/tracking", "POST", {
     projectType: "ROADSHOW",
-    details: { billingName: "KFC", stateCode: "33", startDate: d(2), endDate: d(6), reportingDate: d(1), sundayHalt: "NO", numberOfVans: 2, reportingLocations: ["Chennai", "Trichy"] },
+    details: { billingName: "KFC", stateCode: "33", startDate: d(2), endDate: d(6), reportingDate: d(2), sundayHalt: "NO", numberOfVans: 2, reportingLocations: ["Chennai", "Trichy"] },
   }, t.rsop);
   assert.equal(rr.status, 201, JSON.stringify(rr.body));
   road = rr.body.data;

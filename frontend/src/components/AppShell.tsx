@@ -31,7 +31,6 @@ export const NAV: Record<RoleKey, { href: string; label: string }[]> = {
     { href: "/rsa", label: "Payments" },
     { href: "/rsa/clearance", label: "Vehicle & Driver Clearance" },
     { href: "/rsa/driver-payments", label: "Driver Payments" },
-    { href: "/rsa/settlements", label: "Settlement Payments" },
     { href: "/rsa/settlements/completed", label: "Payment Completed" },
   ],
   RSO: [
@@ -52,6 +51,7 @@ export default function AppShell({ role, children }: { role: RoleKey; children: 
   const router = useRouter();
   const path = usePathname();
   const [open, setOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const busy = useNetworkActivity() > 0;
 
   useEffect(() => {
@@ -100,12 +100,13 @@ export default function AppShell({ role, children }: { role: RoleKey; children: 
           </div>
           <button
             className="btn btn-ghost"
+            disabled={signingOut}
             onClick={() => {
-              logout();
-              router.replace("/login");
+              setSigningOut(true);
+              logout(); // clears the session and loads /login
             }}
           >
-            Sign out
+            {signingOut ? "Signing out…" : "Sign out"}
           </button>
         </div>
       </aside>
