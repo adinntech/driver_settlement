@@ -12,6 +12,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { Server } from "node:http";
 import mongoose from "mongoose";
+const { addDaysYmd: shiftDay, todayIst: todayYmd } = await import("../src/utils/dates.js");
+/** Fixture dates relative to today: campaign start dates must be today or up to 7 days back. */
+const day = (n: number) => shiftDay(todayYmd(), n);
 
 const { default: app } = await import("../src/app.js");
 const { connectDB } = await import("../src/db/connect.js");
@@ -26,6 +29,7 @@ let server: Server;
 let base = "";
 {
   await connectDB();
+  assert.match(mongoose.connection.name, /_test/, "refusing to drop a non-test database");
   await mongoose.connection.dropDatabase();
   await Promise.all([User, TrackingVehicle, TrackingProject, Budget, BudgetVersion, BudgetEvent, Notification].map((m: any) => m.init()));
   await seedUsers();
@@ -47,11 +51,11 @@ const login = async (role: string, u: string, p: string) =>
 // one Project Code per client (a code belongs to one client's project)
 const codeOf = (client: string) => String(10_000_000 + ([...client].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 90_000_000));
 const signage = (client: string) => ({
-  projectCode: codeOf(client), date: "2026-10-20", client, jobSheetNumber: "22403", location: "RAMNAD",
-  numberOfVehicles: 1, fromDate: "2026-10-21", toDate: "2026-10-26",
+  projectCode: codeOf(client), date: day(-3), client, jobSheetNumber: "22403", location: "RAMNAD",
+  numberOfVehicles: 1, fromDate: day(-2), toDate: day(3),
 });
 const budgetBody = {
-  mileage: 12, estimatedKmPerDay: 150, onRoadDate: "2026-10-21", completionDate: "2026-10-26", sundayHalt: false, numberOfDays: 6,
+  mileage: 12, estimatedKmPerDay: 150, onRoadDate: day(-2), completionDate: day(3), sundayHalt: true, numberOfDays: 6, // Halt Food needs Sunday Halt
   dieselAmount: 5000, salaryAmount: 800, salaryUnit: "PER_DAY", foodAmount: 300, foodUnit: "PER_DAY", haltFood: 200,
   tolls: [{ location: "Salem", rate: 120 }], others: [{ description: "Parking", amount: 100 }],
   fromLocation: "Chennai", toLocation: "Madurai", totalKm: 900, upDownValue: 50,
@@ -128,7 +132,7 @@ test("listing, filters, pagination, stats and review detail for RSOM", async () 
   assert.equal(row.trackupNumber, a.vehicle.trackupNumber);
   assert.equal(row.pifNumber, a.vehicle.pifNumber);
   assert.equal(row.projectType, "SIGNAGE");
-  assert.equal(row.campaignFrom, "2026-10-21");
+  assert.equal(row.campaignFrom, day(-2));
   assert.equal(row.version, 1);
   assert.equal(row.status, "PENDING");
   assert.equal(row.submittedBy, "RBP");
@@ -207,14 +211,30 @@ test("concurrent approve/reject: exactly one decision wins and only one notifica
   assert.equal(n.length, 1);
 });
 
-test("reject validation: reason, fields and per-field comments are mandatory", async () => {
+test("RSOM can reject without a reason: stored as null, RBP still sees the flagged fields, resubmission works", async () => {
+  const { t, b } = await newBudget("No Reason Client");
+  await call(`/budgets/${b._id}/submit`, "POST", {}, t.rbp);
+  const fields = [{ field: "tolls", comment: "Toll rate looks wrong" }];
+  const r = await call(`/approvals/${b._id}/reject`, "POST", { version: 1, reason: "   ", fields }, t.rsom);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.data.approvalStatus, "REJECTED");
+  assert.equal(r.body.data.rejection.reason, null);
+  assert.deepEqual(r.body.data.rejection.fields, fields);
+  const n = (await call("/notifications", "GET", undefined, t.rbp)).body.data.items.find((x: any) => x.meta?.budgetId === b._id && x.type === "BUDGET_REJECTED");
+  assert.ok(n && !/Reason:/.test(n.message), "no empty Reason: in the notification");
+  // RBP revises and resubmits as before
+  assert.equal((await call(`/budgets/${b._id}`, "PUT", { ...budgetBody, tolls: [{ location: "Salem", rate: 150 }] }, t.rbp)).status, 200);
+  assert.equal((await call(`/budgets/${b._id}/submit`, "POST", { comment: "Fixed toll" }, t.rbp)).status, 200);
+  // RSOP / RBP can never reject (RSOM only)
+  assert.equal((await call(`/approvals/${b._id}/reject`, "POST", { version: 2, fields }, t.rbp)).status, 403);
+});
+
+test("reject validation: fields and per-field comments are mandatory; the overall reason is optional", async () => {
   const { t, b } = await newBudget("Validate Client");
   await call(`/budgets/${b._id}/submit`, "POST", {}, t.rbp);
   const rej = (body: unknown) => call(`/approvals/${b._id}/reject`, "POST", body, t.rsom);
   const f = [{ field: "tolls", comment: "wrong" }];
   for (const [label, body, re] of [
-    ["no reason", { version: 1, fields: f }, /reason is required/],
-    ["blank reason", { version: 1, reason: "   ", fields: f }, /reason is required/],
     ["no fields", { version: 1, reason: "bad" }, /at least one field/],
     ["empty fields", { version: 1, reason: "bad", fields: [] }, /at least one field/],
     ["bad field", { version: 1, reason: "bad", fields: [{ field: "nope", comment: "x" }] }, /not a valid budget field/],
@@ -268,7 +288,7 @@ test("full reject -> correct -> resubmit -> approve cycle with history, notifica
   assert.equal(e.body.data.data.dieselAmount, 5000);
   const vs = (await call(`/budgets/${b._id}/versions`, "GET", undefined, t.rbp)).body.data;
   assert.equal(vs[0].data.haltFood, 200); // rejected V1 preserved
-  assert.deepEqual(vs[1].changes.map((c: any) => c.field).sort(), ["haltFood", "tolls"]);
+  assert.deepEqual(vs[1].changes.map((c: any) => c.field).sort(), ["haltFood", "tolls", "upDownValue"]); // Up/Down follows the tolls
 
   const rs = await call(`/budgets/${b._id}/submit`, "POST", { comment: "Fixed toll and halt food" }, t.rbp);
   assert.equal(rs.status, 200);
@@ -284,7 +304,7 @@ test("full reject -> correct -> resubmit -> approve cycle with history, notifica
   const d = (await call("/approvals/" + b._id, "GET", undefined, t.rsom)).body.data;
   assert.equal(d.comparison.fromVersion, 1);
   assert.equal(d.comparison.toVersion, 2);
-  assert.deepEqual(d.comparison.changes.map((c: any) => c.field).sort(), ["haltFood", "tolls"]);
+  assert.deepEqual(d.comparison.changes.map((c: any) => c.field).sort(), ["haltFood", "tolls", "upDownValue"]); // RSOM also sees the recalculated Up/Down
   assert.equal(d.comparison.changes.find((c: any) => c.field === "haltFood").from, 200);
   assert.equal(d.comparison.changes.find((c: any) => c.field === "haltFood").to, 250);
   assert.equal(d.comparison.resubmissionComment, "Fixed toll and halt food");
@@ -304,7 +324,7 @@ test("full reject -> correct -> resubmit -> approve cycle with history, notifica
   assert.equal(rejected.details.reason, "Several amounts need correction"); // history never overwritten
   assert.deepEqual(rejected.details.fields, fields);
   const resub = ev.find((x: any) => x.action === "RESUBMITTED");
-  assert.deepEqual(resub.details.changesSinceRejected.map((c: any) => c.field).sort(), ["haltFood", "tolls"]);
+  assert.deepEqual(resub.details.changesSinceRejected.map((c: any) => c.field).sort(), ["haltFood", "tolls", "upDownValue"]);
   assert.equal(resub.details.comment, "Fixed toll and halt food");
 
   // history rows cannot be rewritten

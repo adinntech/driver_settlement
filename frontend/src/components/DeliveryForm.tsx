@@ -8,7 +8,7 @@ import { useToast } from "@/context/ToastContext";
 import { useApi } from "@/hooks/useApi";
 import { ApiError, request, uploadDeliveryPhoto, type UploadedPhoto } from "@/services/api";
 import type { ClearanceDetail, DeliveryPhoto } from "@/utils/clearance";
-import { DESCRIPTION_MAX, EVIDENCE_HELPER, PHOTO_EXTENSIONS, fileSizeText, validateDeliveryForm } from "@/utils/delivery";
+import { DESCRIPTION_MAX, EVIDENCE_HELPER, MAX_ADDITIONAL_PHOTOS, PHOTO_EXTENSIONS, fileSizeText, validateDeliveryForm } from "@/utils/delivery";
 import { formatDateTime } from "@/utils/format";
 
 const errText = (e: unknown) => (e instanceof ApiError || e instanceof Error ? e.message : "Something went wrong");
@@ -46,6 +46,45 @@ export function PhotoPicker({ label, helper, file, onChange, camera }: { label: 
   );
 }
 
+/** Optional extra photos: several can be chosen at once, each with a preview and Remove. Uploaded only when delivery is confirmed. */
+export function MultiPhotoPicker({ files, onChange, camera }: { files: File[]; onChange: (f: File[]) => void; camera: boolean }) {
+  const cam = useRef<HTMLInputElement>(null);
+  const pick = useRef<HTMLInputElement>(null);
+  const urls = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
+  useEffect(() => () => urls.forEach((u) => URL.revokeObjectURL(u)), [urls]);
+  const add = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (picked.length) onChange([...files, ...picked].slice(0, MAX_ADDITIONAL_PHOTOS));
+  };
+  const full = files.length >= MAX_ADDITIONAL_PHOTOS;
+  return (
+    <section className="card cl-section" data-section="photo-additional">
+      <h3>Additional Photos (optional)</h3>
+      <p className="muted">Add up to {MAX_ADDITIONAL_PHOTOS} more photos of the vehicle (branding, sides, interior, damages). JPG, PNG or WEBP, 10 MB each.</p>
+      {files.length ? (
+        <div className="photo-grid">
+          {files.map((f, i) => (
+            <div key={`${f.name}-${i}`} className="photo-box">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={urls[i]} alt={`Additional photo ${i + 1} preview`} className="photo-preview" />
+              <small className="muted">{f.name} · {fileSizeText(f.size)}</small>
+              <button type="button" className="btn btn-outline btn-danger btn-sm" onClick={() => onChange(files.filter((_, j) => j !== i))} aria-label={`Remove additional photo ${i + 1}`}>Remove</button>
+            </div>
+          ))}
+        </div>
+      ) : <p className="muted">No additional photos.</p>}
+      <div className="actions-row" style={{ justifyContent: "flex-start" }}>
+        {camera && <button type="button" className="btn btn-outline" disabled={full} onClick={() => cam.current?.click()}>Take Photo</button>}
+        <button type="button" className="btn btn-outline" disabled={full} onClick={() => pick.current?.click()}>Add from Device</button>
+        <small className="muted">{files.length}/{MAX_ADDITIONAL_PHOTOS}</small>
+      </div>
+      <input ref={cam} type="file" accept="image/*" capture="environment" hidden onChange={add} aria-label="Additional photo camera" />
+      <input ref={pick} type="file" accept={PHOTO_EXTENSIONS.join(",")} multiple hidden onChange={add} aria-label="Additional photos file" />
+    </section>
+  );
+}
+
 export function PhotoThumb({ photo, label }: { photo: DeliveryPhoto | null; label: string }) {
   const [open, setOpen] = useState(false);
   if (!photo) return <p className="muted">{label}: not available</p>;
@@ -72,17 +111,19 @@ export default function DeliveryForm({ id }: { id: string }) {
   const [description, setDescription] = useState("");
   const [speedo, setSpeedo] = useState<File | null>(null);
   const [evidence, setEvidence] = useState<File | null>(null);
+  const [extra, setExtra] = useState<File[]>([]);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   // photos already stored by an earlier (failed) attempt are reused on retry; replacing a file drops its stored copy
   const stored = useRef<{ speedo?: { file: File; up: UploadedPhoto }; evidence?: { file: File; up: UploadedPhoto } }>({});
+  const storedExtra = useRef(new Map<File, UploadedPhoto>()); // additional photos already stored by an earlier attempt
 
   if (q.loading) return <Skeleton rows={8} />;
   if (q.error || !q.data) return <ErrorState message={q.error ?? "Allocation not found"} onRetry={q.reload} />;
   const d = q.data;
-  const problems = validateDeliveryForm(description, speedo, evidence);
+  const problems = validateDeliveryForm(description, speedo, evidence, extra);
 
   if (done) {
     return (
@@ -116,6 +157,14 @@ export default function DeliveryForm({ id }: { id: string }) {
     return up;
   }
 
+  async function ensureExtra(file: File): Promise<UploadedPhoto> {
+    const have = storedExtra.current.get(file);
+    if (have) return have;
+    const up = await uploadDeliveryPhoto(id, "additional", file);
+    storedExtra.current.set(file, up);
+    return up;
+  }
+
   async function go() {
     if (problems.length || !speedo || !evidence) return setError(problems.join("; "));
     setBusy(true);
@@ -123,7 +172,11 @@ export default function DeliveryForm({ id }: { id: string }) {
     try {
       const s = await ensure("speedometer", speedo);
       const e = await ensure("evidence", evidence);
-      await request(`/on-road-vehicles/${id}/deliver`, "POST", { description: description.trim(), speedometerPhoto: { key: s.key }, evidencePhoto: { key: e.key }, version: d.version });
+      const more: UploadedPhoto[] = [];
+      for (const f of extra) more.push(await ensureExtra(f)); // one at a time: a failure keeps the ones already stored
+      await request(`/on-road-vehicles/${id}/deliver`, "POST", {
+        description: description.trim(), speedometerPhoto: { key: s.key }, evidencePhoto: { key: e.key }, additionalPhotos: more.map((x) => ({ key: x.key })), version: d.version,
+      });
       toast("Vehicle delivered successfully");
       setConfirm(false);
       setDone(true);
@@ -148,6 +201,7 @@ export default function DeliveryForm({ id }: { id: string }) {
       </section>
       <PhotoPicker label="Speedometer Photo" helper="Capture the vehicle's current speedometer reading." file={speedo} onChange={setSpeedo} camera />
       <PhotoPicker label="Driver & Vehicle Handover Photo" helper={EVIDENCE_HELPER} file={evidence} onChange={setEvidence} camera />
+      <MultiPhotoPicker files={extra} onChange={setExtra} camera />
       <section className="card cl-section">
         <p className="muted">Delivered Date &amp; Time and Delivered By are recorded automatically by the server (IST) for the signed-in user when you confirm.</p>
       </section>
@@ -165,6 +219,7 @@ export default function DeliveryForm({ id }: { id: string }) {
             <div><dt>RSA Approval Status</dt><dd>Approved</dd></div>
             <div><dt>Speedometer Photo</dt><dd>{speedo?.name}</dd></div>
             <div><dt>Driver &amp; Vehicle Photo</dt><dd>{evidence?.name}</dd></div>
+            <div><dt>Additional Photos</dt><dd>{extra.length ? `${extra.length} photo${extra.length > 1 ? "s" : ""}` : "None"}</dd></div>
             <div className="wide"><dt>Delivery Description</dt><dd>{description.trim()}</dd></div>
           </dl>
           {error && <div className="alert" role="alert">{error}</div>}

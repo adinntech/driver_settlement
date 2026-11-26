@@ -194,9 +194,9 @@ export function PaymentFormPanel({
         <label className="rsa-check"><input type="checkbox" checked={form.cashInHand} onChange={(e) => set("cashInHand", e.target.checked)} aria-label="Cash In Hand" /> Cash In Hand</label>
       </div>
 
-      <h4 className="sub">Diesel Cost</h4>
+      <h4 className="sub">Fuel Cost</h4>
       <div className="rsa-diesel">
-        <input className="num-input" inputMode="decimal" placeholder="0.00" value={diesel.amount} aria-label="Diesel Cost" onChange={(e) => setDiesel({ ...diesel, amount: sanitizeAmount(e.target.value) })} />
+        <input className="num-input" inputMode="decimal" placeholder="0.00" value={diesel.amount} aria-label="Fuel Cost" onChange={(e) => setDiesel({ ...diesel, amount: sanitizeAmount(e.target.value) })} />
         <Select value={diesel.mode} aria-label="Diesel payment mode" onChange={(e) => setDiesel({ ...diesel, mode: e.target.value })}>
           <option value="">Mode</option>
           {options.dieselPaymentModes.map((m) => <option key={m} value={m}>{m}</option>)}
@@ -543,7 +543,7 @@ export default function RsaPaymentScreen({ tvId, onClose, onSaved }: { tvId: str
           <dl className="kv allot-proj" data-step="summary">
             <KV k="Trackup Number" v={c.trackupNumber} /><KV k="Vehicle" v={c.vehicle.vehicleNo} /><KV k="Driver" v={`${c.driver.driverNumber} · ${c.driver.driverName}`} />
             <KV k="Payment For" v={PAYMENT_FOR_LABEL[c.paymentFor]} /><KV k="Cash In Hand" v={form.cashInHand ? "Yes" : "No"} />
-            <KV k="Diesel Cost" v={money(t.diesel)} /><KV k="Food Allowance" v={money(amountPaise(form.foodAmount) ?? 0)} /><KV k="Salary Advance" v={money(amountPaise(form.salaryAdvance) ?? 0)} />
+            <KV k="Fuel Cost" v={money(t.diesel)} /><KV k="Food Allowance" v={money(amountPaise(form.foodAmount) ?? 0)} /><KV k="Salary Advance" v={money(amountPaise(form.salaryAdvance) ?? 0)} />
             <KV k="Expenses (net)" v={money(t.expenseNet)} /><KV k="Total Payable" v={<strong>{money(t.total)}</strong>} />
           </dl>
           <p className="muted">The payment number, entry time and amounts are recorded by the server. Saving an entry does not mean the bank transfer is done.</p>

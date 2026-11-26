@@ -259,31 +259,48 @@ test("simultaneous creation: 30 parallel requests all get different driver numbe
   await assert.rejects(Driver.create({ ...any, _id: new mongoose.Types.ObjectId(), mobileDigits: "6999999999", licenceKey: undefined }));
 });
 
-test("edit: restores saved details, keeps the Driver Number, creates no duplicate, no-change is refused", async () => {
+test("edit: saved details are locked (only bank details / status change), Driver Number kept, no duplicate, no-change refused", async () => {
   const t = await T();
   const c = (await call("/drivers", "POST", good({ mobileNumber: "9111111111", licenceNumber: "TN0720110000111", driverType: "ACTING_DRIVER" }), t.rbp)).body.data;
   const body = { ...good({ mobileNumber: "9111111111", licenceNumber: "TN0720110000111", driverType: "ACTING_DRIVER" }), driverNumber: "DR-9999" };
   assert.equal((await call(`/drivers/${c._id}`, "PUT", body, t.rbp)).status, 400); // nothing changed
   const before = await Driver.countDocuments();
-  const u = await call(`/drivers/${c._id}`, "PUT", { ...body, driverName: "Murugan Kumar", driverType: "COMPANY_DRIVER", salary: 20000, status: "INACTIVE" }, t.rbp);
+  // every non-bank detail is locked once saved, also through a direct API request
+  for (const [over, label] of [
+    [{ driverName: "Murugan Kumar" }, "Name"], [{ driverType: "COMPANY_DRIVER" }, "Driver type"], [{ salary: 20000 }, "Salary"],
+    [{ address: "New address" }, "Address"], [{ mobileNumber: "9000000001" }, "Mobile number"], [{ licenceNumber: "TN0720110000999" }, "Licence number"],
+    [{ licenceType: "HMV" }, "Licence type"], [{ licenceExpiryDate: "2031-01-01" }, "Licence expiry date"], [{ attachment: null }, "Attachment"],
+  ] as [Record<string, unknown>, string][]) {
+    const r = await call(`/drivers/${c._id}`, "PUT", { ...body, ...over }, t.rbp);
+    if (label === "Attachment" && !c.attachment) continue; // no attachment saved: clearing it is no change
+    assert.equal(r.status, 403, `${label}: ${JSON.stringify(r.body)}`);
+    assert.match(r.body.message, new RegExp(`locked after saving.*${label}`), label);
+  }
+  // a bank-only request (other fields left out) keeps the saved details
+  const bankOnly = await call(`/drivers/${c._id}`, "PUT", { bankName: "Indian Bank", accountNumber: "998877665544" }, t.rbp);
+  assert.equal(bankOnly.status, 200, JSON.stringify(bankOnly.body));
+  assert.equal(bankOnly.body.data.bankName, "Indian Bank");
+  assert.equal(bankOnly.body.data.driverName, c.driverName);
+  const u = await call(`/drivers/${c._id}`, "PUT", { ...body, bankName: "Canara Bank", status: "INACTIVE" }, t.rbp);
   assert.equal(u.status, 200, JSON.stringify(u.body));
   assert.equal(u.body.data.driverNumber, c.driverNumber); // never regenerated, never client-set
   assert.equal(u.body.data._id, c._id);
-  assert.equal(u.body.data.driverName, "Murugan Kumar");
-  assert.equal(u.body.data.driverType, "COMPANY_DRIVER");
-  assert.equal(u.body.data.salary, 20000);
+  assert.equal(u.body.data.driverName, c.driverName);
+  assert.equal(u.body.data.driverType, "ACTING_DRIVER");
+  assert.equal(u.body.data.salary, c.salary);
+  assert.equal(u.body.data.bankName, "Canara Bank");
   assert.equal(u.body.data.status, "INACTIVE");
   assert.equal(u.body.data.updatedBy, "RBP");
   assert.equal(u.body.data.createdBy, "RBP");
   assert.equal(await Driver.countDocuments(), before); // update, not insert
   const g = (await call(`/drivers/${c._id}`, "GET", undefined, t.rbp)).body.data;
-  for (const k of ["address", "accountName", "accountNumber", "ifscCode", "bankName", "licenceNumber", "licenceType", "licenceExpiryDate"]) assert.equal(g[k], c[k], k);
+  for (const k of ["address", "accountName", "ifscCode", "licenceNumber", "licenceType", "licenceExpiryDate", "mobileNumber"]) assert.equal(g[k], c[k], k);
   assert.equal(g.driverNumber, c.driverNumber);
-  // keeping the own mobile / licence is fine, taking another driver's is not
+  // another driver's mobile / licence can never be taken (the lock refuses it before the duplicate check)
   const other = (await call("/drivers", "POST", mk({ mobileNumber: "9222222222", licenceNumber: "TN0720110000222" }), t.rbp)).body.data;
-  assert.equal((await call(`/drivers/${c._id}`, "PUT", { ...body, driverName: "Murugan K", mobileNumber: "9222222222" }, t.rbp)).status, 409);
-  assert.equal((await call(`/drivers/${c._id}`, "PUT", { ...body, driverName: "Murugan K", licenceNumber: "TN0720110000222" }, t.rbp)).status, 409);
-  assert.equal((await call(`/drivers/${c._id}`, "PUT", { ...body, driverName: "Murugan K2", driverType: "NOPE" }, t.rbp)).status, 400);
+  assert.equal((await call(`/drivers/${c._id}`, "PUT", { ...body, mobileNumber: "9222222222" }, t.rbp)).status, 403);
+  assert.equal((await call(`/drivers/${c._id}`, "PUT", { ...body, licenceNumber: "TN0720110000222" }, t.rbp)).status, 403);
+  assert.equal((await call(`/drivers/${c._id}`, "PUT", { ...body, driverType: "NOPE" }, t.rbp)).status, 400); // invalid input is still a 400
   assert.ok(other);
 });
 

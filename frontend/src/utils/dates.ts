@@ -33,3 +33,17 @@ export function keepInRange(value: string, min?: string | null, max?: string | n
   if (isYmd(max) && value > max) return "";
   return value;
 }
+
+export function addDaysYmd(ymd: string, days: number): string {
+  return new Date(Date.parse(`${ymd}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+/** Campaign start date window (same as the server): today back to this many days before today. */
+export const START_DATE_PAST_DAYS = 7;
+export const earliestStartYmd = (today = todayIst()) => addDaysYmd(today, -START_DATE_PAST_DAYS);
+/** Error for a campaign start date outside [today - 7 days, today], or "" when it fits. */
+export function startDateError(v: string, label: string, today = todayIst()): string {
+  if (v > today) return `${label} cannot be in the future`;
+  if (v < earliestStartYmd(today)) return `${label} cannot be more than ${START_DATE_PAST_DAYS} days in the past`;
+  return "";
+}

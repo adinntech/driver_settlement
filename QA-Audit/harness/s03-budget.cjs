@@ -21,7 +21,7 @@ async function openBudget(s) {
       await s.fill("Estimated KM per day", "90");
       await s.date("On Road Date", addDays(todayIst(), 6));
       await s.date("Completion Date", addDays(todayIst(), 2));
-      await s.fill("Diesel Cost", "18000");
+      await s.fill("Fuel Cost", "18000");
       await s.fill("Salary", "850");
       await s.fill("Food", "250");
       await s.clickText("button.btn-primary", "Save", { exact: true });
@@ -102,7 +102,7 @@ async function openBudget(s) {
     });
     await tc(s, "BUD-07", "RBP: edits the rejected field, saves V2 and resubmits", "RBP", async (t) => {
       await s.clickText("button.btn-primary", "Edit Budget");
-      await s.fill("Diesel Cost", "15500");
+      await s.fill("Fuel Cost", "15500");
       await s.clickText("button.btn-primary", "Save New Version");
       await s.clickText(".modal button", "Save", { exact: true });
       await sleep(1200); await s.waitIdle();

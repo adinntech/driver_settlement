@@ -182,11 +182,11 @@ export default function VehicleAvailability({ value: a, onChange }: { value: AvF
               <Row label="Expected Release">
                 <DateTime d={a.expectedReleaseDate} t={a.expectedReleaseTime} onD={(v) => set("expectedReleaseDate", v)} onT={(v) => set("expectedReleaseTime", v)} />
               </Row>
-              <Row label="Next Available" req>
+              <Row label="Next Available (optional)">
                 <DateTime d={a.nextAvailableDate} t={a.nextAvailableTime} minD={a.expectedReleaseDate || undefined} onD={(v) => set("nextAvailableDate", v)} onT={(v) => set("nextAvailableTime", v)} />
               </Row>
-              <Row label="Additional Remarks">
-                <textarea rows={3} value={a.project.remarks} maxLength={300} onChange={(e) => proj("remarks", e.target.value)} />
+              <Row label="Remarks">
+                <textarea rows={3} value={a.project.remarks} maxLength={300} aria-label="Remarks" placeholder="Optional notes about this allocation" onChange={(e) => proj("remarks", e.target.value)} />
               </Row>
             </div>
           </div>

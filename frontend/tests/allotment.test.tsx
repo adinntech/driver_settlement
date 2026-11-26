@@ -40,13 +40,16 @@ test("three tabs: Vehicle Management, Vehicle Allotment, Allotment History; the 
   assert.match(html, /class="v-tab active"[^>]*href="\/rbp\/vehicles\/allotment"|href="\/rbp\/vehicles\/allotment"[^>]*class="v-tab active"|class="v-tab active"[^>]*aria-current/);
 });
 
-test("allot form: defaults the allotment moment to now (IST); a vehicle, next available date AND time are mandatory", () => {
+test("allot form: defaults the allotment moment to now (IST); a vehicle is mandatory; next available is optional (both or neither)", () => {
   const f = emptyAllotForm(NOW);
   assert.deepEqual([f.allottedDate, f.allottedTime], ["2026-11-24", "12:00"]);
   assert.deepEqual(validateAllotForm(okForm(), NOW), []);
   const e = validateAllotForm(emptyAllotForm(NOW), NOW);
-  for (const m of ["Select a vehicle", "Next available date is required", "Next available time is required"]) assert.ok(e.includes(m), m);
-  assert.ok(validateAllotForm({ ...okForm(), nextAvailableTime: "" }, NOW).includes("Next available time is required"));
+  assert.ok(e.includes("Select a vehicle"));
+  assert.ok(!e.some((m) => /Next available/.test(m)), "an empty next available is allowed");
+  assert.deepEqual(validateAllotForm({ ...okForm(), nextAvailableDate: "", nextAvailableTime: "" }, NOW), []);
+  assert.ok(validateAllotForm({ ...okForm(), nextAvailableTime: "" }, NOW).includes("Next available: both date and time are required"));
+  assert.ok(validateAllotForm({ ...okForm(), nextAvailableDate: "" }, NOW).includes("Next available: both date and time are required"));
 });
 
 test("allot form: invalid periods are rejected", () => {
@@ -115,7 +118,9 @@ test("extend / release dialogs show the current allotment", () => {
   assert.ok(rel.includes("Release Vehicle") && rel.includes("Available Now"));
   assert.deepEqual(scheduleFromAllotment({ expectedReleaseAt: null, nextAvailableAt: "2026-11-26T03:30:00.000Z" }), { expectedReleaseDate: "", expectedReleaseTime: "", nextAvailableDate: "2026-11-26", nextAvailableTime: "09:00" });
   assert.deepEqual(validateSchedule({ expectedReleaseDate: "", expectedReleaseTime: "", nextAvailableDate: "2026-12-01", nextAvailableTime: "10:00" }, null), []);
-  assert.ok(validateSchedule({ expectedReleaseDate: "", expectedReleaseTime: "", nextAvailableDate: "", nextAvailableTime: "" }, null).length >= 2);
+  assert.deepEqual(validateSchedule({ expectedReleaseDate: "", expectedReleaseTime: "", nextAvailableDate: "", nextAvailableTime: "" }, null), []); // optional
+  assert.ok(validateSchedule({ expectedReleaseDate: "", expectedReleaseTime: "", nextAvailableDate: "2026-12-01", nextAvailableTime: "" }, null).length === 1);
+  assert.deepEqual(scheduleFromAllotment({ expectedReleaseAt: null, nextAvailableAt: null }).nextAvailableDate, "");
 });
 
 test("IST display of stored instants and period text", () => {

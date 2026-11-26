@@ -11,11 +11,11 @@ import { DecimalInput, IntInput } from "@/components/ui/Inputs";
 import { ConfirmDialog, ErrorState, Skeleton } from "@/components/ui/Ui";
 import { useToast } from "@/context/ToastContext";
 import { useApi } from "@/hooks/useApi";
-import { request } from "@/services/api";
+import { ApiError, request } from "@/services/api";
 import type { Activity, Budget, BudgetContext, BudgetEvent, BudgetVersion } from "@/types/domain";
 import { ActivitySummary, ApprovalHistory, VersionHistory } from "@/components/HistorySections";
 import {
-  addCharge, removeCharge, updateCharge, addToll, autoDays, computeValues, draftFromData, removeToll, toPayload, updateToll, validateDraft,
+  addCharge, removeCharge, updateCharge, addToll, autoDays, computeValues, haltFoodApplies, draftFromData, removeToll, toPayload, updateToll, validateDraft,
   type Draft, type Unit,
 } from "@/utils/budgetForm";
 import RbpApprovalPanel from "@/components/RbpApprovalPanel";
@@ -24,7 +24,7 @@ import { keepInRange, laterOf } from "@/utils/dates";
 import {
   STATUS_TEXT, TOLL_VEHICLE_CLASSES, applyPlaza, rateOrigin, sourceLine, tollClassLabel, type TollJourney, type TollSourceInfo, type TollVehicleClass,
 } from "@/utils/tolls";
-import { canEdit, describeBudget, statusOf } from "@/utils/budgetDescribe";
+import { canEdit, canSubmit, describeBudget, statusOf } from "@/utils/budgetDescribe";
 import { formatDate, formatDateTime, formatInr } from "@/utils/format";
 import { allowanceText, kmText } from "@/utils/kmAllowance";
 
@@ -113,7 +113,7 @@ function BudgetView() {
       ) : (
         <>
           <BudgetSummary budget={budget} activity={activity} rejected={rejectedMap(budget)} />
-          <RbpApprovalPanel budget={budget} onChanged={res.reload} />
+          <RbpApprovalPanel budget={budget} />
           <HistorySection key={`${budget.currentVersion}-${budget.approvalStatus ?? ""}`} budget={budget} />
         </>
       )}
@@ -204,9 +204,13 @@ function BudgetForm({
   const [f, setF] = useState<Draft>(() => draftFromData(budget?.data, { campaignFrom: context.campaignFrom, campaignTo: context.campaignTo, sundayHalt: context.sundayHalt }));
   const [daysManual, setDaysManual] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
-  const [confirm, setConfirm] = useState(false);
+  /** Which action the confirm dialog is for: SAVE keeps a draft, SUBMIT saves and sends the version to RSOM. */
+  const [confirm, setConfirm] = useState<"SAVE" | "SUBMIT" | null>(null);
+  const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const saving = useRef(false); // blocks double submits
+  const status = budget ? statusOf(budget.approvalStatus) : "DRAFT";
+  const resubmit = status === "REJECTED";
   const v = useMemo(() => computeValues(f), [f]);
   // Budget KM estimate against the campaign allowance (KM / day x days + the one-time Extra KM pool). Shown only; no money effect.
   const estimatedKm = Math.round((Number(f.estimatedKmPerDay) || 0) * (Number(f.numberOfDays) || 0) * 100) / 100;
@@ -252,25 +256,57 @@ function BudgetForm({
     return Array.from(new Set([...fromCtx, ...base]));
   }, [context.location]);
 
-  async function save() {
+  /**
+   * Save keeps the budget as a draft (first save creates V1, later saves a new version). Save & Submit saves the same way and
+   * then submits that version to RSOM: a first submission for a draft, a resubmission after a rejection. When nothing changed
+   * since the last saved version, Save & Submit sends that saved version as it is (the server still refuses an unrevised
+   * rejected version).
+   */
+  async function save(mode: "SAVE" | "SUBMIT") {
     const e = validateDraft(f, bounds);
     setErrors(e);
-    if (e.length) return setConfirm(false);
+    if (e.length) return setConfirm(null);
     if (saving.current) return;
     saving.current = true;
     setBusy(true);
     const body = toPayload(f);
-    try {
-      if (budget) await request(`/budgets/${budget._id}`, "PUT", body);
-      else await request("/budgets", "POST", { vehicleId, ...body });
-      toast(budget ? "Budget updated — new version saved" : "Budget created successfully");
-      onSaved();
-    } catch (err) {
-      setErrors([(err as Error).message]);
-      setConfirm(false);
+    let id = budget?._id ?? "";
+    let saved = false;
+    const fail = (msg: string) => {
+      setErrors([msg]);
+      setConfirm(null);
       setBusy(false);
       saving.current = false;
+    };
+    try {
+      if (budget) {
+        try {
+          await request(`/budgets/${budget._id}`, "PUT", body);
+          saved = true;
+        } catch (err) {
+          const unchanged = err instanceof ApiError && err.status === 400 && /no changes to save/i.test(err.message);
+          if (!(mode === "SUBMIT" && unchanged && canSubmit(status, budget.currentVersion, budget.rejectedVersion))) throw err;
+        }
+      } else {
+        const r = await request<{ budget: { _id: string } }>("/budgets", "POST", { vehicleId, ...body });
+        id = r.budget._id;
+        saved = true;
+      }
+    } catch (err) {
+      return fail((err as Error).message);
     }
+    if (mode === "SUBMIT") {
+      try {
+        await request(`/budgets/${id}/submit`, "POST", { comment });
+      } catch (err) {
+        if (!saved) return fail((err as Error).message);
+        // the new version is kept as a draft; show why it was not sent
+        toast(`Budget saved as a draft, but it was not submitted: ${(err as Error).message}`);
+        return onSaved();
+      }
+      toast(resubmit ? "Revised budget saved and resubmitted to RSOM" : "Budget saved and submitted to RSOM for approval");
+    } else toast(budget ? "Budget updated — new version saved as draft" : "Budget saved as draft");
+    onSaved();
   }
 
   return (
@@ -316,7 +352,7 @@ function BudgetForm({
               {estimatedKm > context.km.totalAllowedKm && ` · exceeds the allowance by ${kmText(Math.round((estimatedKm - context.km.totalAllowedKm) * 100) / 100)}`}
             </p>
           )}
-          <Row label="Diesel Cost" k="dieselAmount">
+          <Row label="Fuel Cost" k="dieselAmount">
             <DecimalInput value={f.dieselAmount} onChange={(x) => set("dieselAmount", x)} placeholder="0.00" />
             <UnitSelect value="PER_CAMPAIGN" fixed />
             <Out value={v.dieselValue} />
@@ -331,7 +367,7 @@ function BudgetForm({
             <UnitSelect value={f.foodUnit} onChange={(u) => set("foodUnit", u)} />
             <Out value={v.foodValue} />
           </Row>
-          <Row label="Halt Food" k="haltFood"><DecimalInput value={f.haltFood} onChange={(x) => set("haltFood", x)} placeholder="0.00" /></Row>
+          {haltFoodApplies(f) && <Row label="Halt Food" k="haltFood"><DecimalInput value={f.haltFood} onChange={(x) => set("haltFood", x)} placeholder="0.00" /></Row>}
         </div>
 
         <div className="b-col">
@@ -443,11 +479,18 @@ function BudgetForm({
             ))}
           </datalist>
           <Row label="Total Km" k="totalKm"><DecimalInput value={f.totalKm} onChange={(x) => set("totalKm", x)} placeholder="0.00" /></Row>
-          <Row label="Up/Down Value" k="upDownValue"><DecimalInput value={f.upDownValue} onChange={(x) => set("upDownValue", x)} placeholder="0.00" /></Row>
+          <Row label="Fuel Rate (₹/litre)" k="fuelRate"><DecimalInput value={f.fuelRate} onChange={(x) => set("fuelRate", x)} placeholder="0.00" aria-label="Fuel Rate per litre" /></Row>
+          <Row label="Up/Down Value" k="upDownValue"><Out value={v.upDownValue} /></Row>
+          <p className="muted b-date-hint">Up/Down = Total KM ÷ Mileage × Fuel Rate + Toll Amount (calculated automatically).</p>
           <Row label="Total Value"><Out value={v.totalValue} /></Row>
         </div>
       </div>
       </RejectedCtx.Provider>
+
+      <label className="field comment-field">
+        <span>{resubmit ? "Resubmission comment for RSOM (optional, sent with Save & Submit)" : "Comment for RSOM (optional, sent with Save & Submit)"}</span>
+        <textarea rows={2} maxLength={500} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="What did you change or what should RSOM know?" />
+      </label>
 
       <div className="sticky-actions">
         <div className="total">
@@ -460,19 +503,32 @@ function BudgetForm({
               Close
             </button>
           )}
-          <button className="btn btn-primary" onClick={() => setConfirm(true)}>
-            {budget ? "Save New Version" : "Save"}
+          <button className="btn btn-outline" onClick={() => setConfirm("SAVE")} disabled={busy}>
+            Save
+          </button>
+          <button className="btn btn-primary" onClick={() => setConfirm("SUBMIT")} disabled={busy}>
+            Save &amp; Submit for Approval
           </button>
         </div>
       </div>
-      {confirm && (
+      {confirm === "SAVE" && (
         <ConfirmDialog
           title={budget ? "Save changes?" : "Save budget?"}
-          message={budget ? "A new version will be saved. Previous versions are kept in history." : "One budget can be created per vehicle."}
+          message={budget ? "A new version will be saved as a draft. Previous versions are kept in history." : "The budget is saved as a draft. One budget can be created per vehicle."}
           busy={busy}
           confirmLabel="Save"
-          onConfirm={save}
-          onCancel={() => setConfirm(false)}
+          onConfirm={() => save("SAVE")}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
+      {confirm === "SUBMIT" && (
+        <ConfirmDialog
+          title={resubmit ? "Save and resubmit to RSOM?" : "Save and submit for approval?"}
+          message={`${budget ? "Any changes are saved as a new version" : "The budget is saved"}, and that version is sent to RSOM. You cannot edit it while it is waiting for approval.`}
+          busy={busy}
+          confirmLabel={resubmit ? "Save & Resubmit" : "Save & Submit"}
+          onConfirm={() => save("SUBMIT")}
+          onCancel={() => setConfirm(null)}
         />
       )}
     </div>

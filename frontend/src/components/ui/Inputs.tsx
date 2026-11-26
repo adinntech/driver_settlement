@@ -15,7 +15,7 @@ export const IntInput = ({ value, onChange, ...p }: Base) => (
 );
 
 /** Fixed +91 prefix, 10 national digits. Handles paste of "+91 98765 43210" without duplicating the code. */
-export function PhoneInput({ value, onChange, placeholder = "9876543210" }: Base) {
+export function PhoneInput({ value, onChange, placeholder = "9876543210", disabled }: Base & { disabled?: boolean }) {
   return (
     <div className="phone">
       <span className="phone-code">+91</span>
@@ -27,6 +27,7 @@ export function PhoneInput({ value, onChange, placeholder = "9876543210" }: Base
         placeholder={placeholder}
         aria-label="Mobile number (+91)"
         value={value}
+        disabled={disabled}
         onChange={(e) => onChange(sanitizePhoneInput(e.target.value))}
         onPaste={(e) => {
           e.preventDefault();

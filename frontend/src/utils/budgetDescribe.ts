@@ -28,22 +28,22 @@ function othersText(data: Record<string, unknown>): string {
 /** Human-readable labels for every field RSOM can flag. */
 export const FIELD_LABELS: Record<string, string> = {
   mileage: "Mileage", estimatedKmPerDay: "Estimated KM per day", onRoadDate: "On Road Date", completionDate: "Completion Date",
-  sundayHalt: "Sunday Halt", numberOfDays: "Number of days", dieselAmount: "Diesel Cost", salaryAmount: "Salary", salaryUnit: "Salary unit",
+  sundayHalt: "Sunday Halt", numberOfDays: "Number of days", dieselAmount: "Fuel Cost", salaryAmount: "Salary", salaryUnit: "Salary unit",
   foodAmount: "Food", foodUnit: "Food unit", haltFood: "Halt Food", tolls: "Toll Detail (Location & Rate)", tollVehicleClass: "Toll Vehicle Class", others: "Others",
-  fromLocation: "From", toLocation: "To", totalKm: "Total Km", upDownValue: "Up/Down Value", otherDetails: "Other Details",
+  fromLocation: "From", toLocation: "To", totalKm: "Total Km", fuelRate: "Fuel Rate (₹/litre)", upDownValue: "Up/Down Value", otherDetails: "Other Details",
 };
 export const fieldLabel = (key: string): string => FIELD_LABELS[key] ?? labelize(key);
 
 const V2_REJECTABLE = [
   "mileage", "estimatedKmPerDay", "onRoadDate", "completionDate", "sundayHalt", "numberOfDays", "dieselAmount", "salaryAmount",
-  "foodAmount", "haltFood", "tolls", "others", "fromLocation", "toLocation", "totalKm", "upDownValue",
+  "foodAmount", "haltFood", "tolls", "others", "fromLocation", "toLocation", "totalKm", "fuelRate", "upDownValue",
 ];
 
 /** Fields RSOM can pick when rejecting this budget (depends on the layout it was saved in). */
 export function rejectableFields(data: Record<string, unknown>): { key: string; label: string }[] {
   const keys =
     data.schemaVersion === 2
-      ? [...V2_REJECTABLE, ...(Array.isArray(data.otherDetails) && data.otherDetails.length ? ["otherDetails"] : [])]
+      ? [...V2_REJECTABLE.filter((k) => k !== "haltFood" || data.sundayHalt === true), ...(Array.isArray(data.otherDetails) && data.otherDetails.length ? ["otherDetails"] : [])]
       : Object.keys(data).filter((k) => k !== "computed" && k !== "schemaVersion");
   return keys.map((key) => ({ key, label: fieldLabel(key) }));
 }
@@ -60,10 +60,11 @@ export function describeBudget(data: Record<string, unknown>): DescribedField[] 
     { key: "completionDate", label: "Completion Date", value: formatDate(data.completionDate as string) },
     { key: "sundayHalt", label: "Sunday Halt", value: yesNo(data.sundayHalt) },
     { key: "numberOfDays", label: "Number of days", value: show(data.numberOfDays) },
-    { key: "dieselAmount", label: "Diesel Cost", value: `${money(data.dieselAmount)} (Per Campaign) = ${money(c.dieselValue)}` },
+    { key: "dieselAmount", label: "Fuel Cost", value: `${money(data.dieselAmount)} (Per Campaign) = ${money(c.dieselValue)}` },
     { key: "salaryAmount", label: "Salary", value: `${money(data.salaryAmount)} (${unitLabel(data.salaryUnit)}) = ${money(c.salaryValue)}` },
     { key: "foodAmount", label: "Food", value: `${money(data.foodAmount)} (${unitLabel(data.foodUnit)}) = ${money(c.foodValue)}` },
-    { key: "haltFood", label: "Halt Food", value: money(data.haltFood) },
+    // Halt Food applies only with Sunday Halt (an older saved non-zero value is still shown, as it is in that version's total)
+    ...(data.sundayHalt === true || Number(data.haltFood) > 0 ? [{ key: "haltFood", label: "Halt Food", value: money(data.haltFood) }] : []),
     ...(data.tollVehicleClass ? [{ key: "tolls", label: "Toll Vehicle Class", value: tollClassLabel(String(data.tollVehicleClass)) || show(data.tollVehicleClass) }] : []),
     { key: "tolls", label: "Toll Detail", value: formatList(data.tolls) },
     { key: "tolls", label: "Toll Amount", value: money(c.tollAmount) },
@@ -71,6 +72,7 @@ export function describeBudget(data: Record<string, unknown>): DescribedField[] 
     { key: "fromLocation", label: "From", value: show(data.fromLocation) },
     { key: "toLocation", label: "To", value: show(data.toLocation) },
     { key: "totalKm", label: "Total Km", value: show(data.totalKm) },
+    ...(data.fuelRate !== undefined ? [{ key: "fuelRate", label: "Fuel Rate (₹/litre)", value: money(data.fuelRate) }] : []),
     { key: "upDownValue", label: "Up/Down Value", value: money(data.upDownValue) },
     { key: null, label: "Total Value", value: money(c.totalValue) },
   ];

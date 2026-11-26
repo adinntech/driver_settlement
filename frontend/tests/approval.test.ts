@@ -51,7 +51,9 @@ test("describeBudget carries field keys for rejection highlighting and never pri
 
 test("rejectable fields: v2 layout list, legacy layout uses its own saved keys", () => {
   const keys = rejectableFields(v2).map((f) => f.key);
-  for (const k of ["tolls", "others", "haltFood", "mileage", "fromLocation", "toLocation", "dieselAmount", "salaryAmount", "foodAmount"])
+  assert.ok(!keys.includes("haltFood")); // no Sunday Halt on this budget: Halt Food does not apply
+  assert.ok(rejectableFields({ ...v2, sundayHalt: true }).some((f) => f.key === "haltFood"));
+  for (const k of ["tolls", "others", "fuelRate", "upDownValue", "mileage", "fromLocation", "toLocation", "dieselAmount", "salaryAmount", "foodAmount"])
     assert.ok(keys.includes(k), k);
   assert.ok(!keys.includes("computed") && !keys.includes("schemaVersion"));
   assert.ok(!keys.includes("otherDetails"));

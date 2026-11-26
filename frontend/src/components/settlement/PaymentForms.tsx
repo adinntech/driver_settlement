@@ -4,7 +4,7 @@ import TableWrap from "@/components/ui/TableWrap";
 import Select from "@/components/ui/Select";
 import DateInput from "@/components/ui/DateInput";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { EmptyState, ErrorState, Modal, Skeleton } from "@/components/ui/Ui";
 import { useToast } from "@/context/ToastContext";
@@ -18,7 +18,7 @@ import { earlierOf, keepInRange, laterOf } from "@/utils/dates";
 import { amountPaise, money, newSubmissionKey, rowId, sanitizeAmount, type RsaProjectRow } from "@/utils/rsa";
 import { allowanceText, kmText, kmUsage } from "@/utils/kmAllowance";
 import {
-  DEDUCTION_KEYS, campaignDays, paymentsBase, finalFormFrom, finalPayload, finalTotals, validateFinalForm, type FinalForm, type FinalNumberKey, type SettlementContext, type SettlementDetail, type SettlementOptions,
+  DEDUCTION_KEYS, campaignDays, onRoadBase, paymentsBase, finalFormFrom, finalPayload, finalTotals, validateFinalForm, type FinalForm, type FinalNumberKey, type SettlementContext, type SettlementDetail, type SettlementOptions,
 } from "@/utils/settlement";
 
 const d = (v: unknown) => (v === null || v === undefined || v === "" ? "-" : String(v));
@@ -180,7 +180,10 @@ interface DieselLine { id: string; amount: string; bunk: string; date: string }
 /** Daily Vehicle Payment, laid out like the legacy "VEHICLE PAYMENT" window: entry form left, job details + previous payments right. */
 function DailyInner({ ctx, existing, expenseOptions }: { ctx: SettlementContext; existing: SettlementDetail | null; expenseOptions: { key: string; label: string; descriptionRequired?: boolean }[] }) {
   const router = useRouter();
-  const base = paymentsBase(useAuth().user?.role);
+  const role = useAuth().user?.role;
+  // opened from On Road Vehicles: Back and the redirect after saving return there; otherwise to Driver Payments as before
+  const fromOnRoad = useSearchParams().get("from") === "on-road";
+  const base = fromOnRoad ? onRoadBase(role) : paymentsBase(role);
   const toast = useToast();
   const s = existing?.data;
   const [today] = useState(() => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10));
@@ -225,7 +228,7 @@ function DailyInner({ ctx, existing, expenseOptions }: { ctx: SettlementContext;
 
   const addDiesel = () => {
     const e: string[] = [];
-    if (!p(dDraft.amount)) e.push("Enter the diesel cost");
+    if (!p(dDraft.amount)) e.push("Enter the fuel cost");
     if (!dDraft.bunk.trim()) e.push("Enter the diesel / petrol bunk name");
     if (/[<>]/.test(dDraft.bunk)) e.push("Bunk name contains invalid characters");
     if (dDraft.date) {
@@ -268,7 +271,7 @@ function DailyInner({ ctx, existing, expenseOptions }: { ctx: SettlementContext;
     }
     if (diesel.some((r) => r.date && (r.date > today || r.date < fromDate || r.date > toDate))) e.push("Every diesel date must be within the payment period and not in the future");
     for (const [label, v] of [["Food", food], ["Salary Advance", advance]] as const) if (amountPaise(v) === null) e.push(`${label} must contain digits only`);
-    if (p(dDraft.amount)) e.push("Click + to add the diesel cost entered, or clear it");
+    if (p(dDraft.amount)) e.push("Click + to add the fuel cost entered, or clear it");
     if (!total) e.push("Enter at least one amount");
     if (payable < 0) e.push("The deductions are more than the payable amount");
     setErrors(e);
@@ -299,7 +302,7 @@ function DailyInner({ ctx, existing, expenseOptions }: { ctx: SettlementContext;
 
   return (
     <div className="dsf vp">
-      <div className="dsf-title"><span>VEHICLE PAYMENT</span><Link className="dsf-back" href={base} onClick={(e) => { if (!confirmLeave()) e.preventDefault(); }}>← Back to driver payments</Link></div>
+      <div className="dsf-title"><span>VEHICLE PAYMENT</span><Link className="dsf-back" href={base} onClick={(e) => { if (!confirmLeave()) e.preventDefault(); }}>{fromOnRoad ? "← Back to on road vehicles" : "← Back to driver payments"}</Link></div>
       {existing && <div className="alert">Correcting {existing.paymentNumber} (rejected: {existing.rejectionReason}). Saving creates version {existing.version + 1}.</div>}
       <div className="vp-body">
         {/* ---------------- left: entry form */}
@@ -315,9 +318,9 @@ function DailyInner({ ctx, existing, expenseOptions }: { ctx: SettlementContext;
               <label className="vp-check"><input type="checkbox" checked={cashInHand} onChange={(e) => setCash(e.target.checked)} /> Cash In Hand</label>
             </span>
             {(periodNote || campFrom) && <><span /><small className={periodNote ? "toll-warn" : "muted"} role="status">{periodNote || `Campaign ${formatDate(campFrom)} → ${formatDate(campTo)}`}</small></>}
-            <label>Diesel Cost</label>
+            <label>Fuel Cost</label>
             <span className="vp-inline">
-              <input className="dsf-in num-input dsf-w-s" inputMode="decimal" placeholder="0.00" aria-label="Diesel cost" value={dDraft.amount} onChange={(e) => setDDraft({ ...dDraft, amount: sanitizeAmount(e.target.value) })} />
+              <input className="dsf-in num-input dsf-w-s" inputMode="decimal" placeholder="0.00" aria-label="Fuel cost" value={dDraft.amount} onChange={(e) => setDDraft({ ...dDraft, amount: sanitizeAmount(e.target.value) })} />
               <input className="dsf-in vp-bunk" placeholder="Diesel / petrol bunk name" aria-label="Bunk name" maxLength={90} value={dDraft.bunk} onChange={(e) => setDDraft({ ...dDraft, bunk: e.target.value })} onKeyDown={(e) => e.key === "Enter" && addDiesel()} />
               <button type="button" className="dsf-btn dsf-btn-plain vp-plus" onClick={addDiesel} aria-label="Add diesel entry">+</button>
               <DateInput className="dsf-in dsf-w-date" aria-label="Diesel date" value={dDraft.date} min={fromDate || campFrom} max={dieselMax} onChange={(e) => setDDraft({ ...dDraft, date: e.target.value })} />

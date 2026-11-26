@@ -195,7 +195,7 @@ function budgetInput(p: BudgetParams, project: any) {
     dieselAmount: Math.round((totalKm / p.mileage) * rate), salaryAmount: p.salaryPerDay, salaryUnit: "PER_DAY", foodAmount: p.foodPerDay, foodUnit: "PER_DAY",
     haltFood: p.haltFood, tolls: p.tolls.map(([location, r]) => ({ location, rate: r })),
     others: (p.others ?? []).map(([description, amount]) => ({ description, amount })),
-    fromLocation: p.from, toLocation: p.to, totalKm, upDownValue: p.upDownValue,
+    fromLocation: p.from, toLocation: p.to, totalKm, fuelRate: rate, // Up/Down is calculated on the server from KM, mileage, rate and tolls
     otherDetails: [{ name: "Diesel rate", value: `Rs ${rate} per litre` }, { name: "Budget basis", value: `${days} campaign days at ${p.kmPerDay} km per day` }],
   };
 }

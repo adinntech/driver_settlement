@@ -46,10 +46,11 @@ test("edit restores all saved entries (round trip); legacy records fall back to 
   d = addToll(d);
   d = updateToll(d, d.tolls[0].id, { location: "Salem", rate: "120" });
   d = updateToll(d, d.tolls[1].id, { location: "Madurai", rate: "80.5" });
-  d = { ...d, haltFood: "200", fromLocation: "Chennai", salaryUnit: "PER_CAMPAIGN" };
+  d = { ...d, sundayHalt: true, haltFood: "200", fuelRate: "95.5", fromLocation: "Chennai", salaryUnit: "PER_CAMPAIGN" };
   const back = draftFromData({ ...toPayload(d), schemaVersion: 2 }, ctx);
   assert.deepEqual(back.tolls.map((t) => [t.location, t.rate]), [["Salem", "120"], ["Madurai", "80.5"]]);
   assert.equal(back.haltFood, "200");
+  assert.equal(back.fuelRate, "95.5");
   assert.equal(back.salaryUnit, "PER_CAMPAIGN");
   assert.equal(back.fromLocation, "Chennai");
   assert.deepEqual(toPayload(back), toPayload(d));
@@ -60,13 +61,35 @@ test("edit restores all saved entries (round trip); legacy records fall back to 
 
 test("calculation mirrors the backend", () => {
   let d = emptyDraft(ctx);
-  d = { ...d, dieselAmount: "5000", salaryAmount: "800", foodAmount: "300", haltFood: "200", upDownValue: "50" };
+  d = { ...d, sundayHalt: true, dieselAmount: "5000", salaryAmount: "800", foodAmount: "300", haltFood: "200", mileage: "10", totalKm: "100", fuelRate: "95" };
   d = updateCharge(d, d.others[0].id, { description: "Parking", amount: "100" });
   d = updateToll(d, d.tolls[0].id, { location: "Salem", rate: "120" });
   d = addToll(d);
   d = updateToll(d, d.tolls[1].id, { location: "Madurai", rate: "80.5" });
-  assert.deepEqual(computeValues(d), { dieselValue: 5000, salaryValue: 1600, foodValue: 600, tollAmount: 200.5, totalValue: 7750.5 });
+  // Up/Down = 100 km / 10 km per litre x Rs 95 + tolls 200.5 = 1150.5
+  assert.deepEqual(computeValues(d), { dieselValue: 5000, salaryValue: 1600, foodValue: 600, tollAmount: 200.5, upDownValue: 1150.5, totalValue: 8851 });
   assert.equal(computeValues({ ...d, salaryUnit: "PER_CAMPAIGN" }).salaryValue, 800);
+});
+
+test("Up/Down recalculates from Total KM, Mileage, Fuel Rate and tolls; never typed", () => {
+  let d = { ...emptyDraft(ctx), mileage: "8", totalKm: "1000", fuelRate: "100" };
+  assert.equal(computeValues(d).upDownValue, 12500); // 1000 / 8 x 100, no tolls
+  d = updateToll(d, d.tolls[0].id, { location: "Salem", rate: "150.25" });
+  assert.equal(computeValues(d).upDownValue, 12650.25);
+  assert.equal(computeValues({ ...d, fuelRate: "90" }).upDownValue, 11400.25);
+  assert.equal(computeValues({ ...d, upDownValue: "99999" }).upDownValue, 12650.25); // a stale saved value is ignored
+  assert.equal(computeValues({ ...d, mileage: "" }).upDownValue, 150.25); // no mileage: fuel part is 0
+  assert.ok(validateDraft({ ...d, mileage: "" }).includes("Mileage is required to calculate the Up/Down value"));
+  assert.equal(toPayload(d).upDownValue, 12650.25);
+});
+
+test("Halt Food counts only with Sunday Halt; without it it is not validated, saved or added", () => {
+  const base = { ...emptyDraft(ctx), haltFood: "500" };
+  assert.equal(computeValues({ ...base, sundayHalt: true }).totalValue, 500);
+  assert.equal(computeValues({ ...base, sundayHalt: false }).totalValue, 0);
+  assert.equal(toPayload({ ...base, sundayHalt: false }).haltFood, 0);
+  assert.equal(toPayload({ ...base, sundayHalt: true }).haltFood, 500);
+  assert.ok(!validateDraft({ ...base, sundayHalt: false, haltFood: "abc" }).some((e) => /Halt food/.test(e)));
 });
 
 test("numeric sanitizers block letters, minus, exponent and extra decimals", () => {

@@ -11,6 +11,9 @@ import test, { after, before } from "node:test";
 import assert from "node:assert/strict";
 import type { Server } from "node:http";
 import mongoose from "mongoose";
+const { addDaysYmd: shiftDay, todayIst: todayYmd } = await import("../src/utils/dates.js");
+/** Fixture dates relative to today: campaign start dates must be today or up to 7 days back. */
+const day = (n: number) => shiftDay(todayYmd(), n);
 
 const { default: app } = await import("../src/app.js");
 const { connectDB } = await import("../src/db/connect.js");
@@ -24,6 +27,7 @@ let base = "";
 
 before(async () => {
   await connectDB();
+  assert.match(mongoose.connection.name, /_test/, "refusing to drop a non-test database");
   await mongoose.connection.dropDatabase();
   await Promise.all([User.init(), TrackingVehicle.init(), TrackingProject.init()]);
   await seedUsers();
@@ -52,12 +56,12 @@ const login = async (role: string, username: string, password: string) =>
   (await call("/auth/login", "POST", { role, username, password })).body.data?.token as string;
 
 const signage = {
-  projectCode: "30000001", date: "2026-10-20", client: "DALMIA", jobSheetNumber: "22070649", location: "RAMNAD",
-  numberOfVehicles: 2, fromDate: "2026-10-21", toDate: "2026-10-26", arrivedBudget: 25000,
+  projectCode: "30000001", date: day(-3), client: "DALMIA", jobSheetNumber: "22070649", location: "RAMNAD",
+  numberOfVehicles: 2, fromDate: day(-2), toDate: day(3), arrivedBudget: 25000,
 };
 const roadshow = {
   projectCode: "30000002", billingName: "Sapphire Foods (KFC)", stateCode: "33", numberOfVans: 7,
-  startDate: "2027-10-22", endDate: "2027-10-23", reportingDate: "2027-10-22",
+  startDate: day(0), endDate: day(1), reportingDate: day(0),
   sundayHalt: "NO", reportingLocations: ["Madurai"],
 };
 

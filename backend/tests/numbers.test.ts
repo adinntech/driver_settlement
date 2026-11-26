@@ -133,7 +133,7 @@ const signage = {
 };
 
 test("roadshow validation: valid sample, computed days, count", () => {
-  const r = validateTracking("ROADSHOW", roadshow);
+  const r = validateTracking("ROADSHOW", roadshow, { allowPastStart: true }); // number / day rules only; start-date window: dateRules.test.ts
   assert.deepEqual(r.errors, []);
   assert.equal(r.vehicleCount, 7);
   assert.equal(r.clientName, "Sapphire Foods (KFC)");
@@ -155,10 +155,10 @@ test("roadshow validation: rejects bad input", () => {
 });
 
 test("signage validation: valid, auto total days, bad range", () => {
-  const ok = validateTracking("SIGNAGE", signage);
+  const ok = validateTracking("SIGNAGE", signage, { allowPastStart: true });
   assert.deepEqual(ok.errors, []);
   assert.equal(ok.details.totalDaysOfWork, 6);
-  const manual = validateTracking("SIGNAGE", { ...signage, totalDaysOfWork: 4 });
+  const manual = validateTracking("SIGNAGE", { ...signage, totalDaysOfWork: 4 }, { allowPastStart: true });
   assert.equal(manual.details.totalDaysOfWork, 4);
   assert.ok(validateTracking("SIGNAGE", { ...signage, toDate: "2026-10-01" }).errors.length > 0);
 });

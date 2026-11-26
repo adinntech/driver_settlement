@@ -142,7 +142,7 @@ test("View Details shows the complete saved payment: project, vehicle, driver, c
 // ================================================================== regression: payment form pieces are untouched
 test("regression: the payment entry form, its totals and the sidebar are unchanged", () => {
   const screen = src("components/RsaPayment.tsx");
-  for (const k of ["PaymentFormPanel", "ProjectHeader", "ExpenseTable", "RsaActionBar", "View Budget", "View Driver", "Check Advance Eligibility", "Total Payable", "Cash In Hand", "Salary Advance", "Diesel Cost"]) assert.ok(screen.includes(k), k);
+  for (const k of ["PaymentFormPanel", "ProjectHeader", "ExpenseTable", "RsaActionBar", "View Budget", "View Driver", "Check Advance Eligibility", "Total Payable", "Cash In Hand", "Salary Advance", "Fuel Cost"]) assert.ok(screen.includes(k), k);
   assert.ok(src("utils/rsa.ts").includes("diesel + food + salary advance + expenses - expenses marked Deduct")); // the formula note is intact
   assert.ok(src("components/AppShell.tsx").includes('{ href: "/rsa", label: "Payments" },')); // Payments stays the first RSA entry (Vehicle & Driver Clearance is added after it)
 });

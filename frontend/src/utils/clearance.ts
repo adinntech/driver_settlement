@@ -20,7 +20,7 @@ export interface ClearanceRow {
 }
 export type DeliveryStatus = "YET_TO_DELIVER" | "DELIVERED";
 export interface DeliveryPhoto { key: string; name: string; size: number; mimeType: string; url: string }
-export interface DeliveryRecord { _id: string; approvalVersion: number; description: string; speedometerPhoto: DeliveryPhoto | null; evidencePhoto: DeliveryPhoto | null; deliveredBy: string; deliveredAt: string; approvedBy: string | null; approvedAt: string | null }
+export interface DeliveryRecord { _id: string; approvalVersion: number; description: string; speedometerPhoto: DeliveryPhoto | null; evidencePhoto: DeliveryPhoto | null; additionalPhotos?: DeliveryPhoto[]; deliveredBy: string; deliveredAt: string; approvedBy: string | null; approvedAt: string | null }
 export interface DeliverySummary { total: number; approved: number; yetToApprove: number; rejected: number; yetToDeliver: number; delivered: number }
 export interface DeliveryHistoryRow { _id: string; version: number; action: string; username: string; role: string; at: string; details: Record<string, unknown> | null }
 export interface ClearanceSummary { total: number; yetToApprove: number; approved: number; rejected: number }

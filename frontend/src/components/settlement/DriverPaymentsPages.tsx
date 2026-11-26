@@ -9,7 +9,7 @@ import AppShell from "@/components/AppShell";
 import { DailyPaymentForm, FinalSettlementForm, ProjectPicker } from "@/components/settlement/PaymentForms";
 import { PaymentQueue } from "@/components/settlement/PaymentQueue";
 import { EmptyState } from "@/components/ui/Ui";
-import { paymentsBase } from "@/utils/settlement";
+import { onRoadBase, paymentsBase } from "@/utils/settlement";
 
 /**
  * The shared Driver Payments module. RBP and RSA open the same pages over the same records (one `settlementpayments`
@@ -43,12 +43,12 @@ export function DriverPaymentsList({ role }: { role: EntryRole }) {
         <div>
           <h1>Driver Payments</h1>
           <p className="muted">
-            One shared list for RBP and RSA. Daily vehicle payments go to RSOM; final driver salary settlements go to RSO.
+            One shared list for RBP and RSA. Daily vehicle payments (entered from On Road Vehicles) go to RSOM; final driver salary settlements go to RSO.
             {role === "RSA" && " Export approved payments for accounts, then record each payment with Entry."}
           </p>
         </div>
         <div className="inline ds-gap">
-          <Link href={`${base}/new?type=daily`} className="btn btn-outline">+ Daily Vehicle Payment</Link>
+          <Link href={onRoadBase(role)} className="btn btn-outline">On Road Vehicles</Link>
           <Link href={`${base}/new?type=final`} className="btn btn-primary">+ Final Driver Settlement</Link>
           {role === "RSA" && <button type="button" className="btn btn-outline" disabled={busy} onClick={exportApproved}>{busy ? "Exporting…" : "Export Approved (Excel)"}</button>}
         </div>

@@ -30,6 +30,8 @@ export default function DriverFormView({
   onSave: () => void; onClose: () => void; onError?: (message: string) => void;
 }) {
   const set = <K extends keyof DriverFormState>(k: K, v: DriverFormState[K]) => onChange({ ...f, [k]: v });
+  // A saved driver's details are locked (the server enforces it too): only the bank details stay editable.
+  const locked = isEdit;
   const file = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -49,18 +51,23 @@ export default function DriverFormView({
 
   return (
     <div className="card form-card drv-form">
+      {locked && (
+        <p className="muted drv-lock-note" role="note">
+          Driver details are locked after saving. Only the bank details (Account Name, Account No, IFSC Code, Bank Name) can be changed.
+        </p>
+      )}
       <div className="rm-form">
         <Row label="Driver No">
           <strong className="drv-no" aria-label="Driver No">{driverNumber ?? "Generated on save"}</strong>
         </Row>
         <Row label="Name" req>
-          <input value={f.driverName} maxLength={80} autoComplete="off" onChange={(e) => set("driverName", sanitizeName(e.target.value))} aria-label="Name" />
+          <input value={f.driverName} maxLength={80} autoComplete="off" onChange={(e) => set("driverName", sanitizeName(e.target.value))} aria-label="Name" disabled={locked} />
         </Row>
         <Row label="Address">
-          <input value={f.address} maxLength={200} onChange={(e) => set("address", e.target.value.replace(/[<>]/g, ""))} aria-label="Address" />
+          <input value={f.address} maxLength={200} onChange={(e) => set("address", e.target.value.replace(/[<>]/g, ""))} aria-label="Address" disabled={locked} />
         </Row>
         <Row label="Mobile No" req>
-          <PhoneInput value={f.mobile} onChange={(v) => set("mobile", v)} />
+          <PhoneInput value={f.mobile} onChange={(v) => set("mobile", v)} disabled={locked} />
         </Row>
         <Row label="Account Name">
           <input value={f.accountName} maxLength={80} onChange={(e) => set("accountName", e.target.value.replace(/[<>]/g, ""))} aria-label="Account Name" />
@@ -75,18 +82,18 @@ export default function DriverFormView({
           <input value={f.bankName} maxLength={80} onChange={(e) => set("bankName", e.target.value.replace(/[<>]/g, ""))} aria-label="Bank Name" />
         </Row>
         <Row label="Licence No">
-          <input value={f.licenceNumber} placeholder="TN07 20110012345" onChange={(e) => set("licenceNumber", sanitizeLicence(e.target.value))} aria-label="Licence No" />
+          <input value={f.licenceNumber} placeholder="TN07 20110012345" onChange={(e) => set("licenceNumber", sanitizeLicence(e.target.value))} aria-label="Licence No" disabled={locked} />
         </Row>
         <Row label="Licence Type">
-          <input value={f.licenceType} maxLength={40} onChange={(e) => set("licenceType", e.target.value.replace(/[<>]/g, ""))} aria-label="Licence Type" />
+          <input value={f.licenceType} maxLength={40} onChange={(e) => set("licenceType", e.target.value.replace(/[<>]/g, ""))} aria-label="Licence Type" disabled={locked} />
         </Row>
         <Row label="Licence Expiry Date">
-          <DateInput value={f.licenceExpiryDate} onChange={(e) => set("licenceExpiryDate", e.target.value)} aria-label="Licence Expiry Date" />
+          <DateInput value={f.licenceExpiryDate} onChange={(e) => set("licenceExpiryDate", e.target.value)} aria-label="Licence Expiry Date" disabled={locked} />
         </Row>
         <Row label="Attachment">
           <div className="drv-attach">
             <input value={f.attachment?.name ?? ""} readOnly placeholder="No file chosen" aria-label="Attachment" />
-            <button type="button" className="btn btn-outline" onClick={() => file.current?.click()} disabled={uploading} aria-label="Browse attachment">{uploading ? "…" : "..."}</button>
+            <button type="button" className="btn btn-outline" onClick={() => file.current?.click()} disabled={uploading || locked} aria-label="Browse attachment">{uploading ? "…" : "..."}</button>
             {f.attachment?.url ? (
               <a className="btn btn-outline" href={f.attachment.url} target="_blank" rel="noopener noreferrer" aria-label="View attachment">V</a>
             ) : (
@@ -99,14 +106,14 @@ export default function DriverFormView({
           <div className="drv-types" role="radiogroup" aria-label="Driver Type">
             {DRIVER_TYPE_OPTIONS.map((o) => (
               <label key={o.value} className="drv-radio">
-                <input type="radio" name="driverType" value={o.value} checked={f.driverType === o.value} onChange={() => set("driverType", o.value)} />
+                <input type="radio" name="driverType" value={o.value} checked={f.driverType === o.value} onChange={() => set("driverType", o.value)} disabled={locked} />
                 {o.label}
               </label>
             ))}
           </div>
         </Row>
         <Row label="Salary">
-          <input className="num-input" inputMode="decimal" value={f.salary} placeholder="0.00" onChange={(e) => set("salary", sanitizeSalary(e.target.value))} aria-label="Salary" />
+          <input className="num-input" inputMode="decimal" value={f.salary} placeholder="0.00" onChange={(e) => set("salary", sanitizeSalary(e.target.value))} aria-label="Salary" disabled={locked} />
         </Row>
         {isEdit && (
           <Row label="Status">

@@ -14,9 +14,10 @@ import { request } from "@/services/api";
 import type { Vehicle } from "@/types/domain";
 import { formatDate, formatDateTime } from "@/utils/format";
 import { DOC_STATUS_LABEL, type DocStatus } from "@/utils/vehicleForm";
-import { AV_LABEL, AV_STATUSES, expectedReleaseText, issueReasonText, nextAvailableText } from "@/utils/vehicleAvailability";
+import { AV_LABEL, AV_STATUSES, expectedReleaseText, inUseRemarks, issueReasonText, nextAvailableText } from "@/utils/vehicleAvailability";
 import { AvBadge } from "@/components/VehicleAvailability";
 import VehicleTabs from "@/components/VehicleTabs";
+import { BulkImportButton } from "@/components/BulkImport";
 
 interface Summary { total: number; active: number; draft: number; maintenanceDue: number; expiringSoon: number; availableNow?: number; inUse?: number; withIssue?: number; rules: { expiringDays: number; maintenanceDueDays: number } }
 interface Page { items: Vehicle[]; total: number; page: number; limit: number }
@@ -87,7 +88,10 @@ function Vehicles() {
           <h1>Vehicle Management</h1>
           <p className="muted">Maintain vehicles, documents and service dates.</p>
         </div>
-        <Link href="/rbp/vehicles/edit" className="btn btn-primary">+ Add Vehicle</Link>
+        <div className="inline ds-gap">
+          <BulkImportButton kind="vehicles" onImported={() => { list.reload(); summary.reload(); }} />
+          <Link href="/rbp/vehicles/edit" className="btn btn-primary">+ Add Vehicle</Link>
+        </div>
       </div>
 
       <VehicleTabs />
@@ -148,7 +152,7 @@ function Vehicles() {
                 <thead>
                   <tr>
                     <th>Vehicle No</th><th>Make</th><th>Model</th><th>Type</th><th>Year</th><th>Current Running</th>
-                    <th>Insurance</th><th>FC</th><th>Availability</th><th>Current Project</th><th>Trackup No</th><th>PIF No</th><th>Client</th><th>Expected Release</th><th>Next Available</th>
+                    <th>Insurance</th><th>FC</th><th>Availability</th><th>Current Project</th><th>Trackup No</th><th>PIF No</th><th>Client</th><th>Remarks</th><th>Expected Release</th><th>Next Available</th>
                     <th>Issue Reason</th><th>Status</th><th>Last Updated</th><th>Created</th><th />
                   </tr>
                 </thead>
@@ -174,6 +178,7 @@ function Vehicles() {
                       <td>{v.availability?.status === "IN_USE" ? v.availability.project?.trackupNumber || "—" : "—"}</td>
                       <td>{v.availability?.status === "IN_USE" ? v.availability.project?.pifNumber || "—" : "—"}</td>
                       <td>{v.availability?.status === "IN_USE" ? v.availability.project?.clientName || "—" : "—"}</td>
+                      <td className="cell-remarks" title={inUseRemarks(v)}>{inUseRemarks(v) || "—"}</td>
                       <td>{expectedReleaseText(v)}</td>
                       <td><strong>{nextAvailableText(v)}</strong></td>
                       <td title={issueReasonText(v)}>{issueReasonText(v)}</td>

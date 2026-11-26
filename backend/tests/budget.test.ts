@@ -10,23 +10,33 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { Server } from "node:http";
 import mongoose from "mongoose";
-import { budgetTotal, computeBudget, diffBudget, validateBudget } from "../src/validators/budget.validator.js";
-import { generateDisplayNumber } from "../src/utils/numbers.js";
-import { allocateOne, type NumberStore } from "../src/services/numberAllocator.js";
-import { normalizeIndianPhone } from "../src/utils/phone.js";
+import type { NumberStore } from "../src/services/numberAllocator.js";
+
+// SAFETY: application modules are imported dynamically, only after MONGO_URI points at the throw-away test database. A static
+// import would run before the lines above (ES module imports are hoisted) and config would read the development database
+// from .env; this file drops its database.
+const { config: cfg } = await import("../src/config/index.js");
+cfg.mongoUri = process.env.MONGO_URI!;
+const { budgetTotal, computeBudget, diffBudget, validateBudget } = await import("../src/validators/budget.validator.js");
+const { generateDisplayNumber } = await import("../src/utils/numbers.js");
+const { allocateOne } = await import("../src/services/numberAllocator.js");
+const { normalizeIndianPhone } = await import("../src/utils/phone.js");
+const { addDaysYmd: shiftDay, todayIst: todayYmd } = await import("../src/utils/dates.js");
+/** Fixture dates relative to today: campaign start dates must be today or up to 7 days back. */
+const day = (n: number) => shiftDay(todayYmd(), n);
 
 const valid = {
   mileage: 12, estimatedKmPerDay: 150,
-  onRoadDate: "2027-10-22", completionDate: "2027-10-23", sundayHalt: false, numberOfDays: 2,
+  onRoadDate: day(0), completionDate: day(1), sundayHalt: true, numberOfDays: 2, // Halt Food applies only with Sunday Halt
   dieselAmount: 5000, salaryAmount: 800, salaryUnit: "PER_DAY", foodAmount: 300, foodUnit: "PER_DAY",
   haltFood: 200, tolls: [{ location: "Salem", rate: 120 }, { location: "Madurai", rate: 80.5 }],
   othersDescription: "Parking", othersAmount: 100, fromLocation: "Chennai", toLocation: "Madurai",
-  totalKm: 900, upDownValue: 50,
+  totalKm: 900, fuelRate: 96, upDownValue: 50, // the sent Up/Down is ignored: 900 / 12 x 96 + 200.5 tolls = 7400.5
 };
 
 test("budget validation: valid sample and defaults for blank amounts", () => {
   assert.deepEqual(validateBudget(valid).errors, []);
-  const min = validateBudget({ onRoadDate: "2027-10-22", completionDate: "2027-10-22", numberOfDays: 1 });
+  const min = validateBudget({ onRoadDate: day(0), completionDate: day(0), numberOfDays: 1 });
   assert.deepEqual(min.errors, []);
   assert.equal(min.data.dieselAmount, 0);
   assert.deepEqual(min.data.tolls, []);
@@ -37,7 +47,7 @@ test("budget validation rejects bad dates, days, negative/invalid amounts", () =
   assert.ok(validateBudget({ ...valid, completionDate: "2026-10-01" }).errors.some((e) => /Completion/.test(e)));
   assert.ok(validateBudget({ ...valid, numberOfDays: 0 }).errors.length > 0);
   assert.ok(validateBudget({ ...valid, numberOfDays: 1.5 }).errors.length > 0);
-  for (const k of ["mileage", "dieselAmount", "salaryAmount", "foodAmount", "haltFood", "othersAmount", "totalKm", "upDownValue"]) {
+  for (const k of ["mileage", "dieselAmount", "salaryAmount", "foodAmount", "haltFood", "othersAmount", "totalKm", "fuelRate"]) {
     assert.ok(validateBudget({ ...valid, [k]: -1 }).errors.length > 0, `${k} negative`);
     assert.ok(validateBudget({ ...valid, [k]: "abc" }).errors.length > 0, `${k} text`);
   }
@@ -62,7 +72,8 @@ test("calculation: per-day items x days, per-campaign as is, tolls summed, total
   assert.equal(c.salaryValue, 1600);
   assert.equal(c.foodValue, 600);
   assert.equal(c.tollAmount, 200.5);
-  assert.equal(c.totalValue, 5000 + 1600 + 600 + 200 + 200.5 + 100 + 50);
+  assert.equal(d.upDownValue, 7400.5); // (900 km / 12 km per litre x Rs 96) + Rs 200.5 tolls, never the browser's 50
+  assert.equal(c.totalValue, 5000 + 1600 + 600 + 200 + 200.5 + 100 + 7400.5);
   assert.equal(budgetTotal(d), c.totalValue);
   const camp = validateBudget({ ...valid, salaryUnit: "PER_CAMPAIGN" }).data;
   assert.equal(computeBudget(camp).salaryValue, 800);
@@ -74,7 +85,7 @@ test("diffBudget: only changed fields, deep compare for toll lists", () => {
   const b = validateBudget({ ...valid, haltFood: 250 }).data;
   assert.deepEqual(diffBudget(a, b), [{ field: "haltFood", from: 200, to: 250 }]);
   const c = validateBudget({ ...valid, tolls: [{ location: "Salem", rate: 120 }] }).data;
-  assert.deepEqual(diffBudget(a, c).map((x) => x.field), ["tolls"]);
+  assert.deepEqual(diffBudget(a, c).map((x) => x.field), ["tolls", "upDownValue"]); // Up/Down follows the toll amount
   // legacy record without the new fields: everything new shows as changed from null
   assert.ok(diffBudget({ permitCharges: 5 }, a).every((x) => x.from === null));
 });
@@ -112,7 +123,7 @@ test("others: multiple description+amount rows, summed in total, empty dropped, 
   // legacy payload (one pair) still works and gives the same total as before
   const legacy = validateBudget(valid).data;
   assert.deepEqual(legacy.others, [{ description: "Parking", amount: 100 }]);
-  assert.equal(budgetTotal(legacy), 7750.5);
+  assert.equal(budgetTotal(legacy), 15101);
   assert.ok(validateBudget({ ...valid, others: [{ description: "x", amount: -1 }] }).errors.length > 0);
   assert.ok(validateBudget({ ...valid, others: [{ description: "x", amount: "abc" }] }).errors.length > 0);
   assert.ok(validateBudget({ ...valid, others: [{ description: "", amount: 10 }] }).errors.some((e) => /description is required/.test(e)));
@@ -158,6 +169,7 @@ let base = "";
 // Setup runs before any test is registered; teardown is the last test (hook ordering is unreliable).
 {
   await connectDB();
+  assert.match(mongoose.connection.name, /_test_/, "refusing to drop a non-test database");
   await mongoose.connection.dropDatabase();
   await Promise.all([User.init(), TrackingVehicle.init(), TrackingProject.init(), Budget.init(), BudgetVersion.init()]);
   await seedUsers();
@@ -178,12 +190,12 @@ const login = async (role: string, u: string, p: string) =>
 
 const roadshow = {
   projectCode: "40000001", billingName: "Sapphire Foods (KFC)", stateCode: "33", numberOfVans: 2,
-  startDate: "2027-10-22", endDate: "2027-10-23", reportingDate: "2027-10-22",
+  startDate: day(0), endDate: day(1), reportingDate: day(0),
   sundayHalt: "NO", paSystem: "YES", reportingLocations: ["Madurai", "Salem"],
 };
 const signage = {
-  projectCode: "40000002", date: "2026-10-20", client: "DALMIA", jobSheetNumber: "22403", location: "RAMNAD",
-  numberOfVehicles: 1, fromDate: "2027-10-21", toDate: "2027-10-26",
+  projectCode: "40000002", date: day(-3), client: "DALMIA", jobSheetNumber: "22403", location: "RAMNAD",
+  numberOfVehicles: 1, fromDate: day(-1), toDate: day(4),
 };
 
 test("roadshow contact number is stored as +91; invalid phone rejected by the API", async () => {
@@ -207,9 +219,9 @@ test("budget context keeps existing fields; adds jobSheet / PA system; reporting
   assert.equal(rc.context.client, "Sapphire Foods (KFC)");
   assert.equal(rc.context.projectType, "ROADSHOW");
   assert.equal(rc.context.displayNumber, r.vehicles[0].displayNumber);
-  assert.equal(rc.context.campaignFrom, "2027-10-22");
-  assert.equal(rc.context.campaignTo, "2027-10-23");
-  assert.equal(rc.context.reportingDate, "2027-10-22");
+  assert.equal(rc.context.campaignFrom, day(0));
+  assert.equal(rc.context.campaignTo, day(1));
+  assert.equal(rc.context.reportingDate, day(0));
   assert.equal(rc.context.location, "Madurai, Salem");
   assert.equal(rc.context.paSystem, "YES");
   assert.equal(rc.context.jobSheetNumber, null);
@@ -263,8 +275,8 @@ test("create, edit restores every toll entry, versions preserved, originals unto
   assert.equal(vs.length, 3);
   assert.deepEqual(vs[0].data.tolls, valid.tolls); // V1 untouched
   assert.deepEqual(vs[1].data.tolls, more);
-  assert.deepEqual(vs[1].changes.map((x: any) => x.field), ["tolls"]);
-  assert.deepEqual(vs[2].changes.map((x: any) => x.field).sort(), ["haltFood", "tolls"]);
+  assert.deepEqual(vs[1].changes.map((x: any) => x.field), ["tolls", "upDownValue"]); // Up/Down follows the toll amount
+  assert.deepEqual(vs[2].changes.map((x: any) => x.field).sort(), ["haltFood", "tolls", "upDownValue"]); // Up/Down follows the tolls
   assert.ok(vs.every((x: any) => x.updatedBy === "RBP" && x.createdAt));
   assert.equal((await call(`/budgets/${budget._id}/versions/99`, "GET", undefined, rbp)).status, 404);
 

@@ -4,6 +4,8 @@ export const MAX_PHOTO_BYTES = 10 * 1024 * 1024; // the same limit the server en
 export const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 export const PHOTO_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"] as const;
 export const DESCRIPTION_MIN = 5;
+/** Optional extra delivery photos beside the speedometer and handover photos (same limit as the server). */
+export const MAX_ADDITIONAL_PHOTOS = 10;
 export const DESCRIPTION_MAX = 1000;
 export const EVIDENCE_HELPER = "Capture a photo showing the assigned driver standing in front of or seated inside the allocated vehicle. Ensure both the driver and vehicle are clearly visible.";
 
@@ -28,7 +30,8 @@ export function validatePhoto(file: { name: string; type: string; size: number }
   return null;
 }
 
-export function validateDeliveryForm(description: string, speedometer: { name: string; type: string; size: number } | null, evidence: { name: string; type: string; size: number } | null): string[] {
+type PickedFile = { name: string; type: string; size: number };
+export function validateDeliveryForm(description: string, speedometer: PickedFile | null, evidence: PickedFile | null, additional: PickedFile[] = []): string[] {
   const errors: string[] = [];
   const d = description.trim();
   if (!d) errors.push("Delivery description is required");
@@ -38,6 +41,11 @@ export function validateDeliveryForm(description: string, speedometer: { name: s
   if (s) errors.push(s);
   const e = validatePhoto(evidence, "Driver & vehicle handover photo");
   if (e) errors.push(e);
+  if (additional.length > MAX_ADDITIONAL_PHOTOS) errors.push(`Too many additional photos (max ${MAX_ADDITIONAL_PHOTOS})`);
+  additional.forEach((f, i) => {
+    const a = validatePhoto(f, `Additional photo ${i + 1}`);
+    if (a) errors.push(a);
+  });
   return errors;
 }
 

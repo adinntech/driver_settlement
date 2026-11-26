@@ -10,8 +10,9 @@ const toInstant = (d: string, t: string) => new Date(`${d}T${t}:00+05:30`);
 export interface Schedule {
   expectedReleaseDate: string | null;
   expectedReleaseTime: string | null;
-  nextAvailableDate: string;
-  nextAvailableTime: string;
+  /** Optional pair: without it the vehicle stays In Use until it is released (no automatic release). */
+  nextAvailableDate: string | null;
+  nextAvailableTime: string | null;
 }
 
 const hex = (v: unknown): v is string => typeof v === "string" && /^[a-f0-9]{24}$/i.test(v);
@@ -31,7 +32,7 @@ function text(o: Obj, k: string, label: string, max: number, errors: string[], r
   return t;
 }
 
-/** Expected release (optional pair) and next available (mandatory pair), checked against the allotment moment. */
+/** Expected release and next available (both optional pairs), checked against the allotment moment. */
 function schedule(b: Obj, errors: string[], allotted: Date | null): Schedule | null {
   const ed = blank(b.expectedReleaseDate) ? null : String(b.expectedReleaseDate);
   const et = blank(b.expectedReleaseTime) ? null : String(b.expectedReleaseTime);
@@ -42,18 +43,17 @@ function schedule(b: Obj, errors: string[], allotted: Date | null): Schedule | n
   if (ed !== null && !realDate(ed)) bad("Expected release date must be a valid date (YYYY-MM-DD)");
   if (et !== null && !realTime(et)) bad("Expected release time must be a valid time (HH:mm)");
   if ((ed === null) !== (et === null)) bad("Expected release: both date and time are required");
-  if (nd === null) bad("Next available date is required");
-  else if (!realDate(nd)) bad("Next available date must be a valid date (YYYY-MM-DD)");
-  if (nt === null) bad("Next available time is required");
-  else if (!realTime(nt)) bad("Next available time must be a valid time (HH:mm)");
-  if (!ok || nd === null || nt === null) return null;
-  const next = toInstant(nd, nt);
+  if (nd !== null && !realDate(nd)) bad("Next available date must be a valid date (YYYY-MM-DD)");
+  if (nt !== null && !realTime(nt)) bad("Next available time must be a valid time (HH:mm)");
+  if ((nd === null) !== (nt === null)) bad("Next available: both date and time are required");
+  if (!ok) return null;
+  const next = nd !== null && nt !== null ? toInstant(nd, nt) : null;
   if (ed !== null && et !== null) {
     const rel = toInstant(ed, et);
     if (allotted && rel < allotted) errors.push("Expected release cannot be before the allotment date & time");
-    if (next < rel) errors.push("Next available date & time cannot be before the expected release");
+    if (next && next < rel) errors.push("Next available date & time cannot be before the expected release");
   }
-  if (allotted && next < allotted) errors.push("Next available date & time cannot be before the allotment date & time");
+  if (allotted && next && next < allotted) errors.push("Next available date & time cannot be before the allotment date & time");
   return { expectedReleaseDate: ed, expectedReleaseTime: et, nextAvailableDate: nd, nextAvailableTime: nt };
 }
 

@@ -104,8 +104,8 @@ const allotTo = async (tv: any, driver?: any) => {
 let sig: any; // signage project, 10 vehicles
 let road: any; // roadshow project, 2 vehicles
 {
-  sig = await mkProject({ projectType: "SIGNAGE", details: { projectCode: "15000001", client: "Kensign Lifestyles", jobSheetNumber: "ZZRSA-1", location: "Coimbatore", date: d(0), fromDate: d(2), toDate: d(9), numberOfVehicles: 10 } });
-  road = await mkProject({ projectType: "ROADSHOW", details: { projectCode: "15000002", billingName: "Ken Roadshow Pvt", stateCode: "33", startDate: d(3), endDate: d(8), reportingDate: d(3), sundayHalt: "NO", numberOfVans: 2, reportingLocations: ["Chennai", "Trichy"] } });
+  sig = await mkProject({ projectType: "SIGNAGE", details: { projectCode: "15000001", client: "Kensign Lifestyles", jobSheetNumber: "ZZRSA-1", location: "Coimbatore", date: d(0), fromDate: d(0), toDate: d(9), numberOfVehicles: 10 } });
+  road = await mkProject({ projectType: "ROADSHOW", details: { projectCode: "15000002", billingName: "Ken Roadshow Pvt", stateCode: "33", startDate: d(0), endDate: d(8), reportingDate: d(3), sundayHalt: "NO", numberOfVans: 2, reportingLocations: ["Chennai", "Trichy"] } });
 }
 // A = signage + vehicle + driver (eligible); B = roadshow + vehicle + driver (eligible)
 const A = sig.vehicles[0];
@@ -214,12 +214,12 @@ test("eligibility: each row carries the real project, vehicle and driver details
   const x = r.items[0];
   assert.deepEqual(keys(x), ["allotment", "allotmentStatus", "approvedBudgetAmount", "budgetVersion", "campaignFromDate", "campaignToDate", "clientName", "displayNumber", "driverAssignedAt", "driverName", "driverNumber", "lastPaymentAt", "paymentCount", "paymentStatus", "pifNumber", "projectName", "projectType", "trackingVehicle", "trackupNumber", "vehicleAllottedAt", "vehicleNo"]);
   assert.deepEqual([x.trackupNumber, x.pifNumber, x.displayNumber, x.projectType, x.clientName, x.vehicleNo, x.driverNumber, x.driverName], [A.trackupNumber, A.pifNumber, A.displayNumber, "SIGNAGE", "Kensign Lifestyles", alA.vehicle.vehicleNo, drvA.driverNumber, "Sampath Madhu"]);
-  assert.deepEqual([x.campaignFromDate, x.campaignToDate], [d(2), d(9)]); // Signage: From Date / To Date
+  assert.deepEqual([x.campaignFromDate, x.campaignToDate], [d(0), d(9)]); // Signage: From Date / To Date
   assert.equal(x.approvedBudgetAmount, 125000.5);
   assert.ok(x.vehicleAllottedAt && x.driverAssignedAt);
   assert.deepEqual([x.paymentStatus, x.paymentCount, x.lastPaymentAt], ["PENDING", 0, null]);
   const rb = (await list(`?q=${encodeURIComponent(B.trackupNumber)}`)).items[0];
-  assert.deepEqual([rb.projectType, rb.campaignFromDate, rb.campaignToDate, rb.clientName], ["ROADSHOW", d(3), d(8), "Ken Roadshow Pvt"]); // Roadshow: Start Date / End Date
+  assert.deepEqual([rb.projectType, rb.campaignFromDate, rb.campaignToDate, rb.clientName], ["ROADSHOW", d(0), d(8), "Ken Roadshow Pvt"]); // Roadshow: Start Date / End Date
 });
 
 test("eligibility: mass search, specific searches, type filter, payment status, date range and server-side pagination", async () => {
@@ -238,9 +238,10 @@ test("eligibility: mass search, specific searches, type filter, payment status, 
   assert.deepEqual(await names("?paymentStatus=PENDING"), [A.trackupNumber, B.trackupNumber, I.trackupNumber].sort());
   assert.deepEqual(await names("?paymentStatus=ENTERED"), []);
   assert.deepEqual(await names(`?from=${d(10)}`), []); // every campaign ended before d(10)
-  assert.deepEqual(await names(`?to=${d(1)}`), []); // every campaign starts after d(1)
+  assert.deepEqual(await names(`?to=${d(-1)}`), []); // every campaign starts today (start dates: today back to 7 days)
   assert.deepEqual(await names(`?from=${d(8)}&to=${d(8)}`), [A.trackupNumber, B.trackupNumber, I.trackupNumber].sort()); // overlapping
-  assert.deepEqual(await names(`?from=${d(2)}&to=${d(2)}&projectType=ROADSHOW`), []); // filters combine
+  assert.deepEqual(await names(`?from=${d(9)}&to=${d(9)}`), [A.trackupNumber, I.trackupNumber].sort()); // only the signage runs to d(9)
+  assert.deepEqual(await names(`?from=${d(9)}&to=${d(9)}&projectType=ROADSHOW`), []); // filters combine
   const p1 = await list("?limit=2&page=1");
   const p2 = await list("?limit=2&page=2");
   assert.deepEqual([p1.items.length, p2.items.length, p1.total], [2, 1, 3]);
@@ -259,10 +260,10 @@ test("payment screen details are read from the database: client, type, vehicle, 
   assert.deepEqual([x.trackupNumber, x.pifNumber, x.clientName, x.projectType, x.paymentFor], [A.trackupNumber, A.pifNumber, "Kensign Lifestyles", "SIGNAGE", "SIGNAGE"]);
   assert.deepEqual([x.vehicle.vehicleNo, x.vehicle.make, x.vehicle.model], [alA.vehicle.vehicleNo, "Tata", "Ace"]);
   assert.deepEqual([x.driver.driverNumber, x.driver.driverName, x.driver.driverType, x.driver.mobileNumber], [drvA.driverNumber, "Sampath Madhu", "COMPANY_DRIVER", drvA.mobileNumber]);
-  assert.deepEqual([x.campaignFromDate, x.campaignToDate], [d(2), d(9)]);
+  assert.deepEqual([x.campaignFromDate, x.campaignToDate], [d(0), d(9)]);
   assert.ok(Math.abs(new Date(x.entryDateTime).getTime() - before) < 5000); // server clock
   const rb = (await rsa(`/projects/${tv(B)}`)).body.data;
-  assert.deepEqual([rb.projectType, rb.paymentFor, rb.campaignFromDate, rb.campaignToDate], ["ROADSHOW", "ROADSHOW", d(3), d(8)]);
+  assert.deepEqual([rb.projectType, rb.paymentFor, rb.campaignFromDate, rb.campaignToDate], ["ROADSHOW", "ROADSHOW", d(0), d(8)]);
   const nf = await rsa(`/projects/${"0".repeat(24)}`);
   assert.equal(nf.status, 404);
   assert.equal(nf.body.data, null);
@@ -355,7 +356,7 @@ test("save: backend generates the payment number, stamps its own time and the RS
   assert.equal(p.totalPayable, 1000.5 + 200 + 150.25 + 500 + 120.1 - 20); // 1950.85
   assert.deepEqual([p.dieselTotal, p.expenseTotal, p.deductTotal], [1200.5, 120.1, 20]);
   assert.deepEqual([p.foodAmount, p.salaryAdvance, p.cashInHand, p.paymentFor, p.paymentStatus], [150.25, 500, true, "SIGNAGE", "ENTERED"]);
-  assert.deepEqual([p.trackupNumber, p.pifNumber, p.clientName, p.vehicleNo, p.driverNumber, p.driverName, p.campaignFromDate, p.campaignToDate], [A.trackupNumber, A.pifNumber, "Kensign Lifestyles", alA.vehicle.vehicleNo, drvA.driverNumber, "Sampath Madhu", d(2), d(9)]);
+  assert.deepEqual([p.trackupNumber, p.pifNumber, p.clientName, p.vehicleNo, p.driverNumber, p.driverName, p.campaignFromDate, p.campaignToDate], [A.trackupNumber, A.pifNumber, "Kensign Lifestyles", alA.vehicle.vehicleNo, drvA.driverNumber, "Sampath Madhu", d(0), d(9)]);
   assert.deepEqual(p.expenses.map((e: any) => [e.optionLabel, e.description, e.amount, e.deduct]), [["Toll", "Salem toll", 120.1, false], ["Others", "Parking refund", 20, true]]);
   assert.deepEqual([p.dieselEntries[0].mode, p.dieselEntries[0].reference, p.mode], ["ePayment", "AXIS IMPS", "Cash in Hand"]);
   assert.deepEqual([p.bankName, p.chequeNo], [null, null]); // not captured: shown as empty, never "undefined"
@@ -375,7 +376,7 @@ test("save: Payment For must match the real project type (Roadshow / Signage); b
   assert.equal((await savePay(A, { paymentFor: "SIGNAGE" })).status, 201);
   const rb = await savePay(B, { paymentFor: "ROADSHOW", cashInHand: false });
   assert.equal(rb.status, 201, JSON.stringify(rb.body));
-  assert.deepEqual([rb.body.data.paymentFor, rb.body.data.cashInHand, rb.body.data.campaignFromDate, rb.body.data.campaignToDate], ["ROADSHOW", false, d(3), d(8)]);
+  assert.deepEqual([rb.body.data.paymentFor, rb.body.data.cashInHand, rb.body.data.campaignFromDate, rb.body.data.campaignToDate], ["ROADSHOW", false, d(0), d(8)]);
 });
 
 test("save: invalid amounts and entries are rejected with the standard envelope and nothing is stored", async () => {

@@ -18,7 +18,7 @@ export const EXPENSE_OPTIONS: ExpenseOption[] = [
 /** Categories whose Description is mandatory (the category alone says nothing). */
 export const DESCRIPTION_REQUIRED = ["OTHERS"];
 
-/** Payment / reference choices offered beside a Diesel Cost entry (placeholder list, configurable). */
+/** Payment / reference choices offered beside a Fuel Cost entry (placeholder list, configurable). */
 export const DIESEL_PAYMENT_MODES: string[] = ["ePayment", "Cash", "Fuel Card"];
 
 export const PAYMENT_FOR = ["ROADSHOW", "SIGNAGE"] as const;

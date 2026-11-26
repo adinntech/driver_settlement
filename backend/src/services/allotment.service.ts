@@ -241,13 +241,13 @@ export async function allotVehicle(input: unknown, username: string, now = new D
   if (!reserved || reserved === "CONFLICT") throw new AppError(`Vehicle ${veh.vehicleNo} is no longer available`, 409);
 
   const allotmentId = new mongoose.Types.ObjectId();
-  const nextAt = istToDate(d.schedule.nextAvailableDate, d.schedule.nextAvailableTime)!;
+  const nextAt = istToDate(d.schedule.nextAvailableDate, d.schedule.nextAvailableTime); // optional
   let reservedDrv: any = null;
   let drvBlock: any = null;
   if (drv) {
     drvBlock = driverInUseBlock({
       project: p.trackingProject, trackingVehicle: p.trackingVehicle, budget: p.budget, budgetVersion: p.budgetVersion, projectType: p.projectType, projectName: p.projectName,
-      clientName: p.clientName, trackupNumber: p.trackupNumber, pifNumber: p.pifNumber, allottedAt: d.allottedAt, nextAvailableAt: nextAt, remarks: d.remarks,
+      clientName: p.clientName, trackupNumber: p.trackupNumber, pifNumber: p.pifNumber, allottedAt: d.allottedAt, nextAvailableAt: nextAt, expectedReleaseAt: istToDate(d.schedule.expectedReleaseDate, d.schedule.expectedReleaseTime), projectEnd: p.endDate ?? null, remarks: d.remarks,
       vehicle: veh._id, vehicleNo: veh.vehicleNo,
     }, allotmentId);
     reservedDrv = await reserveDriver(drv, drvBlock, username, now);
@@ -266,7 +266,7 @@ export async function allotVehicle(input: unknown, username: string, now = new D
       trackupNumber: p.trackupNumber, pifNumber: p.pifNumber, billNumber: p.billNumber ?? undefined, clientName: p.clientName,
       projectType: p.projectType, projectName: p.projectName, projectStart: p.startDate ?? undefined, projectEnd: p.endDate ?? undefined,
       allottedAt: d.allottedAt, expectedReleaseAt: istToDate(d.schedule.expectedReleaseDate, d.schedule.expectedReleaseTime),
-      nextAvailableAt: istToDate(d.schedule.nextAvailableDate, d.schedule.nextAvailableTime), remarks: d.remarks ?? undefined,
+      nextAvailableAt: nextAt, remarks: d.remarks ?? undefined,
       status: "ACTIVE", source: "ALLOTMENT", createdBy: username, updatedBy: username,
     });
   } catch (e) {
@@ -278,7 +278,7 @@ export async function allotVehicle(input: unknown, username: string, now = new D
   }
   await logAllotment(a._id, "ALLOTTED", username, {
     vehicleNo: veh.vehicleNo, trackupNumber: p.trackupNumber, pifNumber: p.pifNumber, billNumber: p.billNumber ?? null,
-    allottedAt: d.allottedAt, expectedReleaseAt: a.expectedReleaseAt ?? null, nextAvailableAt: a.nextAvailableAt, remarks: d.remarks,
+    allottedAt: d.allottedAt, expectedReleaseAt: a.expectedReleaseAt ?? null, nextAvailableAt: a.nextAvailableAt ?? null, remarks: d.remarks,
     ...(drv ? { driverNumber: drv.driverNumber } : {}),
   });
   if (drv) {
@@ -320,8 +320,8 @@ export async function changeVehicle(id: string, input: unknown, username: string
 
   // the project identifiers and schedule are preserved from the original allotment
   const exp = dateToIst(old.expectedReleaseAt);
-  const nxt = dateToIst(old.nextAvailableAt)!;
-  const sched: Schedule = { expectedReleaseDate: exp?.date ?? null, expectedReleaseTime: exp?.time ?? null, nextAvailableDate: nxt.date, nextAvailableTime: nxt.time };
+  const nxt = dateToIst(old.nextAvailableAt);
+  const sched: Schedule = { expectedReleaseDate: exp?.date ?? null, expectedReleaseTime: exp?.time ?? null, nextAvailableDate: nxt?.date ?? null, nextAvailableTime: nxt?.time ?? null };
   const p = oldVeh.availability.project;
   const av = validateAvailability(availabilityInput(p, old.remarks ?? null, sched), false, now, oldVeh.availability);
   if (av.errors.length || !av.data) throw new AppError(av.errors.join("; "), 400);
@@ -402,9 +402,9 @@ export async function extendAllotment(id: string, input: unknown, username: stri
   if (!a) throw new AppError("Allotment not found", 404);
   if (a.status !== "ACTIVE") throw new AppError("Only an active allotment can be extended", 409);
   const exp = istToDate(v.data.schedule.expectedReleaseDate, v.data.schedule.expectedReleaseTime);
-  const nxt = istToDate(v.data.schedule.nextAvailableDate, v.data.schedule.nextAvailableTime)!;
+  const nxt = istToDate(v.data.schedule.nextAvailableDate, v.data.schedule.nextAvailableTime); // optional
   if (exp && exp < a.allottedAt) throw new AppError("Expected release cannot be before the allotment date & time", 400);
-  if (nxt < a.allottedAt) throw new AppError("Next available date & time cannot be before the allotment date & time", 400);
+  if (nxt && nxt < a.allottedAt) throw new AppError("Next available date & time cannot be before the allotment date & time", 400);
 
   const veh: any = await Vehicle.findById(a.vehicle).lean();
   if (!veh || veh.availability?.status !== "IN_USE" || veh.availability.project?.trackupNumber !== a.trackupNumber)
@@ -413,7 +413,7 @@ export async function extendAllotment(id: string, input: unknown, username: stri
   const av = validateAvailability(availabilityInput(p, p.remarks ?? null, v.data.schedule), false, now, veh.availability);
   if (av.errors.length || !av.data) throw new AppError(av.errors.join("; "), 400);
   const rows = vehicleRows(veh.availability, av.data, veh._id, username, v.data.reason ?? "Project extended");
-  if (!rows.length && +nxt === +new Date(a.nextAvailableAt) && +(exp ?? 0) === +(a.expectedReleaseAt ? new Date(a.expectedReleaseAt) : 0)) throw new AppError("No changes to save", 400);
+  if (!rows.length && +(nxt ?? 0) === +(a.nextAvailableAt ? new Date(a.nextAvailableAt) : 0) && +(exp ?? 0) === +(a.expectedReleaseAt ? new Date(a.expectedReleaseAt) : 0)) throw new AppError("No changes to save", 400);
 
   const upd = await Vehicle.findOneAndUpdate(
     { _id: veh._id, revision: veh.revision, "availability.status": "IN_USE", "availability.project.trackupNumber": a.trackupNumber },
@@ -429,7 +429,7 @@ export async function extendAllotment(id: string, input: unknown, username: stri
   }
   await syncDriverSchedule(res, username, now); // the driver's To date follows the allotment
   await logAllotment(a._id, "EXTENDED", username, {
-    reason: v.data.reason, from: { expectedReleaseAt: a.expectedReleaseAt ?? null, nextAvailableAt: a.nextAvailableAt }, to: { expectedReleaseAt: exp, nextAvailableAt: nxt },
+    reason: v.data.reason, from: { expectedReleaseAt: a.expectedReleaseAt ?? null, nextAvailableAt: a.nextAvailableAt ?? null }, to: { expectedReleaseAt: exp, nextAvailableAt: nxt },
   });
   if (rows.length) await VehicleHistory.insertMany(rows);
   return withUrls(res);

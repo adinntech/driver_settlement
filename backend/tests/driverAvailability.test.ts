@@ -69,7 +69,7 @@ const budgetNo = (() => { let n = 0; return () => `BUD-D-${++n}`; })();
   const t = await T();
   const r = await call("/tracking", "POST", {
     projectType: "SIGNAGE",
-    details: { projectCode: "14000001", client: "Pepsi India", jobSheetNumber: "ZZDRV-77", location: "Coimbatore", date: d(0), fromDate: d(2), toDate: d(9), numberOfVehicles: 6 },
+    details: { projectCode: "14000001", client: "Pepsi India", jobSheetNumber: "ZZDRV-77", location: "Coimbatore", date: d(0), fromDate: d(0), toDate: d(9), numberOfVehicles: 6 },
   }, t.rsop);
   assert.equal(r.status, 201, JSON.stringify(r.body));
   proj = r.body.data;
@@ -229,7 +229,7 @@ test("In Use: dates default to the project's own dates when left blank, and the 
   const r = await create({ status: "IN_USE", project: { pifNumber: pif[1] } });
   assert.equal(r.status, 201, JSON.stringify(r.body));
   assert.equal(r.body.data.availability.project.trackupNumber, trk[1]); // PIF gives the Trackup number
-  assert.equal(r.body.data.availability.project.startDate, d(2));
+  assert.equal(r.body.data.availability.project.startDate, d(0));
   assert.equal(r.body.data.availability.project.endDate, d(9));
 });
 
@@ -281,12 +281,14 @@ test("edit: extending the To date records PROJECT_EXTENDED; a new project is PRO
 
 test("edit: a detail-only change records UPDATED with previous and new values and leaves the availability untouched", async () => {
   const c = (await create(notAvail())).body.data;
-  const r = await put(c._id, c, undefined, { driverName: "Renamed Driver" });
+  // saved details are locked (a rename is refused); a bank-detail change is the detail-only edit that remains
+  assert.equal((await put(c._id, c, undefined, { driverName: "Renamed Driver" })).status, 403);
+  const r = await put(c._id, c, undefined, { bankName: "Indian Bank" });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.data.availability.status, "NOT_AVAILABLE"); // availability not sent => stored value stays
   const h = await history(c._id);
   assert.equal(h[0].action, "UPDATED");
-  assert.deepEqual(h[0].changes, [{ field: "driverName", from: "Avail Driver", to: "Renamed Driver" }]);
+  assert.deepEqual(h[0].changes, [{ field: "bankName", from: null, to: "Indian Bank" }]);
 });
 
 test("legacy driver (created before availability existed): listed, editable once a status is chosen, status filters never match it", async () => {

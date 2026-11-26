@@ -62,7 +62,7 @@ function Screen({ mode }: { mode: "RSA" | "RBP" }) {
 }
 
 const DELIVERY_ACTION: Record<string, string> = {
-  RSA_APPROVED: "RSA Clearance Approved", SPEEDOMETER_PHOTO_UPLOADED: "Speedometer Photo Uploaded", EVIDENCE_PHOTO_UPLOADED: "Driver & Vehicle Evidence Uploaded", DELIVERED: "Vehicle Delivered",
+  RSA_APPROVED: "RSA Clearance Approved", SPEEDOMETER_PHOTO_UPLOADED: "Speedometer Photo Uploaded", EVIDENCE_PHOTO_UPLOADED: "Driver & Vehicle Evidence Uploaded", ADDITIONAL_PHOTO_UPLOADED: "Additional Photo Uploaded", DELIVERED: "Vehicle Delivered",
 };
 
 /** RBP: RSA approval + delivery information. Delivered evidence is view-only (no edit / delete here). */
@@ -88,6 +88,7 @@ function DeliverySection({ d }: { d: ClearanceDetail }) {
         <div className="inline" style={{ alignItems: "flex-start", gap: 24, flexWrap: "wrap" }}>
           <PhotoThumb photo={d.delivery.speedometerPhoto} label="Speedometer Photo" />
           <PhotoThumb photo={d.delivery.evidencePhoto} label="Driver & Vehicle Evidence Photo" />
+          {(d.delivery.additionalPhotos ?? []).map((p, i) => <PhotoThumb key={p.key} photo={p} label={`Additional Photo ${i + 1}`} />)}
         </div>
       )}
       {d.canDeliver && (

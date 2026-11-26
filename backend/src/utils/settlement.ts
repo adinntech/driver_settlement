@@ -71,7 +71,7 @@ export const DEDUCTION_LABELS: Record<DeductionKey, string> = {
 /** Number fields of the final form: [key, label]. Values are non-negative with up to 2 decimals (kept in hundredths). */
 const NUMBER_FIELDS = [
   ["estimatedKmPerDay", "Estimated KM Per Day"], ["fixedMileage", "Fixed Mileage"], ["openingKm", "Opening KM"], ["closingKm", "Closing KM"],
-  ["dieselCost", "Diesel Cost (per litre)"], ["ioclLitres", "IOCL card usage (litres)"], ["ioclKms", "IOCL card usage (KMs)"],
+  ["dieselCost", "Fuel Cost (per litre)"], ["ioclLitres", "IOCL card usage (litres)"], ["ioclKms", "IOCL card usage (KMs)"],
   ["estimatedBudget", "Estimated Budget"], ["estimatedKm", "Estimated KM"], ["estimatedFuel", "Estimated Fuel"],
   ["perDaySalary", "Per Day Salary"], ["perDayFood", "Per Day Food"], ["haltDayPay", "Halt Day Pay"], ["travelPay", "Travel Pay"], ["overtimeRate", "Overtime rate per hour"],
   ["onRoadDays", "On Road Days"], ["onRoadSundays", "On Road Sunday"], ["haltDays", "Halt Days"], ["overtimeHours", "Overtime (hours)"],
@@ -166,7 +166,7 @@ export function validateFinalInput(input: unknown, ctx: { totalDays: number | nu
  *   Result KM            = Closing KM - Opening KM
  *   Expected litres      = Result KM / Fixed Mileage
  *   Variation in litres  = IOCL litres used - expected litres   (positive = more fuel used than the mileage allows)
- *   Mileage short (hint) = max(variation, 0) x Diesel Cost per litre   (shown as a suggestion; the deduction is entered by RBP)
+ *   Mileage short (hint) = max(variation, 0) x Fuel Cost per litre   (shown as a suggestion; the deduction is entered by RBP)
  *   Earnings             = On road days x per day salary + On road Sundays x per day salary + (on road days + Sundays) x per day food
  *                          + halt days x halt day pay + travel pay + overtime hours x overtime rate
  *   Claimed (per row)    = quantity x cost;   rejected = claimed - approved

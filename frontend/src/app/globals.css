@@ -471,6 +471,7 @@ textarea:focus { outline: none; border-color: var(--red); box-shadow: 0 0 0 3px 
 .proj-taken { color: var(--red-dark); font-weight: 600; }
 .av-cell { display: grid; gap: 4px; min-width: 130px; }
 .av-cell small { color: var(--muted); }
+.cell-remarks { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hist-status { margin: 0 0 8px; font-size: .88rem; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
 .av-view .kv { margin-bottom: 8px; }
 .stat-av-green strong { color: var(--ok); }
@@ -607,6 +608,8 @@ textarea:focus { outline: none; border-color: var(--red); box-shadow: 0 0 0 3px 
 .badge-dl-delivered { background: var(--ok-soft); color: var(--ok); }
 .photo-box { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
 .photo-preview { max-width: 280px; max-height: 220px; border-radius: 10px; border: 1px solid var(--border); object-fit: cover; }
+.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+.photo-grid .photo-preview { max-width: 100%; height: 140px; }
 
 /* ===================================================================== settlement payments (ds-*) */
 .ds-card { padding: 18px; }
@@ -1812,3 +1815,9 @@ button.stat, button.ds-kpi { font: inherit; text-align: left; color: inherit; wi
 .pc-toggle { font-size: 1rem; line-height: 1; padding: 4px 8px; }
 .pc-table > tbody > .pc-sub > td { padding: 0 0 12px 36px; max-width: none; background: var(--surface-2, var(--bg)); }
 .pc-table > tbody > .pc-sub .table { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+
+/* Excel bulk import dialog */
+.import-steps { margin: 0 0 12px 18px; padding: 0; display: grid; gap: 4px; }
+.import-errs { margin: 0; padding-left: 16px; }
+.ok-text { color: var(--ok, #15803d); }
+.bad-text { color: var(--danger, #b91c1c); font-weight: 600; }

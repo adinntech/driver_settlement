@@ -107,8 +107,8 @@ const rsaUser: any = await User.findOne({ role: "RSA" }).lean();
 const rbpUser: any = await User.findOne({ role: "RBP" }).lean();
 const notes = (user: any, type: string) => Notification.find({ recipient: user._id, type }).lean() as Promise<any[]>;
 
-const sig = await mkProject({ projectType: "SIGNAGE", details: { projectCode: "15000001", client: "Kensign Lifestyles", jobSheetNumber: "ZZCL-1", location: "Coimbatore", date: d(0), fromDate: d(2), toDate: d(9), numberOfVehicles: 10 } });
-const road = await mkProject({ projectType: "ROADSHOW", details: { projectCode: "15000002", billingName: "Ken Roadshow Pvt", stateCode: "33", startDate: d(3), endDate: d(8), reportingDate: d(3), sundayHalt: "NO", numberOfVans: 2, reportingLocations: ["Chennai", "Trichy"] } });
+const sig = await mkProject({ projectType: "SIGNAGE", details: { projectCode: "15000001", client: "Kensign Lifestyles", jobSheetNumber: "ZZCL-1", location: "Coimbatore", date: d(0), fromDate: d(0), toDate: d(9), numberOfVehicles: 10 } });
+const road = await mkProject({ projectType: "ROADSHOW", details: { projectCode: "15000002", billingName: "Ken Roadshow Pvt", stateCode: "33", startDate: d(0), endDate: d(8), reportingDate: d(3), sundayHalt: "NO", numberOfVans: 2, reportingLocations: ["Chennai", "Trichy"] } });
 const [A, C, D, E, F, G] = sig.vehicles.slice(0, 6);
 void D; void G;
 const B = road.vehicles[0];

@@ -1,5 +1,5 @@
 import { countDays } from "../utils/days.js";
-import { isYmd, todayIst } from "../utils/dates.js";
+import { addDaysYmd, isYmd, todayIst } from "../utils/dates.js";
 import { normalizeIndianPhone } from "../utils/phone.js";
 import { kmAllowanceOf, MAX_EXTRA_KM, parseKmPerDay } from "../utils/kmAllowance.js";
 
@@ -18,6 +18,9 @@ export interface ValidationResult {
   projectCode: string;
 }
 
+/** Campaign start date window: today back to this many days before today (future dates are not allowed). */
+export const START_DATE_PAST_DAYS = 7;
+
 /** Project Code: exactly 8 digits. */
 export const PROJECT_CODE = /^\d{8}$/;
 
@@ -35,6 +38,12 @@ export interface TrackingValidationOptions {
 export function validateTracking(projectType: unknown, input: unknown, opts: TrackingValidationOptions = {}): ValidationResult {
   const errors: string[] = [];
   const today = todayIst(opts.now);
+  const earliestStart = addDaysYmd(today, -START_DATE_PAST_DAYS);
+  const checkStart = (v: unknown, label: string) => {
+    if (!isDate(v) || opts.allowPastStart) return;
+    if (String(v) > today) errors.push(`${label} cannot be in the future`);
+    else if (String(v) < earliestStart) errors.push(`${label} cannot be more than ${START_DATE_PAST_DAYS} days in the past`);
+  };
   const b = (input && typeof input === "object" ? input : {}) as Obj;
   const req = (k: string, label: string) => {
     if (!str(b[k])) errors.push(`${label} is required`);
@@ -67,8 +76,7 @@ export function validateTracking(projectType: unknown, input: unknown, opts: Tra
       "invoiceDate",
     ])
       if (b[k] && !isDate(b[k])) errors.push(`${k} must be a valid date (YYYY-MM-DD)`);
-    if (isDate(b.startDate) && !opts.allowPastStart && String(b.startDate) < today)
-      errors.push("Start date cannot be in the past");
+    checkStart(b.startDate, "Start date");
     if (isDate(b.startDate) && isDate(b.endDate) && String(b.endDate) < String(b.startDate))
       errors.push("End date cannot be before start date");
     if (isDate(b.reportingDate) && isDate(b.startDate) && isDate(b.endDate)) {
@@ -123,6 +131,7 @@ export function validateTracking(projectType: unknown, input: unknown, opts: Tra
     for (const k of ["date", "fromDate", "toDate"])
       if (!isDate(b[k])) errors.push(`${k} must be a valid date (YYYY-MM-DD)`);
     if (isDate(b.date) && String(b.date) > today) errors.push("Date cannot be in the future");
+    checkStart(b.fromDate, "From date");
     if (isDate(b.fromDate) && isDate(b.toDate) && String(b.toDate) < String(b.fromDate))
       errors.push("To date cannot be before from date");
     if (b.arrivedBudget !== undefined && b.arrivedBudget !== "" && !(Number(b.arrivedBudget) >= 0))

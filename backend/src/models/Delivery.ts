@@ -2,8 +2,10 @@ import mongoose, { Schema } from "mongoose";
 
 export const DELIVERY_STATUSES = ["YET_TO_DELIVER", "DELIVERED"] as const;
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
-export const DELIVERY_ACTIONS = ["RSA_APPROVED", "SPEEDOMETER_PHOTO_UPLOADED", "EVIDENCE_PHOTO_UPLOADED", "DELIVERED"] as const;
-export const PHOTO_KINDS = ["SPEEDOMETER", "EVIDENCE"] as const;
+export const DELIVERY_ACTIONS = ["RSA_APPROVED", "SPEEDOMETER_PHOTO_UPLOADED", "EVIDENCE_PHOTO_UPLOADED", "ADDITIONAL_PHOTO_UPLOADED", "DELIVERED"] as const;
+export const PHOTO_KINDS = ["SPEEDOMETER", "EVIDENCE", "ADDITIONAL"] as const;
+/** Optional extra delivery photos (beside the mandatory speedometer and handover photos). */
+export const MAX_ADDITIONAL_PHOTOS = 10;
 export type PhotoKind = (typeof PHOTO_KINDS)[number];
 
 const photo = new Schema({ storage: String, key: String, name: String, size: Number, mimeType: String }, { _id: false }); // file metadata only, never image data
@@ -30,6 +32,7 @@ const deliverySchema = new Schema(
     description: { type: String, required: true },
     speedometerPhoto: { type: photo, required: true },
     evidencePhoto: { type: photo, required: true },
+    additionalPhotos: { type: [photo], default: [] }, // optional; older deliveries have none
     deliveredBy: { type: String, required: true },
     deliveredAt: { type: Date, required: true }, // server time
   },

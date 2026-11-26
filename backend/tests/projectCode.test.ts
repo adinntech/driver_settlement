@@ -11,6 +11,9 @@ import test, { after, before } from "node:test";
 import assert from "node:assert/strict";
 import type { Server } from "node:http";
 import mongoose from "mongoose";
+const { addDaysYmd: shiftDay, todayIst: todayYmd } = await import("../src/utils/dates.js");
+/** Fixture dates relative to today: campaign start dates must be today or up to 7 days back. */
+const day = (n: number) => shiftDay(todayYmd(), n);
 
 const { default: app } = await import("../src/app.js");
 const { connectDB } = await import("../src/db/connect.js");
@@ -24,6 +27,7 @@ let server: Server;
 let base = "";
 before(async () => {
   await connectDB();
+  assert.match(mongoose.connection.name, /_test/, "refusing to drop a non-test database");
   await mongoose.connection.dropDatabase();
   await Promise.all([User.init(), TrackingVehicle.init(), TrackingProject.init()]);
   await seedUsers();
@@ -42,8 +46,8 @@ const call = async (path: string, method = "GET", body?: unknown, token?: string
 };
 let rsop = "";
 const token = async () => (rsop ||= (await call("/auth/login", "POST", { role: "RSOP", username: "RSOP", password: "pass2" })).body.data.token);
-const signage = (code: unknown, client = "DALMIA", n = 1) => ({ projectCode: code, date: "2026-10-20", client, jobSheetNumber: "J1", location: "RAMNAD", numberOfVehicles: n, fromDate: "2026-10-21", toDate: "2026-10-26" });
-const roadshow = (code: unknown, client = "DALMIA", n = 1) => ({ projectCode: code, billingName: client, stateCode: "33", numberOfVans: n, startDate: "2027-10-22", endDate: "2027-10-23", reportingDate: "2027-10-22", sundayHalt: "NO", reportingLocations: ["Madurai"] });
+const signage = (code: unknown, client = "DALMIA", n = 1) => ({ projectCode: code, date: day(-3), client, jobSheetNumber: "J1", location: "RAMNAD", numberOfVehicles: n, fromDate: day(-2), toDate: day(3) });
+const roadshow = (code: unknown, client = "DALMIA", n = 1) => ({ projectCode: code, billingName: client, stateCode: "33", numberOfVans: n, startDate: day(0), endDate: day(1), reportingDate: day(0), sundayHalt: "NO", reportingLocations: ["Madurai"] });
 const post = async (projectType: string, details: unknown) => call("/tracking", "POST", { projectType, details }, await token());
 
 test("validation: exactly 8 digits, both project types (frontend uses the same rule)", () => {

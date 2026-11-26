@@ -36,7 +36,7 @@ const panel = (f: PaymentForm = form(), c: RsaContext = ctx()) => renderToStatic
 test("RSA is the fourth login: own home, own sidebar; the other three logins are unchanged", () => {
   assert.equal(homeFor("RSA"), "/rsa");
   assert.deepEqual(NAV.RSA.slice(0, 2), [{ href: "/rsa", label: "Payments" }, { href: "/rsa/clearance", label: "Vehicle & Driver Clearance" }]); // original entries first, unchanged
-  assert.deepEqual(NAV.RSA.slice(2).map((n) => n.href), ["/rsa/driver-payments", "/rsa/settlements/completed"]);
+  assert.deepEqual(NAV.RSA.slice(2).map((n) => n.href), ["/rsa/on-road-vehicles", "/rsa/driver-payments", "/rsa/settlements/completed"]);
   assert.equal(homeFor("RSO"), "/rso"); // RSO is a separate login from RSOM
   assert.deepEqual(NAV.RSO.map((n) => n.href), ["/rso", "/rso/reports"]);
   assert.equal(homeFor("RSOP"), "/rsop");
@@ -44,7 +44,7 @@ test("RSA is the fourth login: own home, own sidebar; the other three logins are
   assert.equal(homeFor("RSOM"), "/rsom");
   assert.equal(homeFor("NOPE"), "/login");
   assert.deepEqual(NAV.RSOM, [{ href: "/rsom", label: "Budget Approvals" }, { href: "/rsom/payments", label: "Daily Payment Approvals" }]);
-  assert.deepEqual(NAV.RBP.map((n) => n.label), ["Projects & Budgets", "Vehicle Management", "Driver Management", "Vehicle Deliver", "Driver Payments"]); // payments appended
+  assert.deepEqual(NAV.RBP.map((n) => n.label), ["Projects & Budgets", "Vehicle Management", "Driver Management", "Vehicle Deliver", "On Road Vehicles", "Driver Payments"]); // payments appended
   assert.deepEqual(NAV.RSOP.map((n) => n.label), ["Dashboard", "New Tracking Request"]);
   assert.ok(!NAV.RSA.some((n) => n.href.startsWith("/rbp") || n.href.startsWith("/rsop") || n.href.startsWith("/rsom"))); // no entry into other roles' pages
 });
@@ -132,7 +132,7 @@ test("project header shows job sheet, vehicle, client, driver and project type r
 
 test("payment form follows the reference layout: Payment For, dates and entry time read-only (no pickers), Cash In Hand, Diesel, Food, Salary Advance, expenses, totals", () => {
   const html = panel();
-  const order = ["Payment For", "From Date", "To Date", "Entry Date &amp; Time", "Cash In Hand", "Diesel Cost", "Food Allowance", "Salary Advance", "Other Expenses", "Total Payable"].map((l) => html.indexOf(l));
+  const order = ["Payment For", "From Date", "To Date", "Entry Date &amp; Time", "Cash In Hand", "Fuel Cost", "Food Allowance", "Salary Advance", "Other Expenses", "Total Payable"].map((l) => html.indexOf(l));
   for (const h of ["<th>Detail</th>", "<th>Description</th>", "<th>Amount</th>", "<th>Deduct</th>", "<th>Actions</th>"]) assert.ok(html.includes(h), h);
   assert.ok(order.every((i) => i >= 0), JSON.stringify(order));
   assert.deepEqual([...order].sort((a, b) => a - b), order);
@@ -143,7 +143,7 @@ test("payment form follows the reference layout: Payment For, dates and entry ti
   assert.ok(html.includes('data-field="entry-time"') && html.includes("recorded by the server"));
   assert.ok(!/<input[^>]*aria-label="Cash In Hand"[^>]*checked/.test(html)); // unchecked by default
   assert.ok(panel(form({ cashInHand: true })).match(/aria-label="Cash In Hand"/) && /checked=""[^>]*aria-label="Cash In Hand"|aria-label="Cash In Hand"[^>]*checked=""/.test(panel(form({ cashInHand: true }))));
-  for (const l of ['aria-label="Diesel Cost"', 'aria-label="Add diesel entry"', 'aria-label="Food Allowance"', 'aria-label="Salary Advance"', 'aria-label="Expense Category"', 'aria-label="Is Default"', 'aria-label="Total Payable"', ">Add<", ">Delete<"])
+  for (const l of ['aria-label="Fuel Cost"', 'aria-label="Add diesel entry"', 'aria-label="Food Allowance"', 'aria-label="Salary Advance"', 'aria-label="Expense Category"', 'aria-label="Is Default"', 'aria-label="Total Payable"', ">Add<", ">Delete<"])
     assert.ok(html.includes(l), l);
   assert.equal((html.match(/inputMode="decimal"/g) ?? []).length, 4); // diesel, food, salary advance, expense amount: numeric keyboards
 });

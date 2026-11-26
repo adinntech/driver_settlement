@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Clearance, ClearanceEvent } from "../models/Clearance.js";
-import { DeliveryEvent, VehicleDelivery, type PhotoKind } from "../models/Delivery.js";
+import { DeliveryEvent, MAX_ADDITIONAL_PHOTOS, VehicleDelivery, type PhotoKind } from "../models/Delivery.js";
 import { VehicleAllotment } from "../models/VehicleAllotment.js";
 import { AppError } from "../utils/AppError.js";
 import { clearanceDetail, loadOne, rsaLink, syncClearances } from "./clearance.service.js";
@@ -19,8 +19,8 @@ const ist = (d: Date) => new Intl.DateTimeFormat("en-GB", { dateStyle: "medium",
 const isDup = (e: unknown) => (e as { code?: number })?.code === 11000;
 export const DESCRIPTION_MIN = 5;
 export const DESCRIPTION_MAX = 1000;
-export const PHOTO_KIND_PARAM: Record<string, PhotoKind> = { speedometer: "SPEEDOMETER", evidence: "EVIDENCE" };
-const ACTION_FOR: Record<PhotoKind, string> = { SPEEDOMETER: "SPEEDOMETER_PHOTO_UPLOADED", EVIDENCE: "EVIDENCE_PHOTO_UPLOADED" };
+export const PHOTO_KIND_PARAM: Record<string, PhotoKind> = { speedometer: "SPEEDOMETER", evidence: "EVIDENCE", additional: "ADDITIONAL" };
+const ACTION_FOR: Record<PhotoKind, string> = { SPEEDOMETER: "SPEEDOMETER_PHOTO_UPLOADED", EVIDENCE: "EVIDENCE_PHOTO_UPLOADED", ADDITIONAL: "ADDITIONAL_PHOTO_UPLOADED" };
 
 const withUrl = (a: any) => (a ? { storage: a.storage, key: a.key, name: a.name, size: a.size, mimeType: a.mimeType, url: attachmentUrl(a) } : null);
 
@@ -62,7 +62,7 @@ async function deliverable(id: string) {
  */
 export async function uploadDeliveryPhoto(id: string, kindParam: string, file: { originalname: string; mimetype: string; size: number; buffer: Buffer } | undefined, username: string, now = new Date()) {
   const kind = PHOTO_KIND_PARAM[kindParam];
-  if (!kind) throw new AppError("Photo type must be speedometer or evidence", 400);
+  if (!kind) throw new AppError("Photo type must be speedometer, evidence or additional", 400);
   const c = await deliverable(id);
   if (!file) throw new AppError("Choose a photo to upload", 400);
   if (!/^image\/(jpeg|png|webp)$/.test(file.mimetype)) throw new AppError("Only JPG, PNG or WEBP photos are allowed", 400);
@@ -76,7 +76,7 @@ export async function uploadDeliveryPhoto(id: string, kindParam: string, file: {
 
 // ---------------------------------------------------------------- deliver
 
-export function validateDeliver(input: unknown): { errors: string[]; description: string; speedoKey: string; evidenceKey: string; version?: number } {
+export function validateDeliver(input: unknown): { errors: string[]; description: string; speedoKey: string; evidenceKey: string; additionalKeys: string[]; version?: number } {
   const b = (input && typeof input === "object" ? input : {}) as Record<string, any>;
   const errors: string[] = [];
   const description = typeof b.description === "string" ? b.description.trim().replace(/[ \t]+/g, " ") : "";
@@ -92,8 +92,21 @@ export function validateDeliver(input: unknown): { errors: string[]; description
   const speedoKey = key(b.speedometerPhoto, "Speedometer photo");
   const evidenceKey = key(b.evidencePhoto, "Driver & vehicle handover photo");
   if (speedoKey && speedoKey === evidenceKey) errors.push("The speedometer photo and the handover photo must be two different photos");
+  // Additional photos: optional, up to MAX_ADDITIONAL_PHOTOS distinct photos, none of them the speedometer or handover photo.
+  const additionalKeys: string[] = [];
+  if (b.additionalPhotos !== undefined && b.additionalPhotos !== null) {
+    if (!Array.isArray(b.additionalPhotos)) errors.push("Additional photos must be a list");
+    else if (b.additionalPhotos.length > MAX_ADDITIONAL_PHOTOS) errors.push(`Too many additional photos (max ${MAX_ADDITIONAL_PHOTOS})`);
+    else
+      b.additionalPhotos.forEach((p: unknown, i: number) => {
+        const k = key(p, `Additional photo ${i + 1}`);
+        if (!k) return;
+        if (k === speedoKey || k === evidenceKey || additionalKeys.includes(k)) errors.push(`Additional photo ${i + 1} is a duplicate of another delivery photo`);
+        else additionalKeys.push(k);
+      });
+  }
   const version = b.version === undefined || b.version === null ? undefined : Number(b.version);
-  return { errors, description, speedoKey, evidenceKey, version };
+  return { errors, description, speedoKey, evidenceKey, additionalKeys, version };
 }
 
 export async function deliverVehicle(id: string, input: unknown, username: string, now = new Date()) {
@@ -103,7 +116,8 @@ export async function deliverVehicle(id: string, input: unknown, username: strin
   // a retry of an already completed delivery with the same photos returns it instead of creating a second one
   if (c0.deliveryStatus === "DELIVERED") {
     const done: any = await VehicleDelivery.findOne({ clearance: c0._id, approvalVersion: c0.currentVersion }).lean();
-    if (done && done.speedometerPhoto?.key === v.speedoKey && done.evidencePhoto?.key === v.evidenceKey) return { replay: true, delivery: deliveryView(done) };
+    const sameExtra = JSON.stringify((done?.additionalPhotos ?? []).map((p: any) => p.key)) === JSON.stringify(v.additionalKeys);
+    if (done && done.speedometerPhoto?.key === v.speedoKey && done.evidencePhoto?.key === v.evidenceKey && sameExtra) return { replay: true, delivery: deliveryView(done) };
   }
   const c = await deliverable(id);
   if (v.version !== undefined && v.version !== c.currentVersion) throw new AppError("A newer submission exists; refresh and try again", 409);
@@ -115,13 +129,19 @@ export async function deliverVehicle(id: string, input: unknown, username: strin
   const ok = (e: any, kind: PhotoKind) => e && String(e.clearance) === String(c._id) && e.version === c.currentVersion && e.details?.kind === kind && String(e.details?.vehicleId) === String(c.vehicle) && String(e.details?.driverId) === String(c.driver);
   if (!ok(sp, "SPEEDOMETER")) throw new AppError("The speedometer photo does not belong to this vehicle delivery; upload it again", 400);
   if (!ok(ev, "EVIDENCE")) throw new AppError("The driver & vehicle handover photo does not belong to this vehicle delivery; upload it again", 400);
+  const extra: any[] = v.additionalKeys.length ? await DeliveryEvent.find({ fileKey: { $in: v.additionalKeys } }).lean() : [];
+  const additionalPhotos = v.additionalKeys.map((k, i) => {
+    const e = extra.find((x) => x.fileKey === k);
+    if (!ok(e, "ADDITIONAL")) throw new AppError(`Additional photo ${i + 1} does not belong to this vehicle delivery; upload it again`, 400);
+    return e.details.attachment;
+  });
 
   let doc: any;
   try {
     doc = await VehicleDelivery.create({
       clearance: c._id, approvalVersion: c.currentVersion, allotment: c.allotment, trackingVehicle: c.trackingVehicle, project: c.project, vehicle: c.vehicle, driver: c.driver,
       trackupNumber: c.trackupNumber, vehicleNo: c.vehicleNo, driverNumber: c.driverNumber, driverName: c.driverName, approvedBy: c.reviewedBy, approvedAt: c.reviewedAt,
-      description: v.description, speedometerPhoto: sp.details.attachment, evidencePhoto: ev.details.attachment, deliveredBy: username, deliveredAt: now, // server time, never the browser's
+      description: v.description, speedometerPhoto: sp.details.attachment, evidencePhoto: ev.details.attachment, additionalPhotos, deliveredBy: username, deliveredAt: now, // server time, never the browser's
     });
   } catch (e) {
     if (isDup(e)) throw new AppError("This vehicle has already been delivered", 409);
@@ -136,7 +156,7 @@ export async function deliverVehicle(id: string, input: unknown, username: strin
     throw new AppError("This allocation just changed; refresh and try again", 409);
   }
   try {
-    await DeliveryEvent.create({ clearance: c._id, version: c.currentVersion, action: "DELIVERED", username, role: "RBP", at: now, details: { deliveryId: String(doc._id), trackupNumber: c.trackupNumber, vehicleId: String(c.vehicle), driverId: String(c.driver), allotmentId: String(c.allotment), description: v.description, approvedBy: c.reviewedBy, approvedAt: c.reviewedAt, speedometerPhoto: sp.details.attachment, evidencePhoto: ev.details.attachment } });
+    await DeliveryEvent.create({ clearance: c._id, version: c.currentVersion, action: "DELIVERED", username, role: "RBP", at: now, details: { deliveryId: String(doc._id), trackupNumber: c.trackupNumber, vehicleId: String(c.vehicle), driverId: String(c.driver), allotmentId: String(c.allotment), description: v.description, approvedBy: c.reviewedBy, approvedAt: c.reviewedAt, speedometerPhoto: sp.details.attachment, evidencePhoto: ev.details.attachment, additionalPhotos } });
   } catch (e) {
     if (!isDup(e)) throw e;
   }
@@ -151,7 +171,8 @@ export async function deliverVehicle(id: string, input: unknown, username: strin
 
 const deliveryView = (d: any) => ({
   _id: String(d._id), approvalVersion: d.approvalVersion, trackupNumber: d.trackupNumber, vehicleNo: d.vehicleNo, driverNumber: d.driverNumber, driverName: d.driverName,
-  description: d.description, speedometerPhoto: withUrl(d.speedometerPhoto), evidencePhoto: withUrl(d.evidencePhoto), deliveredBy: d.deliveredBy, deliveredAt: d.deliveredAt,
+  description: d.description, speedometerPhoto: withUrl(d.speedometerPhoto), evidencePhoto: withUrl(d.evidencePhoto),
+  additionalPhotos: (d.additionalPhotos ?? []).map(withUrl), deliveredBy: d.deliveredBy, deliveredAt: d.deliveredAt,
   approvedBy: d.approvedBy ?? null, approvedAt: d.approvedAt ?? null,
 });
 

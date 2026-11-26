@@ -21,6 +21,7 @@ export const NAV: Record<RoleKey, { href: string; label: string }[]> = {
     { href: "/rbp/vehicles", label: "Vehicle Management" },
     { href: "/rbp/drivers", label: "Driver Management" },
     { href: "/rbp/on-road", label: "Vehicle Deliver" },
+    { href: "/rbp/on-road-vehicles", label: "On Road Vehicles" },
     { href: "/rbp/payments", label: "Driver Payments" },
   ],
   RSOM: [
@@ -30,6 +31,7 @@ export const NAV: Record<RoleKey, { href: string; label: string }[]> = {
   RSA: [
     { href: "/rsa", label: "Payments" },
     { href: "/rsa/clearance", label: "Vehicle & Driver Clearance" },
+    { href: "/rsa/on-road-vehicles", label: "On Road Vehicles" },
     { href: "/rsa/driver-payments", label: "Driver Payments" },
     { href: "/rsa/settlements/completed", label: "Payment Completed" },
   ],

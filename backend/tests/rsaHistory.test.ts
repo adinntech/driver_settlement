@@ -102,8 +102,8 @@ const allotTo = async (tv: any, driver?: any) => {
 let sig: any; // signage project, 10 vehicles
 let road: any; // roadshow project, 2 vehicles
 {
-  sig = await mkProject({ projectType: "SIGNAGE", details: { projectCode: "15000001", client: "Kensign Lifestyles", jobSheetNumber: "ZZRSA-1", location: "Coimbatore", date: d(0), fromDate: d(2), toDate: d(9), numberOfVehicles: 10 } });
-  road = await mkProject({ projectType: "ROADSHOW", details: { projectCode: "15000002", billingName: "Ken Roadshow Pvt", stateCode: "33", startDate: d(3), endDate: d(8), reportingDate: d(3), sundayHalt: "NO", numberOfVans: 2, reportingLocations: ["Chennai", "Trichy"] } });
+  sig = await mkProject({ projectType: "SIGNAGE", details: { projectCode: "15000001", client: "Kensign Lifestyles", jobSheetNumber: "ZZRSA-1", location: "Coimbatore", date: d(0), fromDate: d(0), toDate: d(9), numberOfVehicles: 10 } });
+  road = await mkProject({ projectType: "ROADSHOW", details: { projectCode: "15000002", billingName: "Ken Roadshow Pvt", stateCode: "33", startDate: d(0), endDate: d(8), reportingDate: d(3), sundayHalt: "NO", numberOfVans: 2, reportingLocations: ["Chennai", "Trichy"] } });
 }
 // fixtures: a signage project and a roadshow project, each with approved budget + vehicle + driver
 const A = sig.vehicles[0];
@@ -154,9 +154,9 @@ test("history by default: every project's payments, latest first, with the table
   const x = r.items.find((p: any) => p._id === p4._id);
   for (const k of ["paymentNumber", "trackupNumber", "paymentFor", "clientName", "vehicleNo", "driverName", "driverNumber", "campaignFromDate", "campaignToDate", "totalPayable", "entryDateTime", "createdBy", "paymentStatus", "pifNumber", "billNumber"]) assert.ok(k in x, k);
   assert.deepEqual([x.trackupNumber, x.paymentFor, x.clientName, x.vehicleNo, x.driverName, x.campaignFromDate, x.campaignToDate, x.totalPayable, x.createdBy, x.paymentStatus],
-    [A.trackupNumber, "SIGNAGE", "Kensign Lifestyles", alA.vehicle.vehicleNo, "Sampath Madhu", d(2), d(9), 1900, "RSA", "ENTERED"]);
+    [A.trackupNumber, "SIGNAGE", "Kensign Lifestyles", alA.vehicle.vehicleNo, "Sampath Madhu", d(0), d(9), 1900, "RSA", "ENTERED"]);
   const rb = r.items.find((p: any) => p._id === p5._id);
-  assert.deepEqual([rb.paymentFor, rb.campaignFromDate, rb.campaignToDate, rb.clientName], ["ROADSHOW", d(3), d(8), "Ken Roadshow Pvt"]);
+  assert.deepEqual([rb.paymentFor, rb.campaignFromDate, rb.campaignToDate, rb.clientName], ["ROADSHOW", d(0), d(8), "Ken Roadshow Pvt"]);
   assert.ok(!JSON.stringify(r).includes("undefined"));
   assert.ok(r.items.every((p: any) => new Date(p.entryDateTime).getTime() > Date.now() - 60_000)); // server stamped
 });
@@ -236,7 +236,7 @@ test("View Details: the complete saved payment by id, unchanged; numbers are nev
   const x = r.body.data;
   assert.equal(x.paymentNumber, p1.paymentNumber);
   assert.deepEqual([x.trackupNumber, x.pifNumber, x.clientName, x.vehicleNo, x.driverNumber, x.driverName, x.campaignFromDate, x.campaignToDate, x.foodAmount, x.createdBy, x.paymentStatus],
-    [A.trackupNumber, A.pifNumber, "Kensign Lifestyles", alA.vehicle.vehicleNo, drvA.driverNumber, "Sampath Madhu", d(2), d(9), 100, "RSA", "ENTERED"]);
+    [A.trackupNumber, A.pifNumber, "Kensign Lifestyles", alA.vehicle.vehicleNo, drvA.driverNumber, "Sampath Madhu", d(0), d(9), 100, "RSA", "ENTERED"]);
   assert.deepEqual(x.expenses.map((e: any) => [e.optionLabel, e.description, e.amount, e.deduct]), [["Toll", "Salem highway toll", 50.25, false]]);
   assert.equal(x.totalPayable, 150.25);
   const x2 = (await rsa(`/payments/${p2._id}`)).body.data;

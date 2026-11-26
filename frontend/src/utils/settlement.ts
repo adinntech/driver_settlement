@@ -87,6 +87,10 @@ export function queueQuery(f: QueueFilters, page: number, limit: number): string
 /** Driver Payments is one shared module: RBP and RSA enter and correct the same records. */
 export const ENTRY_ROLES = ["RBP", "RSA"] as const;
 export const paymentsBase = (role: string | undefined): string => (role === "RSA" ? "/rsa/driver-payments" : "/rbp/payments");
+/** On Road Vehicles tab of each entry role (delivered vehicles; daily payments start here). */
+export const onRoadBase = (role: string | undefined): string => (role === "RSA" ? "/rsa/on-road-vehicles" : "/rbp/on-road-vehicles");
+/** The existing Daily Vehicle Payment form for a project vehicle, opened from On Road Vehicles (returns there afterwards). */
+export const dailyPaymentHref = (role: string | undefined, tv: string): string => `${paymentsBase(role)}/daily?tv=${tv}&from=on-road`;
 
 /** Which actions a role has on an entry (the server enforces the same rules). */
 export function actionsFor(role: string, p: Pick<SettlementRow, "status" | "approver" | "category">) {

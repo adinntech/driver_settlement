@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import AppShell from "@/components/AppShell";
 import { DriverFilters, DriverTable } from "@/components/DriverList";
+import { BulkImportButton } from "@/components/BulkImport";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/Ui";
 import { useApi } from "@/hooks/useApi";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -37,7 +38,10 @@ function Drivers() {
           <h1>Driver Management</h1>
           <p className="muted">Maintain driver details and availability.</p>
         </div>
-        <Link href="/rbp/drivers/edit" className="btn btn-primary">+ Add Driver</Link>
+        <div className="inline ds-gap">
+          <BulkImportButton kind="drivers" onImported={list.reload} />
+          <Link href="/rbp/drivers/edit" className="btn btn-primary">+ Add Driver</Link>
+        </div>
       </div>
 
       <div className="card">

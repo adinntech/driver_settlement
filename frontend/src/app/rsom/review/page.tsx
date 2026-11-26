@@ -143,7 +143,7 @@ function Body({ data, reload }: { data: Review; reload: () => void }) {
         <div className="card compare fade-in">
           <h3 className="sub">Revised budget — V{comparison.fromVersion} (rejected) vs V{comparison.toVersion} (resubmitted)</h3>
           <p className="muted">
-            Previously rejected: {comparison.rejection.reason}
+            Previously rejected{comparison.rejection.reason ? `: ${comparison.rejection.reason}` : ""}
             {comparison.resubmissionComment && <> · <strong>RBP comment:</strong> {comparison.resubmissionComment}</>}
           </p>
           <table className="table">
@@ -258,7 +258,6 @@ function RejectModal({ budget, onClose, onDone }: { budget: Budget; onClose: () 
 
   async function submit() {
     const e: string[] = [];
-    if (!reason.trim()) e.push("Rejection reason is required");
     const keys = Object.keys(picked);
     if (keys.length === 0) e.push("Select at least one field that needs correction");
     for (const k of keys) if (!picked[k].trim()) e.push(`Enter a comment for ${fieldLabel(k)}`);
@@ -269,7 +268,7 @@ function RejectModal({ budget, onClose, onDone }: { budget: Budget; onClose: () 
     try {
       await request(`/approvals/${budget._id}/reject`, "POST", {
         version: budget.currentVersion,
-        reason: reason.trim(),
+        reason: reason.trim() || undefined,
         fields: keys.map((k) => ({ field: k, comment: picked[k].trim() })),
       });
       onDone();
@@ -284,7 +283,7 @@ function RejectModal({ budget, onClose, onDone }: { budget: Budget; onClose: () 
     <Modal title={`Reject budget · V${budget.currentVersion}`} wide onClose={busy ? () => {} : onClose}>
       {errors.length > 0 && <div className="alert" role="alert">{errors.map((e) => <div key={e}>{e}</div>)}</div>}
       <label className="field">
-        <span>Rejection reason *</span>
+        <span>Rejection reason (optional)</span>
         <textarea rows={3} maxLength={1000} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Explain why this budget is rejected" />
       </label>
       <h4 className="sub reject-sub">Fields that need correction *</h4>

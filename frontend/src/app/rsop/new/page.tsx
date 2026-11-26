@@ -11,7 +11,7 @@ import { useToast } from "@/context/ToastContext";
 import { request } from "@/services/api";
 import type { Project, ProjectType } from "@/types/domain";
 import { countDays, formatDate } from "@/utils/format";
-import { earlierOf, inYmdRange, isYmd, keepInRange, laterOf, todayIst } from "@/utils/dates";
+import { earlierOf, earliestStartYmd, inYmdRange, isYmd, keepInRange, laterOf, startDateError, todayIst } from "@/utils/dates";
 import { DecimalInput, PhoneInput } from "@/components/ui/Inputs";
 import { isValidPhone, toFullPhone } from "@/utils/phone";
 import { allowanceText, extraKmError, kmAllowance, parseKmPerDay } from "@/utils/kmAllowance";
@@ -216,10 +216,11 @@ const clean = (f: Form) => Object.fromEntries(Object.entries(f).filter(([, v]) =
 function RoadshowForm() {
   const { f, set, bind, errors, setErrors } = useFormState({
     sundayHalt: "NO", paSystem: "NO", mike: "NO", tv: "NO", promoter: "NO", leaflet: "NO", extraKmAllowed: "NO",
-    photos: "REQUIRED",
+    photos: "REQUIRED", startDate: todayIst(),
   });
   const [locs, setLocs] = useState<string[]>([]);
   const today = todayIst();
+  const minStart = earliestStartYmd(today);
   const [dateNote, setDateNote] = useState("");
   const [elementNote, setElementNote] = useState("");
   // Campaign dates drive the Reporting Date and the Elements & Billing dates: when they change, any of those dates outside the
@@ -267,7 +268,8 @@ function RoadshowForm() {
       if (!f.startDate || !f.endDate) e.push("Start and end dates are required");
       else if (!isYmd(f.startDate) || !isYmd(f.endDate)) e.push("Start and end dates must be valid dates");
       else {
-        if (f.startDate < todayIst()) e.push("Start date cannot be in the past");
+        const se = startDateError(f.startDate, "Start date");
+        if (se) e.push(se);
         if (f.endDate < f.startDate) e.push("End date cannot be before start date");
       }
       if (!f.reportingDate) e.push("Reporting date is required");
@@ -353,13 +355,13 @@ function RoadshowForm() {
           <Field label="Number of Vans *"><input type="number" min={1} max={100} {...bind("numberOfVans")} /></Field>
           <Field label="Innovation Model / LED Model"><input {...bind("innovationModel")} placeholder="2 Sided LED Van" /></Field>
           <Field label="Sunday Halt"><YesNo value={f.sundayHalt} onChange={(v) => set("sundayHalt", v)} /></Field>
-          <Field label="Start Date *" hint="Today or later"><DateInput value={f.startDate ?? ""} min={today} max={f.endDate || undefined} onChange={(e) => setCampaign("startDate", e.target.value)} aria-label="Start Date" /></Field>
-          <Field label="End Date *" hint="On or after the start date"><DateInput value={f.endDate ?? ""} min={f.startDate || today} onChange={(e) => setCampaign("endDate", e.target.value)} aria-label="End Date" /></Field>
+          <Field label="Start Date *" hint="Today or up to 7 days back"><DateInput value={f.startDate ?? ""} min={minStart} max={earlierOf(today, f.endDate)} onChange={(e) => setCampaign("startDate", e.target.value)} aria-label="Start Date" /></Field>
+          <Field label="End Date *" hint="On or after the start date"><DateInput value={f.endDate ?? ""} min={f.startDate || minStart} onChange={(e) => setCampaign("endDate", e.target.value)} aria-label="End Date" /></Field>
           <Field label="Number of Days" hint={f.sundayHalt === "YES" ? "Sundays excluded" : "Sundays included"}>
             <input value={days ? `${days} day${days > 1 ? "s" : ""}` : ""} readOnly />
           </Field>
           <Field label="Reporting Date *" hint={dateNote || "Within the campaign start and end dates"}>
-            <DateInput {...bind("reportingDate")} min={f.startDate || today} max={f.endDate || undefined} disabled={!f.startDate || !f.endDate} aria-label="Reporting Date" />
+            <DateInput {...bind("reportingDate")} min={f.startDate || minStart} max={f.endDate || undefined} disabled={!f.startDate || !f.endDate} aria-label="Reporting Date" />
           </Field>
         </div>
       )}
@@ -443,7 +445,8 @@ function RoadshowForm() {
 
 function SignageForm() {
   const today = todayIst();
-  const { f, bind, set, errors, setErrors } = useFormState({ date: today });
+  const { f, bind, set, errors, setErrors } = useFormState({ date: today, fromDate: today });
+  const minStart = earliestStartYmd(today);
   const [confirm, setConfirm] = useState(false);
   const [manualDays, setManualDays] = useState(false);
   const { submit, busy, done } = useSubmit("SIGNAGE");
@@ -465,6 +468,10 @@ function SignageForm() {
     if (!f.fromDate || !f.toDate) e.push("From and To dates are required");
     else if (!isYmd(f.fromDate) || !isYmd(f.toDate)) e.push("From and To dates must be valid dates");
     else if (f.toDate < f.fromDate) e.push("To date cannot be before from date");
+    if (f.fromDate && isYmd(f.fromDate)) {
+      const se = startDateError(f.fromDate, "From date");
+      if (se) e.push(se);
+    }
     if (f.arrivedBudget && !(Number(f.arrivedBudget) >= 0)) e.push("Arrived budget must be a valid amount");
     if (manualDays && !(Number(f.totalDaysOfWork) >= 1)) e.push("Total days must be at least 1");
     return e;
@@ -499,8 +506,8 @@ function SignageForm() {
         <Field label="Location *"><input {...bind("location")} placeholder="RAMNAD" /></Field>
         <Field label="Number of Vehicles *"><input type="number" min={1} max={100} {...bind("numberOfVehicles")} /></Field>
         <Field label="Arrived Budget (₹)"><input type="number" min={0} {...bind("arrivedBudget")} placeholder="25000" /></Field>
-        <Field label="From Date *"><DateInput {...bind("fromDate")} max={f.toDate || undefined} /></Field>
-        <Field label="To Date *"><DateInput {...bind("toDate")} min={f.fromDate || undefined} /></Field>
+        <Field label="From Date *" hint="Today or up to 7 days back"><DateInput {...bind("fromDate")} min={minStart} max={earlierOf(today, f.toDate)} /></Field>
+        <Field label="To Date *"><DateInput {...bind("toDate")} min={f.fromDate || minStart} /></Field>
         <Field label="Total Days of Work" hint={manualDays ? "Manual value" : "Auto-calculated"}>
           <div className="inline">
             <input

@@ -182,11 +182,10 @@ export function validateAvailability(
     const nd = date(b, "nextAvailableDate", "Next available date");
     const nt = time(b, "nextAvailableTime", "Next available time");
     pair(rd, rt, "Expected release");
+    pair(nd, nt, "Next available"); // optional: without it the vehicle stays In Use until it is released
     if (!draft) {
       // Only approved projects can be allocated: the project must have been picked by Trackup / PIF number (linked server-side).
       if (!pr.trackingProject || !pr.trackingVehicle) errors.push("Select an approved project by Trackup Number or PIF Number");
-      if (nd === null) errors.push("Next available date is required");
-      if (nt === null) errors.push("Next available time is required");
     }
     const releaseAt = joinAt(rd, rt);
     const nextAt = joinAt(nd, nt);

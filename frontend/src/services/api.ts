@@ -119,6 +119,34 @@ export async function request<T>(path: string, method = "GET", body?: unknown): 
   return json.data as T;
 }
 
+/**
+ * Posts one file (multipart "file" field) to an endpoint and returns its envelope. With `allowFailure`, a 4xx answer that still
+ * carries data (e.g. row-wise import errors) is returned as { ok: false } instead of thrown.
+ */
+export async function postFile<T>(path: string, file: File, allowFailure = false): Promise<{ ok: boolean; message: string; data: T }> {
+  const token = tokenStore.get();
+  const fd = new FormData();
+  fd.append("file", file);
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body: fd });
+  } catch {
+    throw new ApiError("Cannot reach the server. Please check your connection.", 0);
+  }
+  let json: ApiResponse<T> | null = null;
+  try {
+    json = (await res.json()) as ApiResponse<T>;
+  } catch {
+    /* non-JSON error body */
+  }
+  if (res.ok && json?.success) {
+    invalidateApiCache();
+    return { ok: true, message: json.message, data: json.data as T };
+  }
+  if (allowFailure && json && json.data) return { ok: false, message: json.message, data: json.data as T };
+  throw new ApiError(json?.message ?? `Request failed (${res.status})`, res.status);
+}
+
 /** Uploads one file (multipart) and returns the stored attachment. Used for vehicle document attachments. */
 export async function uploadAttachment(file: File): Promise<import("@/types/domain").Attachment> {
   const token = tokenStore.get();
@@ -147,7 +175,7 @@ export async function uploadAttachment(file: File): Promise<import("@/types/doma
 
 export interface UploadedPhoto { kind: string; storage: string; key: string; name: string; size: number; mimeType: string; url: string }
 /** Uploads one vehicle delivery photo (multipart) for a clearance; the server binds the stored file to that delivery. */
-export async function uploadDeliveryPhoto(clearanceId: string, kind: "speedometer" | "evidence", file: File): Promise<UploadedPhoto> {
+export async function uploadDeliveryPhoto(clearanceId: string, kind: "speedometer" | "evidence" | "additional", file: File): Promise<UploadedPhoto> {
   const token = tokenStore.get();
   const fd = new FormData();
   fd.append("file", file);

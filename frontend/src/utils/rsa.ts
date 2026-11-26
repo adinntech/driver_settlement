@@ -99,7 +99,7 @@ export function totals(f: PaymentForm) {
 /** Warns (never blocks) when Fuel / Food Allowance are also typed as expense rows next to their own fields: both are counted. */
 export function overlapWarnings(f: PaymentForm): string[] {
   const w: string[] = [];
-  if (f.diesel.length && f.expenses.some((e) => e.optionKey === "FUEL" && !e.deduct)) w.push("Fuel is entered both as Diesel Cost and as an expense row: both amounts are added to the total.");
+  if (f.diesel.length && f.expenses.some((e) => e.optionKey === "FUEL" && !e.deduct)) w.push("Fuel is entered both as Fuel Cost and as an expense row: both amounts are added to the total.");
   if ((amountPaise(f.foodAmount) ?? 0) > 0 && f.expenses.some((e) => e.optionKey === "FOOD_ALLOWANCE" && !e.deduct)) w.push("Food is entered both in the Food field and as an expense row: both amounts are added to the total.");
   return w;
 }

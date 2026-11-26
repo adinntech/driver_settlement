@@ -98,8 +98,8 @@ const mkProject = async (body: unknown) => {
   return r.body.data as any;
 };
 const sched = { expectedReleaseDate: d(3), expectedReleaseTime: "20:00", nextAvailableDate: d(4), nextAvailableTime: "09:00" };
-const sig = await mkProject({ projectType: "SIGNAGE", details: { projectCode: "15000001", client: "Kensign Lifestyles", jobSheetNumber: "ZZDL-1", location: "Coimbatore", date: d(0), fromDate: d(2), toDate: d(9), numberOfVehicles: 10 } });
-const road = await mkProject({ projectType: "ROADSHOW", details: { projectCode: "15000002", billingName: "Ken Roadshow Pvt", stateCode: "33", startDate: d(3), endDate: d(8), reportingDate: d(3), sundayHalt: "NO", numberOfVans: 6, reportingLocations: ["Chennai", "Trichy"] } });
+const sig = await mkProject({ projectType: "SIGNAGE", details: { projectCode: "15000001", client: "Kensign Lifestyles", jobSheetNumber: "ZZDL-1", location: "Coimbatore", date: d(0), fromDate: d(0), toDate: d(9), numberOfVehicles: 10 } });
+const road = await mkProject({ projectType: "ROADSHOW", details: { projectCode: "15000002", billingName: "Ken Roadshow Pvt", stateCode: "33", startDate: d(0), endDate: d(8), reportingDate: d(3), sundayHalt: "NO", numberOfVans: 6, reportingLocations: ["Chennai", "Trichy"] } });
 const nextIdx = new Map<any, number>();
 let next = 0;
 /** A fresh project vehicle with budget + vehicle + driver allotted through the real API; the clearance is created by the assignment. */
@@ -449,6 +449,150 @@ test("regression: RSA clearance, payments and the other modules still work; deli
   await rbp("/summary");
   await rbp(`/${X.cid}`);
   assert.equal(await snap(), before);
+});
+
+test("additional photos: several optional extra photos, bound to this delivery, stored and returned with preview urls", async () => {
+  const A = await fresh(road, "Extra Photos Driver");
+  await approve(A.cid);
+  const p = await photos(A.cid);
+  const ex1 = await upload(A.cid, "additional", JPG, "side-left.jpg");
+  const ex2 = await upload(A.cid, "additional", PNG, "branding.png", "image/png");
+  assert.equal(ex1.status, 201, JSON.stringify(ex1.body));
+  assert.equal(ex1.body.data.kind, "ADDITIONAL");
+  assert.equal((await upload(A.cid, "additional", Buffer.from("not an image"), "x.jpg")).status, 400); // content is checked
+  assert.equal((await upload(A.cid, "selfie", JPG)).status, 400); // unknown photo kind
+  // refused: a photo of another delivery, a duplicate, the speedometer photo reused, too many, not a list
+  const otherKey = xp.s.key; // stored for vehicle X, as a speedometer photo
+  for (const [extra, re] of [
+    [[{ key: otherKey }], /does not belong to this vehicle delivery/],
+    [[{ key: ex1.body.data.key }, { key: ex1.body.data.key }], /duplicate/],
+    [[{ key: p.s.key }], /duplicate/],
+    [Array.from({ length: 11 }, () => ({ key: ex1.body.data.key })), /max 10/],
+    ["nope", /must be a list/],
+  ] as [unknown, RegExp][]) {
+    const r = await deliver(A.cid, payload(p, { additionalPhotos: extra }));
+    assert.equal(r.status, 400, JSON.stringify(r.body));
+    assert.match(r.body.message, re);
+  }
+  assert.equal((await Clearance.findById(A.cid).lean() as any).deliveryStatus ?? "YET_TO_DELIVER", "YET_TO_DELIVER"); // nothing delivered by the refusals
+  const ok = await deliver(A.cid, payload(p, { additionalPhotos: [{ key: ex1.body.data.key }, { key: ex2.body.data.key }] }));
+  assert.equal(ok.status, 201, JSON.stringify(ok.body));
+  assert.deepEqual(ok.body.data.additionalPhotos.map((x: any) => x.name), ["side-left.jpg", "branding.png"]);
+  const doc: any = await VehicleDelivery.findOne({ clearance: A.cid }).lean();
+  assert.equal(doc.additionalPhotos.length, 2);
+  assert.ok(doc.additionalPhotos.every((x: any) => x.key && !("url" in x))); // metadata only; urls are computed on read
+  // the View screen (RBP) and the RSA review both return every photo with a url for the preview
+  const view = (await rbp(`/${A.cid}`)).body.data;
+  assert.ok(view.delivery.speedometerPhoto.url && view.delivery.evidencePhoto.url);
+  assert.equal(view.delivery.additionalPhotos.length, 2);
+  assert.ok(view.delivery.additionalPhotos.every((x: any) => typeof x.url === "string" && x.url.length > 0));
+  assert.ok(view.deliveryHistory.some((e: any) => e.action === "ADDITIONAL_PHOTO_UPLOADED"));
+  // a retry with the same photos returns the delivery instead of creating another
+  const again = await deliver(A.cid, payload(p, { additionalPhotos: [{ key: ex1.body.data.key }, { key: ex2.body.data.key }] }));
+  assert.equal(again.status, 200, JSON.stringify(again.body));
+  assert.equal(await VehicleDelivery.countDocuments({ clearance: A.cid }), 1);
+  // older deliveries without extra photos still read fine
+  assert.deepEqual((await rbp(`/${X.cid}`)).body.data.delivery.additionalPhotos, []);
+});
+
+test("On Road Vehicles: delivered + still allotted vehicles for RBP and RSA, daily payment state, other roles refused", async () => {
+  const t = await T();
+  const list = async (token: string, qs = "") => call(`/settlements/on-road${qs}`, "GET", undefined, token);
+  for (const token of [t.rbp, t.rsa]) {
+    const r = await list(token);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    const tv = new Set(r.body.data.items.map((x: any) => x.trackingVehicle));
+    assert.ok(tv.has(String(X.tvx._id)), "delivered vehicle is on road");
+    assert.ok(!tv.has(String(Y.tvx._id)), "approved but not delivered is not on road");
+    assert.ok(!tv.has(String(P.tvx._id)) && !tv.has(String(R.tvx._id)), "pending / rejected are not on road");
+    const x = r.body.data.items.find((i: any) => i.trackingVehicle === String(X.tvx._id));
+    const cur: any = await Clearance.findById(X.cid).lean(); // an earlier test changed this vehicle's driver after delivery
+    assert.deepEqual([x.vehicleNo, x.driverName, x.projectType], [cur.vehicleNo, cur.driverName, "ROADSHOW"]);
+    assert.ok(x.deliveredAt && x.deliveredBy === "RBP");
+    assert.deepEqual(x.dailyPayments, { count: 0, pending: 0, rejected: 0, lastPaidUpTo: null });
+  }
+  assert.equal((await list(t.rbp, `?q=${encodeURIComponent(X.veh.vehicleNo)}`)).body.data.items.length, 1);
+  assert.equal((await list(t.rbp, "?projectType=SIGNAGE")).body.data.items.some((i: any) => i.trackingVehicle === String(X.tvx._id)), false);
+  assert.equal((await list(t.rsom)).status, 403);
+  assert.equal((await list(t.rsop)).status, 403);
+  // released: no longer on road
+  const rel = await call(`/vehicle-allotments/${X.allotment._id}/release`, "POST", { reason: "Campaign ended" }, t.rbp);
+  assert.equal(rel.status, 200, JSON.stringify(rel.body));
+  assert.ok(!(await list(t.rbp)).body.data.items.some((i: any) => i.trackingVehicle === String(X.tvx._id)));
+});
+
+test("On Road Vehicles regression: list never uses a payment id; vehicles with and without payments, filters, valid daily-payment targets, bad ids", async () => {
+  const t = await T();
+  const onRoad = async (token: string, qs = "") => call(`/settlements/on-road${qs}`, "GET", undefined, token);
+  const deliverNew = async (proj: any, name: string) => {
+    const v = await fresh(proj, name);
+    await approve(v.cid);
+    const ph = await photos(v.cid);
+    const r = await deliver(v.cid, payload(ph));
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    return v;
+  };
+  // three delivered vehicles on two projects: one paid by RBP, one paid by RSA and approved by RSOM, one never paid
+  const paidRbp = await deliverNew(sig, "Paid By RBP Driver");
+  const paidRsa = await deliverNew(sig, "Paid By RSA Driver");
+  const unpaid = await deliverNew(road, "Never Paid Driver");
+  let k = 0;
+  const pay = async (token: string, v: any) => {
+    const c = (await call(`/settlements/projects/${v.tvx._id}`, "GET", undefined, token)).body.data;
+    const r = await call(`/settlements/projects/${v.tvx._id}/daily`, "POST", { paymentFor: c.projectType, fromDate: c.campaign.fromDate, toDate: c.campaign.fromDate, foodAmount: "300", idempotencyKey: `onroad-regression-${++k}` }, token);
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    return r.body.data;
+  };
+  await pay(t.rbp, paidRbp);
+  const second = await pay(t.rsa, paidRsa);
+  const ap = await call(`/settlements/${second._id}/approve`, "POST", { version: second.version }, t.rsom); // RSOM approval workflow unchanged
+  assert.equal(ap.status, 200, JSON.stringify(ap.body));
+
+  for (const [role, token] of [["RBP", t.rbp], ["RSA", t.rsa]] as const) {
+    const r = await onRoad(token, "?limit=100");
+    assert.equal(r.status, 200, `${role}: ${JSON.stringify(r.body)}`); // never "Invalid payment id": /on-road is not read as /:id
+    const row = (v: any) => r.body.data.items.find((i: any) => i.trackingVehicle === String(v.tvx._id));
+    assert.ok(row(unpaid), `${role}: a vehicle without any payment is listed`);
+    assert.deepEqual(row(unpaid).dailyPayments, { count: 0, pending: 0, rejected: 0, lastPaidUpTo: null });
+    assert.deepEqual([row(paidRbp).dailyPayments.count, row(paidRbp).dailyPayments.pending], [1, 1]);
+    assert.deepEqual([row(paidRsa).dailyPayments.count, row(paidRsa).dailyPayments.pending], [1, 0]); // approved by RSOM
+    assert.ok(row(paidRbp).dailyPayments.lastPaidUpTo);
+    assert.equal(r.body.data.total, r.body.data.items.length);
+    // every row's Daily Vehicle Payment target (the project vehicle id) opens the existing payment context for this role
+    for (const item of r.body.data.items) {
+      assert.match(item.trackingVehicle, /^[a-f0-9]{24}$/);
+      const ctx = await call(`/settlements/projects/${item.trackingVehicle}`, "GET", undefined, token);
+      assert.equal(ctx.status, 200, `${role} ${item.trackupNumber}: ${JSON.stringify(ctx.body)}`);
+      assert.equal(ctx.body.data.trackupNumber, item.trackupNumber);
+      assert.equal(ctx.body.data.vehicleNo, item.vehicleNo);
+    }
+    // filters: project type and search (trackup, vehicle no, driver name)
+    const types = (await onRoad(token, "?projectType=SIGNAGE&limit=100")).body.data.items;
+    assert.ok(types.length >= 2 && types.every((i: any) => i.projectType === "SIGNAGE"));
+    assert.ok(!types.some((i: any) => i.trackingVehicle === String(unpaid.tvx._id)));
+    assert.ok((await onRoad(token, "?projectType=ROADSHOW&limit=100")).body.data.items.some((i: any) => i.trackingVehicle === String(unpaid.tvx._id)));
+    for (const q of [unpaid.tvx.trackupNumber, unpaid.veh.vehicleNo, "never paid"]) {
+      const hit = (await onRoad(token, `?q=${encodeURIComponent(q)}`)).body.data.items;
+      assert.deepEqual(hit.map((i: any) => i.trackingVehicle), [String(unpaid.tvx._id)], q);
+    }
+    assert.deepEqual((await onRoad(token, "?q=%25.*%5B")).body.data.items, []); // regex characters are escaped
+    assert.equal((await onRoad(token, "?projectType=NOPE")).status, 200); // an unknown type is ignored, not an error
+    // pagination
+    const p1 = (await onRoad(token, "?limit=1&page=1")).body.data;
+    const p2 = (await onRoad(token, "?limit=1&page=2")).body.data;
+    assert.equal(p1.items.length, 1);
+    assert.notEqual(p1.items[0].trackingVehicle, p2.items[0]?.trackingVehicle);
+  }
+  // invalid / missing ids give precise errors on their own routes; the list itself never needs one
+  assert.equal((await call("/settlements/projects/not-an-id", "GET", undefined, t.rbp)).status, 400);
+  assert.equal((await call(`/settlements/projects/${"0".repeat(24)}`, "GET", undefined, t.rbp)).status, 404);
+  const badPay = await call("/settlements/not-an-id", "GET", undefined, t.rbp);
+  assert.deepEqual([badPay.status, badPay.body.message], [400, "Invalid payment id"]);
+  assert.equal((await call(`/settlements/${"0".repeat(24)}`, "GET", undefined, t.rbp)).status, 404);
+  // permissions unchanged: only the entry roles see the list; no token is refused
+  assert.equal((await onRoad(t.rsom)).status, 403);
+  assert.equal((await onRoad(t.rsop)).status, 403);
+  assert.equal((await call("/settlements/on-road")).status, 401);
 });
 
 test("cleanup", async () => {

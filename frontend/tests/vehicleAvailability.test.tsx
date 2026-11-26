@@ -50,7 +50,7 @@ test("conditional fields: Available Now shows only availability; In Use shows pr
 
   const use = render(inUse());
   assert.ok(use.includes('data-panel="in-use"'));
-  for (const l of ["Project Allocation Details", "Trackup Number", "PIF Number", "Client / Billing Name", "Project Type", "Project Name", "Project Period", "Expected Release", "Next Available", "Additional Remarks", "Only approved projects are available for vehicle allocation."])
+  for (const l of ["Project Allocation Details", "Trackup Number", "PIF Number", "Client / Billing Name", "Project Type", "Project Name", "Project Period", "Expected Release", "Next Available", "Remarks", "Only approved projects are available for vehicle allocation."])
     assert.ok(use.includes(l), l);
   assert.ok(use.includes("25-Nov-2026 – 30-Nov-2026")); // project period from the approved project
   assert.ok(!use.includes('data-panel="available"') && !use.includes("Issue Category"));
@@ -113,10 +113,11 @@ test("selecting an existing project auto-populates its details; RBP keeps own lo
   assert.equal(u.remarks, "needs ladder");
 });
 
-test("validation: In Use needs an approved (linked) project and a next available date AND time", () => {
+test("validation: In Use needs an approved (linked) project; next available is optional but needs date AND time together", () => {
   assert.deepEqual(validateAvailability(inUse(), false, NOW), []);
-  assert.ok(validateAvailability(inUse({ nextAvailableDate: "" }), false, NOW).includes("Next available date is required"));
-  assert.ok(validateAvailability(inUse({ nextAvailableTime: "" }), false, NOW).includes("Next available time is required"));
+  assert.deepEqual(validateAvailability(inUse({ nextAvailableDate: "", nextAvailableTime: "" }), false, NOW), []);
+  assert.ok(validateAvailability(inUse({ nextAvailableDate: "" }), false, NOW).includes("Next available: both date and time are required"));
+  assert.ok(validateAvailability(inUse({ nextAvailableTime: "" }), false, NOW).includes("Next available: both date and time are required"));
   const noProject = validateAvailability({ ...inUse(), project: emptyAvailability(NOW).project }, false, NOW);
   assert.ok(noProject.includes("Select an approved project by Trackup Number or PIF Number"));
   const typedOnly = inUse(); typedOnly.project = { ...typedOnly.project, trackingProject: "", trackupNumber: "TRK-X" }; // typed but not matched to an approved project

@@ -303,10 +303,10 @@ test("regression: Driver Management CRUD, Driver Number, Company / Acting type, 
   const g = (await call(`/drivers/${d._id}`, "GET", undefined, t)).body.data;
   assert.deepEqual([g.driverNumber, g.driverType, g.salary, g.accountName, g.accountNumber, g.ifscCode, g.bankName, g.status], [d.driverNumber, "ACTING_DRIVER", 450.5, "Advance Driver", "123456789012", "SBIN0001234", "SBI", "ACTIVE"]);
   assert.match(g.driverNumber, /^DR-\d{4,5}$/);
-  const up = await call(`/drivers/${d._id}`, "PUT", { driverName: "Renamed Driver", driverType: "COMPANY_DRIVER", mobileNumber: d.mobileNumber, salary: 500 }, t);
-  assert.equal(up.status, 200, JSON.stringify(up.body));
-  assert.equal(up.body.data.driverNumber, d.driverNumber);
-  assert.equal(up.body.data.driverType, "COMPANY_DRIVER");
+  // the salary is locked in Driver Management once saved, so the revision is applied to the record directly here
+  const locked = await call(`/drivers/${d._id}`, "PUT", { driverName: d.driverName, driverType: "ACTING_DRIVER", mobileNumber: d.mobileNumber, salary: 500 }, t);
+  assert.equal(locked.status, 403, JSON.stringify(locked.body));
+  await mongoose.connection.collection("drivers").updateOne({ _id: new mongoose.Types.ObjectId(String(d._id)) }, { $set: { salary: 500 } });
   const hist = await list(d._id);
   assert.equal(hist.data.total, 2);
   assert.ok(hist.data.items.every((x: any) => x.perDaySalary === 450.5)); // the edit to 500 did not touch past advances

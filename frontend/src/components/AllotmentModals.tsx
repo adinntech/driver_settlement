@@ -169,7 +169,7 @@ export function AllotModal({ project, onClose, onDone }: { project: AllotmentPro
       <Field label="Expected Release">
         <DT d={f.expectedReleaseDate} t={f.expectedReleaseTime} onD={(v) => set("expectedReleaseDate", v)} onT={(v) => set("expectedReleaseTime", v)} label="Expected release" min={f.allottedDate || undefined} />
       </Field>
-      <Field label="Next Available" req>
+      <Field label="Next Available (optional)">
         <DT d={f.nextAvailableDate} t={f.nextAvailableTime} onD={(v) => set("nextAvailableDate", v)} onT={(v) => set("nextAvailableTime", v)} label="Next available" min={laterOf(todayIst(), f.expectedReleaseDate)} />
       </Field>
       <Field label="Remarks">
@@ -518,7 +518,7 @@ export function ExtendModal({ project, onClose, onDone }: { project: AllotmentPr
       <Field label="Expected Release">
         <DT d={s.expectedReleaseDate} t={s.expectedReleaseTime} onD={(v) => setS({ ...s, expectedReleaseDate: v })} onT={(v) => setS({ ...s, expectedReleaseTime: v })} label="Expected release" />
       </Field>
-      <Field label="Next Available" req>
+      <Field label="Next Available (optional)">
         <DT d={s.nextAvailableDate} t={s.nextAvailableTime} onD={(v) => setS({ ...s, nextAvailableDate: v })} onT={(v) => setS({ ...s, nextAvailableTime: v })} label="Next available" />
       </Field>
       <Field label="Reason">

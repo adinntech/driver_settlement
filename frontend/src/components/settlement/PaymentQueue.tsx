@@ -310,7 +310,7 @@ function DailyBreakdown({ data }: { data: Record<string, any> }) {
     <section className="ds-sec">
       <h4>Daily payment</h4>
       <KV items={[
-        ["Payment For", data.paymentFor === "SIGNAGE" ? "Signage" : "RoadShow"], ["Cash in Hand", data.cashInHand ? "Yes" : "No"], ["Diesel Cost", formatInr(data.dieselTotal)],
+        ["Payment For", data.paymentFor === "SIGNAGE" ? "Signage" : "RoadShow"], ["Cash in Hand", data.cashInHand ? "Yes" : "No"], ["Fuel Cost", formatInr(data.dieselTotal)],
         ["Food", formatInr(data.foodAmount)], ["Salary Advance", formatInr(data.salaryAdvance)],
       ]} />
       {!!data.expenses?.length && (
@@ -334,7 +334,7 @@ function FinalBreakdown({ data }: { data: Record<string, any> }) {
         <KV items={[
           ["Campaign", `${formatDate(data.campaignFrom)} to ${formatDate(data.campaignTo)}`], ["Total Days", data.totalDays], ["Location", data.location], ["Reporting Date", formatDate(data.reportingDate)],
           ["Fixed Mileage", `${data.fuel.fixedMileage} km/l`], ["Opening / Closing KM", `${data.fuel.openingKm} / ${data.fuel.closingKm}`], ["Result", `${data.fuel.resultKm} km`],
-          ["Diesel Cost", `${formatInr(data.fuel.dieselCost)} / l`], ["IOCL (litres / KMs)", `${data.fuel.ioclLitres} / ${data.fuel.ioclKms}`], ["Variation in Litres", data.fuel.variationLitres],
+          ["Fuel Cost", `${formatInr(data.fuel.dieselCost)} / l`], ["IOCL (litres / KMs)", `${data.fuel.ioclLitres} / ${data.fuel.ioclKms}`], ["Variation in Litres", data.fuel.variationLitres],
           ["Estimated Budget", formatInr(data.estimate.estimatedBudget)], ["Estimated KM / Fuel", `${data.estimate.estimatedKm} km / ${data.estimate.estimatedFuel} l`],
           // KM allowance saved with the settlement (RoadShow; absent on settlements saved before it was recorded)
           ...(data.km && data.km.totalAllowedKm !== null && data.km.totalAllowedKm !== undefined ? [

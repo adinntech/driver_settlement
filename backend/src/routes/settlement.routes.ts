@@ -5,6 +5,7 @@ import {
   settlementOptions, submitSettlement, viewBudget, viewDriver,
 } from "../services/settlement.service.js";
 import { accountsExport, approvedPaymentRows, driverListRows, driverSalaryPdf, driverSalaryRows, reportWorkbook, vehicleMisRows } from "../services/settlementReports.service.js";
+import { listOnRoadVehicles } from "../services/onRoad.service.js";
 import { sendResponse } from "../utils/sendResponse.js";
 import { AppError } from "../utils/AppError.js";
 
@@ -35,6 +36,10 @@ router.get("/options", ALL, wrap(async (_req, res) => void ok(res, "Options fetc
 const ENTRY = requireRole("RBP", "RSA"); // the shared Driver Payments module
 router.get("/projects", ENTRY, wrap(async (req, res) => {
   ok(res, "Eligible projects fetched", await listEligibleProjects({ q: q(req.query.q), projectType: q(req.query.projectType), page: n(req.query.page), limit: n(req.query.limit) }));
+}));
+// On Road Vehicles tab (RBP + RSA): delivered vehicles still on road; daily payments open the existing entry form below.
+router.get("/on-road", ENTRY, wrap(async (req, res) => {
+  ok(res, "On road vehicles fetched", await listOnRoadVehicles({ q: q(req.query.q), projectType: q(req.query.projectType), page: n(req.query.page), limit: n(req.query.limit) }));
 }));
 router.get("/projects/:tvId", ENTRY, wrap(async (req, res) => void ok(res, "Project fetched", await settlementContext(String(req.params.tvId)))));
 router.get("/projects/:tvId/budget", ENTRY, wrap(async (req, res) => void ok(res, "Budget fetched", await viewBudget(String(req.params.tvId)))));

@@ -88,7 +88,7 @@ function Allotment() {
                           <div className="av-cell">
                             <strong className="num">{p.allotment.vehicleNo}</strong>
                             <small>Allotted {fmtInstant(p.allotment.allottedAt)}</small>
-                            <small>Next available {fmtInstant(p.allotment.nextAvailableAt)}</small>
+                            <small>{p.allotment.nextAvailableAt ? `Next available ${fmtInstant(p.allotment.nextAvailableAt)}` : "No next available date"}</small>
                           </div>
                         ) : (
                           <span className="muted">Not allotted</span>

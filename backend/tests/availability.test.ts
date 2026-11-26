@@ -61,9 +61,12 @@ test("In Use: project details, release and next available date & time are valida
   assert.deepEqual(ok.errors, []);
   assert.equal(ok.data?.nextAvailableAt, "2026-11-26T09:00");
   assert.equal(ok.data?.issue, null); // issue fields hidden for this status
-  // mandatory next available date AND time
-  assert.ok(v(inUse({ nextAvailableDate: "" })).errors.includes("Next available date is required"));
-  assert.ok(v(inUse({ nextAvailableTime: undefined })).errors.includes("Next available time is required"));
+  // next available is optional, but when given it needs both the date AND the time
+  assert.ok(v(inUse({ nextAvailableDate: "" })).errors.includes("Next available: both date and time are required"));
+  assert.ok(v(inUse({ nextAvailableTime: undefined })).errors.includes("Next available: both date and time are required"));
+  const open = v(inUse({ nextAvailableDate: "", nextAvailableTime: "" }));
+  assert.deepEqual(open.errors, []);
+  assert.equal(open.data?.nextAvailableAt, null); // no automatic release
   // missing project details
   assert.ok(v({ ...inUse(), project: {} }).errors.includes("Select an approved project by Trackup Number or PIF Number")); // only an approved, linked project can be allocated
   assert.ok(v({ ...inUse(), project: { projectName: "Manual", clientName: "Manual", projectType: "ROADSHOW" } }).errors.some((e) => /approved project/.test(e)));
@@ -201,13 +204,13 @@ const mkBudget = (tv: any, projectId: string, state: Record<string, unknown>) =>
   const t = await T();
   const r = await call("/tracking", "POST", {
     projectType: "SIGNAGE",
-    details: { projectCode: "13000001", client: "Pepsi India", jobSheetNumber: "ZZPEP-77", location: "Coimbatore", date: d(0), fromDate: d(2), toDate: d(9), numberOfVehicles: 14 },
+    details: { projectCode: "13000001", client: "Pepsi India", jobSheetNumber: "ZZPEP-77", location: "Coimbatore", date: d(0), fromDate: d(0), toDate: d(9), numberOfVehicles: 14 },
   }, t.rsop);
   assert.equal(r.status, 201, JSON.stringify(r.body));
   proj = r.body.data;
   const rr = await call("/tracking", "POST", {
     projectType: "ROADSHOW",
-    details: { projectCode: "13000002", billingName: "KFC", stateCode: "33", startDate: d(2), endDate: d(6), reportingDate: d(2), sundayHalt: "NO", numberOfVans: 2, reportingLocations: ["Chennai", "Trichy"] },
+    details: { projectCode: "13000002", billingName: "KFC", stateCode: "33", startDate: d(0), endDate: d(6), reportingDate: d(2), sundayHalt: "NO", numberOfVans: 2, reportingLocations: ["Chennai", "Trichy"] },
   }, t.rsop);
   assert.equal(rr.status, 201, JSON.stringify(rr.body));
   road = rr.body.data;
@@ -221,7 +224,7 @@ const mkBudget = (tv: any, projectId: string, state: Record<string, unknown>) =>
   // vehicles[13]: no budget at all
   for (const tv of road.vehicles) await mkBudget(tv, road._id, approved);
   const ar = await call("/tracking", "POST", {
-    projectType: "SIGNAGE", details: { projectCode: "13000003", client: "Auto Motors", jobSheetNumber: "ZZAUTO-1", location: "Salem", date: d(0), fromDate: d(2), toDate: d(9), numberOfVehicles: 12 },
+    projectType: "SIGNAGE", details: { projectCode: "13000003", client: "Auto Motors", jobSheetNumber: "ZZAUTO-1", location: "Salem", date: d(0), fromDate: d(0), toDate: d(9), numberOfVehicles: 12 },
   }, t.rsop);
   assert.equal(ar.status, 201, JSON.stringify(ar.body));
   auto = ar.body.data;
@@ -249,7 +252,7 @@ test("suggestions: only projects with a currently approved budget; draft / pendi
   assert.equal(row.clientName, "Pepsi India");
   assert.equal(row.projectType, "SIGNAGE");
   assert.match(row.projectName, /Pepsi India Signage – ZZPEP-77/);
-  assert.equal(row.startDate, d(2));
+  assert.equal(row.startDate, d(0));
   assert.equal(row.endDate, d(9));
   assert.equal(row.location, "Coimbatore");
   assert.equal(row.allocatedTo, null);
@@ -305,7 +308,7 @@ test("mapping: trackup gives its own PIF, PIF gives its own trackup (each vehicl
   assert.equal(rs.body.data.projectType, "ROADSHOW");
   assert.equal(rs.body.data.projectName, "KFC Roadshow");
   assert.equal(rs.body.data.location, "Chennai, Trichy");
-  assert.equal(rs.body.data.startDate, d(2));
+  assert.equal(rs.body.data.startDate, d(0));
 });
 
 test("mapping: invalid trackup / PIF, mismatched pair and unapproved projects are rejected with the standard envelope", async () => {
@@ -346,7 +349,7 @@ test("create with each status; In Use fills the matching PIF from the trackup (o
   assert.equal(p.clientName, "Pepsi India"); // from the database, not the request
   assert.match(p.projectName, /Pepsi India Signage/);
   assert.equal(p.projectType, "SIGNAGE");
-  assert.equal(p.startDate, d(2));
+  assert.equal(p.startDate, d(0));
   assert.equal(p.trackingProject, proj._id);
   assert.equal(p.trackingVehicle, proj.vehicles[0]._id);
   assert.equal(p.budgetVersion, 1);
@@ -386,7 +389,7 @@ test("allocation validation: needs an approved, matching project; invalid / mism
     [use({ trackupNumber: trk[8] }), /Only approved projects can be allocated/],
     [use({ trackupNumber: trk[11] }), /Only approved projects can be allocated/],
     [use({ trackupNumber: trk[13] }), /Only approved projects can be allocated/],
-    [use({ trackupNumber: trk[3] }, { nextAvailableTime: "" }), /Next available time is required/],
+    [use({ trackupNumber: trk[3] }, { nextAvailableTime: "" }), /Next available: both date and time are required/],
     [use({ trackupNumber: trk[3] }, { nextAvailableDate: "2026-02-31" }), /valid date/],
   ] as const) {
     const r = await call("/vehicles", "POST", full({ availability }), t.rbp);

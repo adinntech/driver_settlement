@@ -128,8 +128,8 @@ export function validateAvailability(a: AvForm, draft: boolean, now = new Date()
     if (!draft) {
       // only an approved project, picked by Trackup / PIF number, can be allocated
       if (!pr.trackingProject) e.push("Select an approved project by Trackup Number or PIF Number");
-      if (!a.nextAvailableDate) e.push("Next available date is required");
-      if (!a.nextAvailableTime) e.push("Next available time is required");
+      // Next available is optional: both date and time, or neither (then no automatic release)
+      if ((!a.nextAvailableDate) !== (!a.nextAvailableTime)) e.push("Next available: both date and time are required");
       if ((!a.expectedReleaseDate) !== (!a.expectedReleaseTime)) e.push("Expected release: both date and time are required");
     }
     const rel = at(a.expectedReleaseDate, a.expectedReleaseTime);
@@ -188,7 +188,7 @@ export function formatLabelAt(v: string): string {
 interface AvVehicle {
   availability?: {
     status?: string | null; availableFromDate?: string | null; availableFromTime?: string | null;
-    project?: { projectName?: string | null; clientName?: string | null; projectType?: string | null } | null;
+    project?: { projectName?: string | null; clientName?: string | null; projectType?: string | null; remarks?: string | null } | null;
     expectedReleaseDate?: string | null; expectedReleaseTime?: string | null; nextAvailableDate?: string | null; nextAvailableTime?: string | null;
     issue?: { category?: string | null; description?: string | null; expectedRepairDate?: string | null; expectedRepairTime?: string | null } | null;
   } | null;
@@ -203,5 +203,8 @@ export function nextAvailableText(v: AvVehicle): string {
 }
 export const expectedReleaseText = (v: AvVehicle): string =>
   v.availability?.status === "IN_USE" ? formatAt(v.availability.expectedReleaseDate, v.availability.expectedReleaseTime) : "—";
+/** Remarks RBP saved for an "In Use – Another Project" allocation ("" when none, or the vehicle is not in use). */
+export const inUseRemarks = (v: AvVehicle): string =>
+  v.availability?.status === "IN_USE" ? (v.availability.project?.remarks ?? "").trim() : "";
 export const issueReasonText = (v: AvVehicle): string =>
   v.availability?.status === "ISSUE" ? [v.availability.issue?.category, v.availability.issue?.description].filter(Boolean).join(": ") || "—" : "—";

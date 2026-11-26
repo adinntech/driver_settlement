@@ -27,8 +27,8 @@ const err = async (s) => (await s.text(".dsf > .alert[role=alert]")).replace(/\n
       const e = await err(s); t.note(e);
       t.expect(/at least one amount/i.test(e), "empty payment accepted");
     });
-    await tc(s, "DP-03", "A typed diesel cost that was not added with + is flagged; bunk name is required", "RBP", async (t) => {
-      await s.page.type('input[aria-label="Diesel cost"]', "2500");
+    await tc(s, "DP-03", "A typed fuel cost that was not added with + is flagged; bunk name is required", "RBP", async (t) => {
+      await s.page.type('input[aria-label="Fuel cost"]', "2500");
       await s.page.click('button[aria-label="Add diesel entry"]'); await sleep(300);
       const e1 = await err(s); t.note(`+ without bunk: ${e1}`);
       t.expect(/bunk name/i.test(e1), "bunk name not required");

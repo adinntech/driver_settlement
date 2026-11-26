@@ -27,7 +27,7 @@ test("entry form uses the full width; Payment History is a top-right button that
 
 test("the form itself still has every field and button (only the layout changed)", () => {
   const screen = src("components/RsaPayment.tsx");
-  for (const k of ["PaymentFormPanel", "ExpenseTable", "RsaActionBar", "View Budget", "View Driver", "Check Advance Eligibility", "Total Payable", "Cash In Hand", "Salary Advance", "Diesel Cost", "onSaved", "hist.reload()"]) assert.ok(screen.includes(k), k);
+  for (const k of ["PaymentFormPanel", "ExpenseTable", "RsaActionBar", "View Budget", "View Driver", "Check Advance Eligibility", "Total Payable", "Cash In Hand", "Salary Advance", "Fuel Cost", "onSaved", "hist.reload()"]) assert.ok(screen.includes(k), k);
 });
 
 test("drawer: faded backdrop, titled dialog, Close button; the history inside shows its table (latest first) or the empty state", () => {

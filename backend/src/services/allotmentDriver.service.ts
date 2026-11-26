@@ -87,7 +87,15 @@ export async function lookupAvailableDriver(by: { number?: string; name?: string
 /** Fields of an allotment (or the allotment about to be created) that the driver's allocation mirrors. */
 interface AllotmentLike {
   project: unknown; trackingVehicle: unknown; budget?: unknown; budgetVersion?: number | null; projectType?: string; projectName?: string; clientName?: string;
-  trackupNumber: string; pifNumber: string; allottedAt: Date; nextAvailableAt: Date; remarks?: string | null; vehicle: unknown; vehicleNo?: string;
+  trackupNumber: string; pifNumber: string; allottedAt: Date; nextAvailableAt: Date | null; expectedReleaseAt?: Date | null; projectEnd?: string | null; remarks?: string | null; vehicle: unknown; vehicleNo?: string;
+}
+
+/**
+ * The driver's To date: the allotment's next-available day; when that optional moment is not set, the expected release day,
+ * then the project end date, then the allotment day itself.
+ */
+export function driverEndDate(a: Pick<AllotmentLike, "nextAvailableAt" | "expectedReleaseAt" | "projectEnd" | "allottedAt">): string {
+  return dateToIst(a.nextAvailableAt ?? null)?.date ?? dateToIst(a.expectedReleaseAt ?? null)?.date ?? (a.projectEnd || dateToIst(a.allottedAt)!.date);
 }
 
 /** "In Use – Another Project" for the driver: From = allotment day, To = the day the allotment ends (IST). The driver scheduler releases after To. */
@@ -97,7 +105,7 @@ export function driverInUseBlock(a: AllotmentLike, allotmentId: unknown): any {
     project: {
       trackingProject: str(a.project), trackingVehicle: str(a.trackingVehicle), budget: str(a.budget), budgetVersion: a.budgetVersion ?? null,
       projectType: a.projectType ?? null, projectName: a.projectName ?? null, clientName: a.clientName ?? null, trackupNumber: a.trackupNumber, pifNumber: a.pifNumber,
-      startDate: dateToIst(a.allottedAt)!.date, endDate: dateToIst(a.nextAvailableAt)!.date, remarks: a.remarks ?? null,
+      startDate: dateToIst(a.allottedAt)!.date, endDate: driverEndDate(a), remarks: a.remarks ?? null,
       allotment: str(allotmentId), vehicle: str(a.vehicle), vehicleNo: a.vehicleNo ?? null,
     },
   };
@@ -168,7 +176,7 @@ export async function syncDriverSchedule(a: any, username: string, now = new Dat
   if (!a?.activeDriver) return;
   const cur: any = await Driver.findById(a.activeDriver).lean();
   if (!cur || cur.availability?.status !== "IN_USE" || String(cur.availability.project?.allotment ?? "") !== String(a._id)) return;
-  const endDate = dateToIst(a.nextAvailableAt)!.date;
+  const endDate = driverEndDate(a);
   if (cur.availability.project.endDate === endDate) return;
   const next = { ...cur.availability, project: { ...cur.availability.project, endDate } };
   const upd = await Driver.findOneAndUpdate(

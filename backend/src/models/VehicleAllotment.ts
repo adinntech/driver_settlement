@@ -30,7 +30,7 @@ const allotmentSchema = new Schema(
     projectEnd: String,
     allottedAt: { type: Date, required: true }, // instants are stored in UTC and shown in IST
     expectedReleaseAt: Date,
-    nextAvailableAt: { type: Date, required: true },
+    nextAvailableAt: { type: Date, default: null }, // optional: null = no automatic release
     remarks: String,
     status: { type: String, enum: ALLOTMENT_STATUSES, required: true, default: "ACTIVE" },
     releasedAt: Date,

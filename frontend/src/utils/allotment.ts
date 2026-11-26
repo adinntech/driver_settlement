@@ -52,18 +52,21 @@ export function validateSchedule(s: Schedule, allotted: Date | null): string[] {
     if (!s.expectedReleaseDate || !s.expectedReleaseTime) e.push("Expected release: both date and time are required");
     else if (!realDate(s.expectedReleaseDate) || !realTime(s.expectedReleaseTime)) e.push("Expected release date & time is invalid");
   }
-  if (!s.nextAvailableDate) e.push("Next available date is required");
-  else if (!realDate(s.nextAvailableDate)) e.push("Next available date is not a valid date");
-  if (!s.nextAvailableTime) e.push("Next available time is required");
-  else if (!realTime(s.nextAvailableTime)) e.push("Next available time is not a valid time");
+  // Next available is optional (both date and time, or neither): without it the vehicle stays In Use until it is released.
+  const hasN = !!(s.nextAvailableDate || s.nextAvailableTime);
+  if (hasN) {
+    if (!s.nextAvailableDate || !s.nextAvailableTime) e.push("Next available: both date and time are required");
+    else if (!realDate(s.nextAvailableDate)) e.push("Next available date is not a valid date");
+    else if (!realTime(s.nextAvailableTime)) e.push("Next available time is not a valid time");
+  }
   if (e.length) return e;
-  const next = toInstant(s.nextAvailableDate, s.nextAvailableTime);
+  const next = hasN ? toInstant(s.nextAvailableDate, s.nextAvailableTime) : null;
   if (hasE) {
     const rel = toInstant(s.expectedReleaseDate, s.expectedReleaseTime);
     if (allotted && rel < allotted) e.push("Expected release cannot be before the allotment date & time");
-    if (next < rel) e.push("Next available date & time cannot be before the expected release");
+    if (next && next < rel) e.push("Next available date & time cannot be before the expected release");
   }
-  if (allotted && next < allotted) e.push("Next available date & time cannot be before the allotment date & time");
+  if (allotted && next && next < allotted) e.push("Next available date & time cannot be before the allotment date & time");
   return e;
 }
 
@@ -78,7 +81,7 @@ export function validateAllotForm(f: AllotForm, now = new Date()): string[] {
     if (allotted.getTime() > now.getTime() + 60_000) e.push("Allotment date & time cannot be in the future");
   }
   e.push(...validateSchedule(f, allotted));
-  if (!e.length && toInstant(f.nextAvailableDate, f.nextAvailableTime) < now) e.push("Next available date & time cannot be in the past");
+  if (!e.length && f.nextAvailableDate && f.nextAvailableTime && toInstant(f.nextAvailableDate, f.nextAvailableTime) < now) e.push("Next available date & time cannot be in the past");
   return e;
 }
 
@@ -145,7 +148,7 @@ export const toChangePayload = (f: ChangeForm) => ({
 });
 
 /** Form values for the extension dialog, from the allotment's stored instants. */
-export function scheduleFromAllotment(a: { expectedReleaseAt?: string | null; nextAvailableAt: string }): Schedule {
+export function scheduleFromAllotment(a: { expectedReleaseAt?: string | null; nextAvailableAt?: string | null }): Schedule {
   const e = instantToIst(a.expectedReleaseAt);
   const n = instantToIst(a.nextAvailableAt);
   return { expectedReleaseDate: e?.date ?? "", expectedReleaseTime: e?.time ?? "", nextAvailableDate: n?.date ?? "", nextAvailableTime: n?.time ?? "" };

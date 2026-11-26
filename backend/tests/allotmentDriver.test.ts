@@ -86,7 +86,7 @@ const pool: any[] = [];
 const projects: any[] = [];
 for (let k = 0; k < 4; k++) {
   const t = await T();
-  const r = await call("/tracking", "POST", { projectType: "SIGNAGE", details: { projectCode: "12000001", client: "Delta Foods", jobSheetNumber: "ZZAD-" + k, location: "Salem", date: d(0), fromDate: d(2), toDate: d(20), numberOfVehicles: 20 } }, t.rsop);
+  const r = await call("/tracking", "POST", { projectType: "SIGNAGE", details: { projectCode: "12000001", client: "Delta Foods", jobSheetNumber: "ZZAD-" + k, location: "Salem", date: d(0), fromDate: d(0), toDate: d(20), numberOfVehicles: 20 } }, t.rsop);
   assert.equal(r.status, 201, JSON.stringify(r.body));
   const proj = r.body.data;
   projects.push(proj);
@@ -683,11 +683,15 @@ test("Driver Management: a driver held by an allotment cannot have its availabil
   assert.equal(blocked.status, 409);
   assert.match(blocked.body.message, /Vehicle Allotment/);
   assert.equal((await drv(dr._id)).availability.status, "IN_USE");
+  // saved driver details are locked: a rename is refused, a bank-detail change still works
   const rename = await call(`/drivers/${dr._id}`, "PUT", { driverName: "Renamed Rajan", driverType: cur.driverType, mobileNumber: cur.mobileNumber }, t);
-  assert.equal(rename.status, 200, JSON.stringify(rename.body));
+  assert.equal(rename.status, 403, JSON.stringify(rename.body));
+  assert.match(rename.body.message, /locked after saving.*Name/);
+  const bank = await call(`/drivers/${dr._id}`, "PUT", { driverName: cur.driverName, driverType: cur.driverType, mobileNumber: cur.mobileNumber, bankName: "Indian Bank" }, t);
+  assert.equal(bank.status, 200, JSON.stringify(bank.body));
   assert.equal((await drv(dr._id)).availability.status, "IN_USE");
   await call(`/vehicle-allotments/${a0._id}/release`, "POST", {}, t);
-  const free = await call(`/drivers/${dr._id}`, "PUT", { driverName: "Renamed Rajan", driverType: cur.driverType, mobileNumber: cur.mobileNumber, availability: { status: "NOT_AVAILABLE", notAvailable: { reason: "Leave", category: "Personal Leave" } } }, t);
+  const free = await call(`/drivers/${dr._id}`, "PUT", { driverName: cur.driverName, driverType: cur.driverType, mobileNumber: cur.mobileNumber, availability: { status: "NOT_AVAILABLE", notAvailable: { reason: "Leave", category: "Personal Leave" } } }, t);
   assert.equal(free.status, 200, JSON.stringify(free.body)); // after release the normal rules apply again
 });
 

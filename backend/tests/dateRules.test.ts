@@ -24,9 +24,12 @@ test("date helpers: strict calendar dates, IST today, IST day of an instant", ()
   assert.equal(addDaysYmd("2026-12-31", 1), "2027-01-01");
 });
 
-test("RSOP start date: today is allowed, yesterday is not (IST boundary)", () => {
+test("RSOP start date: today back to 7 days ago is allowed; older or future dates are not (IST boundary)", () => {
   assert.deepEqual(errs({}), []);
-  assert.ok(errs({ startDate: "2026-11-24", reportingDate: "2026-11-25" }).includes("Start date cannot be in the past"));
+  assert.deepEqual(errs({ startDate: "2026-11-24", reportingDate: "2026-11-25" }), []); // yesterday
+  assert.deepEqual(errs({ startDate: "2026-11-18", reportingDate: "2026-11-18" }), []); // exactly 7 days back
+  assert.ok(errs({ startDate: "2026-11-17", reportingDate: "2026-11-18" }).includes("Start date cannot be more than 7 days in the past"));
+  assert.ok(errs({ startDate: "2026-11-26", reportingDate: "2026-11-27" }).includes("Start date cannot be in the future"));
   // just before midnight UTC on the 24th is already the 25th in India -> the 25th is still "today"
   assert.deepEqual(validateTracking("ROADSHOW", roadshow(), { now: new Date("2026-11-24T19:00:00Z") }).errors, []);
   // historical imports (dev seed only) may keep a started campaign
@@ -56,11 +59,15 @@ test("RSOP: the Model / Backlit field is not stored for a roadshow", () => {
   assert.equal("model" in r.details, false);
 });
 
-test("signage: entry date cannot be in the future; work dates may be past or future", () => {
-  const sig = { projectCode: "12345678", client: "D", jobSheetNumber: "1", location: "X", numberOfVehicles: 1, date: "2026-11-25", fromDate: "2026-10-01", toDate: "2026-10-05" };
-  assert.deepEqual(validateTracking("SIGNAGE", sig, { now: NOW }).errors, []);
-  assert.ok(validateTracking("SIGNAGE", { ...sig, date: "2026-11-26" }, { now: NOW }).errors.includes("Date cannot be in the future"));
-  assert.deepEqual(validateTracking("SIGNAGE", { ...sig, fromDate: "2027-01-01", toDate: "2027-01-05" }, { now: NOW }).errors, []);
+test("signage: entry date cannot be in the future; From date is today back to 7 days ago; To date may be later", () => {
+  const sig = { projectCode: "12345678", client: "D", jobSheetNumber: "1", location: "X", numberOfVehicles: 1, date: "2026-11-25", fromDate: "2026-11-18", toDate: "2026-12-05" };
+  const sErr = (o: Record<string, unknown>) => validateTracking("SIGNAGE", { ...sig, ...o }, { now: NOW }).errors;
+  assert.deepEqual(sErr({}), []);
+  assert.deepEqual(sErr({ fromDate: "2026-11-25" }), []);
+  assert.ok(sErr({ date: "2026-11-26" }).includes("Date cannot be in the future"));
+  assert.ok(sErr({ fromDate: "2026-11-17" }).includes("From date cannot be more than 7 days in the past"));
+  assert.ok(sErr({ fromDate: "2026-11-26" }).includes("From date cannot be in the future"));
+  assert.ok(sErr({ fromDate: "2026-11-25", toDate: "2026-11-24" }).includes("To date cannot be before from date"));
 });
 
 // ------------------------------------------------------------------------------------------------ RBP budget

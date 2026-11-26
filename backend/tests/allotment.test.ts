@@ -85,11 +85,11 @@ let projP: any; // pool of approved project vehicles held by "busy" fixture vehi
     assert.equal(r.status, 201, JSON.stringify(r.body));
     return r.body.data;
   };
-  projA = await mk({ projectType: "SIGNAGE", details: { projectCode: "11000001", client: "Alpha Foods", jobSheetNumber: "ZZALT-1", location: "Salem", date: d(0), fromDate: d(2), toDate: d(12), numberOfVehicles: 12 } });
-  projB = await mk({ projectType: "SIGNAGE", details: { projectCode: "11000002", client: "Beta Drafts", jobSheetNumber: "ZZALT-2", location: "Erode", date: d(0), fromDate: d(2), toDate: d(5), numberOfVehicles: 1 } });
-  projC = await mk({ projectType: "SIGNAGE", details: { projectCode: "11000003", client: "Gamma Versions", jobSheetNumber: "ZZALT-3", location: "Hosur", date: d(0), fromDate: d(2), toDate: d(5), numberOfVehicles: 1 } });
-  projR = await mk({ projectType: "ROADSHOW", details: { projectCode: "11000004", billingName: "Roadie Co", stateCode: "33", startDate: d(3), endDate: d(8), reportingDate: d(3), sundayHalt: "NO", numberOfVans: 2, reportingLocations: ["Chennai", "Trichy"] } });
-  projP = await mk({ projectType: "SIGNAGE", details: { projectCode: "11000005", client: "Pool Holders", jobSheetNumber: "ZZALT-4", location: "Karur", date: d(0), fromDate: d(2), toDate: d(5), numberOfVehicles: 8 } });
+  projA = await mk({ projectType: "SIGNAGE", details: { projectCode: "11000001", client: "Alpha Foods", jobSheetNumber: "ZZALT-1", location: "Salem", date: d(0), fromDate: d(0), toDate: d(12), numberOfVehicles: 12 } });
+  projB = await mk({ projectType: "SIGNAGE", details: { projectCode: "11000002", client: "Beta Drafts", jobSheetNumber: "ZZALT-2", location: "Erode", date: d(0), fromDate: d(0), toDate: d(5), numberOfVehicles: 1 } });
+  projC = await mk({ projectType: "SIGNAGE", details: { projectCode: "11000003", client: "Gamma Versions", jobSheetNumber: "ZZALT-3", location: "Hosur", date: d(0), fromDate: d(0), toDate: d(5), numberOfVehicles: 1 } });
+  projR = await mk({ projectType: "ROADSHOW", details: { projectCode: "11000004", billingName: "Roadie Co", stateCode: "33", startDate: d(0), endDate: d(8), reportingDate: d(3), sundayHalt: "NO", numberOfVans: 2, reportingLocations: ["Chennai", "Trichy"] } });
+  projP = await mk({ projectType: "SIGNAGE", details: { projectCode: "11000005", client: "Pool Holders", jobSheetNumber: "ZZALT-4", location: "Karur", date: d(0), fromDate: d(0), toDate: d(5), numberOfVehicles: 8 } });
   const approved = { approvalStatus: "APPROVED", approvedVersion: 1 };
   for (const tv of projP.vehicles) await mkBudget(tv, projP._id, approved);
   for (let i = 0; i < 10; i++) await mkBudget(projA.vehicles[i], projA._id, approved);
@@ -112,15 +112,15 @@ const allot = async (vehicleId: string, trackupNumber: string, over: Record<stri
 const att = (name: string) => ({ storage: "local", key: `driver_settlement/vehicles/2026/123e4567-e89b-12d3-a456-426614174000-${name}`, name, size: 1234, mimeType: "application/pdf" });
 
 // ================================================================== validators (pure)
-test("validators: allotment times, mandatory next availability, change reason, schedule", () => {
+test("validators: allotment times, optional next availability (both or neither), change reason, schedule", () => {
   const NOW = new Date("2026-11-24T06:30:00Z"); // 12:00 IST
   const ok = { vehicleId: "a".repeat(24), trackupNumber: "TRK-1", nextAvailableDate: "2026-11-26", nextAvailableTime: "09:00" };
   assert.deepEqual(validateAllot(ok, NOW).errors, []);
   assert.equal(validateAllot(ok, NOW).data?.allottedAt.toISOString(), NOW.toISOString()); // defaults to now
   assert.equal(validateAllot({ ...ok, allottedDate: "2026-11-24", allottedTime: "10:00" }, NOW).data?.allottedAt.toISOString(), "2026-11-24T04:30:00.000Z"); // IST -> UTC
   for (const [over, re] of [
-    [{ nextAvailableDate: "" }, /Next available date is required/],
-    [{ nextAvailableTime: "" }, /Next available time is required/],
+    [{ nextAvailableDate: "" }, /Next available: both date and time are required/],
+    [{ nextAvailableTime: "" }, /Next available: both date and time are required/],
     [{ nextAvailableDate: "2026-02-31" }, /valid date/],
     [{ nextAvailableTime: "25:00" }, /valid time/],
     [{ allottedDate: "2026-11-25", allottedTime: "10:00" }, /cannot be in the future/],
@@ -135,6 +135,12 @@ test("validators: allotment times, mandatory next availability, change reason, s
     [{ remarks: "x".repeat(301) }, /too long/],
   ] as const) assert.match(validateAllot({ ...ok, ...over }, NOW).errors.join(";"), re, JSON.stringify(over));
   assert.deepEqual(validateAllot({ ...ok, remarks: "Bring ladder" }, NOW).data?.remarks, "Bring ladder");
+  // Next Available is optional: leaving out both the date and the time is valid
+  const none = validateAllot({ ...ok, nextAvailableDate: "", nextAvailableTime: "" }, NOW);
+  assert.deepEqual(none.errors, []);
+  assert.equal(none.data?.schedule.nextAvailableDate, null);
+  assert.equal(none.data?.schedule.nextAvailableTime, null);
+  assert.deepEqual(validateAllot({ ...ok, nextAvailableDate: undefined, nextAvailableTime: undefined, expectedReleaseDate: "2026-11-27", expectedReleaseTime: "10:00" }, NOW).errors, []);
   // change
   const c = { vehicleId: "b".repeat(24), reason: "Breakdown" };
   assert.deepEqual(validateChange(c).errors, []);
@@ -147,7 +153,8 @@ test("validators: allotment times, mandatory next availability, change reason, s
   assert.match(validateChange({ ...c, attachments: "x" }).errors.join(), /must be a list/);
   // schedule (extension)
   assert.deepEqual(validateSchedule({ nextAvailableDate: "2026-12-01", nextAvailableTime: "10:00" }).errors, []);
-  assert.match(validateSchedule({ nextAvailableDate: "2026-12-01" }).errors.join(), /Next available time is required/);
+  assert.match(validateSchedule({ nextAvailableDate: "2026-12-01" }).errors.join(), /Next available: both date and time are required/);
+  assert.deepEqual(validateSchedule({}).errors, []); // extension without a next available moment
 });
 
 // ================================================================== access
@@ -186,7 +193,7 @@ test("approved projects: only a currently approved latest budget; pending / reje
   assert.match(row.projectName, /Alpha Foods Signage – ZZALT-1/);
   assert.equal(row.pifNumber, A(0).pifNumber);
   assert.equal(row.billNumber, null); // "where available": the tracking records carry none
-  assert.equal(row.startDate, d(2));
+  assert.equal(row.startDate, d(0));
   assert.equal(row.endDate, d(12));
   assert.equal(row.vehicleCount, 12);
   assert.equal(row.budgetAmount, 125000.5);
@@ -260,7 +267,7 @@ test("allot: vehicle becomes In Use, identifiers auto-populated, times stored in
   assert.notEqual(A(0).pifNumber, A(1).pifNumber);
   assert.equal(a.clientName, "Alpha Foods");
   assert.equal(a.projectType, "SIGNAGE");
-  assert.equal(a.projectStart, d(2));
+  assert.equal(a.projectStart, d(0));
   assert.equal(a.billNumber ?? null, null);
   assert.equal(a.remarks, "Bring the ladder");
   assert.equal(a.createdBy, "RBP");
@@ -304,8 +311,8 @@ test("allot: invalid input, unavailable vehicles and unapproved projects are ref
       assert.equal(r.body.data, null);
       assert.match(r.body.message, re);
     });
-  await bad({ nextAvailableDate: "" }, 400, /Next available date is required/);
-  await bad({ nextAvailableTime: "" }, 400, /Next available time is required/);
+  await bad({ nextAvailableDate: "" }, 400, /Next available: both date and time are required/);
+  await bad({ nextAvailableTime: "" }, 400, /Next available: both date and time are required/);
   await bad({ expectedReleaseDate: d(5), expectedReleaseTime: "10:00" }, 400, /before the expected release/); // next (d4) < expected (d5)
   await bad({ allottedDate: d(1), allottedTime: "10:00" }, 400, /cannot be in the future/);
   await bad({ nextAvailableDate: d(-1), nextAvailableTime: "09:00", expectedReleaseDate: d(-2), expectedReleaseTime: "09:00" }, 400, /in the past|before the allotment/);
@@ -707,6 +714,34 @@ test("regression: vehicle CRUD, draft, issue workflow and the rest of the API be
   assert.equal(await TrackingVehicle.countDocuments({ project: projA._id }), 12); // RSOP records only read
   assert.equal(await Budget.countDocuments(), 12 + 1 + 1 + 2 + 8);
   assert.equal(((await TrackingProject.findById(projA._id).lean()) as any).clientName, "Alpha Foods");
+});
+
+test("next available is optional: an allotment without it keeps the vehicle In Use with no automatic release; it can be added later", async () => {
+  const t = await T();
+  const veh = await mkVehicle({ vehicleNo: "TN91AL0901" });
+  const trackup = busyRef();
+  const r = await allot(veh._id, trackup, { nextAvailableDate: "", nextAvailableTime: "" });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(r.body.data.nextAvailableAt ?? null, null);
+  const v: any = await Vehicle.findById(veh._id).lean();
+  assert.equal(v.availability.status, "IN_USE");
+  assert.equal(v.availability.nextAvailableAt ?? null, null);
+  assert.equal(v.availability.project.trackupNumber, trackup);
+  // the release scheduler only picks up vehicles with a next-available moment
+  await releaseDueVehicles(new Date(Date.now() + 365 * 86_400_000));
+  assert.equal(((await Vehicle.findById(veh._id).lean()) as any).availability.status, "IN_USE");
+  // a half pair is still refused
+  const half = await allot((await mkVehicle({ vehicleNo: "TN91AL0902" }))._id, busyRef(), { nextAvailableDate: d(5), nextAvailableTime: "" });
+  assert.equal(half.status, 400);
+  assert.match(half.body.message, /Next available: both date and time are required/);
+  // the date can be set later through the existing extension; the scheduler then applies as before
+  const ext = await call(`/vehicle-allotments/${r.body.data._id}/schedule`, "PUT", { expectedReleaseDate: d(3), expectedReleaseTime: "20:00", nextAvailableDate: d(4), nextAvailableTime: "09:00", reason: "Release date known" }, t.rbp);
+  assert.equal(ext.status, 200, JSON.stringify(ext.body));
+  assert.ok(((await Vehicle.findById(veh._id).lean()) as any).availability.nextAvailableAt);
+  // and removed again
+  const clear = await call(`/vehicle-allotments/${r.body.data._id}/schedule`, "PUT", { expectedReleaseDate: d(3), expectedReleaseTime: "20:00", nextAvailableDate: "", nextAvailableTime: "", reason: "Open ended" }, t.rbp);
+  assert.equal(clear.status, 200, JSON.stringify(clear.body));
+  assert.equal(((await Vehicle.findById(veh._id).lean()) as any).availability.nextAvailableAt ?? null, null);
 });
 
 test("cleanup", async () => {

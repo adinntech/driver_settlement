@@ -347,7 +347,7 @@ export async function driverSalaryPdf(id: string): Promise<{ name: string; buffe
   txt("Fuel Consumption", L, 284, { bold: true });
   txt("On-Road budget Estimation", 330, 284, { bold: true });
   const fy = [299, 311.5, 324, 336.5];
-  [["Fixed Mileage", plain(d.fuel.fixedMileage), `Diesel Cost : ${plain(d.fuel.dieselCost)}`], ["Opening KM", plain(d.fuel.openingKm), `IOCL card usage in Ltrs : ${plain(d.fuel.ioclLitres)}`],
+  [["Fixed Mileage", plain(d.fuel.fixedMileage), `Fuel Cost : ${plain(d.fuel.dieselCost)}`], ["Opening KM", plain(d.fuel.openingKm), `IOCL card usage in Ltrs : ${plain(d.fuel.ioclLitres)}`],
     ["Closing KM", plain(d.fuel.closingKm), `IOCL card usage in KMs : ${plain(d.fuel.ioclKms)}`], ["Result", plain(d.fuel.resultKm), `Variation in ltrs : ${plain(d.fuel.variationLitres)}`]]
     .forEach(([a, b, c], i) => { txt(a, L, fy[i]); txt(b, 124, fy[i]); txt(c, 175, fy[i]); });
   [["Estimated Budget", num2(d.estimate.estimatedBudget)], ["Estimated KM", plain(d.estimate.estimatedKm)], ["Estimated Fuel", num2(d.estimate.estimatedFuel)],

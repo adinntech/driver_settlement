@@ -78,7 +78,7 @@ export interface Budget {
 
 export interface Rejection {
   version: number;
-  reason: string;
+  reason: string | null;
   fields: { field: string; comment: string }[];
   rejectedBy: string;
   rejectedAt: string;
@@ -246,7 +246,7 @@ export interface AvailableDriver { _id: string; driverNumber: string; driverName
 /** The driver currently on an allotment (null = Driver Not Assigned). */
 export interface AllotmentDriverRef { driverId: string; driverNumber: string | null; driverName: string | null; driverType: string | null; mobileNumber: string | null; assignedAt: string | null }
 export interface AllotmentRef {
-  _id: string; vehicleId: string; vehicleNo: string; allottedAt: string; expectedReleaseAt: string | null; nextAvailableAt: string; remarks: string | null;
+  _id: string; vehicleId: string; vehicleNo: string; allottedAt: string; expectedReleaseAt: string | null; nextAvailableAt: string | null; remarks: string | null;
   driver?: AllotmentDriverRef | null; // absent on older API responses
 }
 export interface AllotmentProject {
@@ -260,7 +260,7 @@ export interface Allotment {
   _id: string; vehicle: string; vehicleNo: string; vehicleMake?: string; vehicleModel?: string;
   trackupNumber: string; pifNumber: string; billNumber?: string | null; clientName: string; projectType: string; projectName: string;
   projectStart?: string | null; projectEnd?: string | null;
-  allottedAt: string; expectedReleaseAt?: string | null; nextAvailableAt: string; remarks?: string | null;
+  allottedAt: string; expectedReleaseAt?: string | null; nextAvailableAt: string | null; remarks?: string | null;
   status: "ACTIVE" | "RELEASED" | "CHANGED"; releasedAt?: string; releaseReason?: string; source?: string;
   previousAllotment?: string; changedFromVehicleNo?: string; changeReason?: string; changeRemarks?: string; changeAttachments: Attachment[]; changedAt?: string;
   driver?: string; driverNumber?: string; driverName?: string; driverType?: string; driverMobile?: string; driverAssignedAt?: string; driverAssignedBy?: string; driverReleasedAt?: string;

@@ -32,6 +32,7 @@ test("sidebar: RBP order is Projects & Budgets, Vehicle Management, Driver Manag
     { href: "/rbp/vehicles", label: "Vehicle Management" },
     { href: "/rbp/drivers", label: "Driver Management" },
     { href: "/rbp/on-road", label: "Vehicle Deliver" },
+    { href: "/rbp/on-road-vehicles", label: "On Road Vehicles" },
     { href: "/rbp/payments", label: "Driver Payments" },
   ]);
   assert.deepEqual(NAV.RSOP, [{ href: "/rsop", label: "Dashboard" }, { href: "/rsop/new", label: "New Tracking Request" }]);

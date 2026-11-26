@@ -50,8 +50,7 @@ export async function syncAllotmentFromVehicle(vehicle: any, prev: any, username
   if (!curTrackup || !cur.project?.trackingVehicle) return;
 
   const expected = istToDate(cur.expectedReleaseDate, cur.expectedReleaseTime);
-  const next = istToDate(cur.nextAvailableDate, cur.nextAvailableTime);
-  if (!next) return;
+  const next = istToDate(cur.nextAvailableDate, cur.nextAvailableTime); // null = no next-available moment (optional)
   const active: any = await VehicleAllotment.findOne({ trackingVehicle: cur.project.trackingVehicle, status: "ACTIVE" }).lean();
   if (!active) {
     const p = cur.project;
@@ -70,11 +69,11 @@ export async function syncAllotmentFromVehicle(vehicle: any, prev: any, username
     return;
   }
   if (String(active.vehicle) !== String(vehicle._id)) return;
-  const changed = +new Date(active.nextAvailableAt) !== +next || +(active.expectedReleaseAt ? new Date(active.expectedReleaseAt) : 0) !== +(expected ?? 0);
+  const changed = +(active.nextAvailableAt ? new Date(active.nextAvailableAt) : 0) !== +(next ?? 0) || +(active.expectedReleaseAt ? new Date(active.expectedReleaseAt) : 0) !== +(expected ?? 0);
   if (changed) {
     await VehicleAllotment.updateOne({ _id: active._id, status: "ACTIVE" }, { $set: { expectedReleaseAt: expected, nextAvailableAt: next, updatedBy: username } });
     await logAllotment(active._id, "EXTENDED", username, {
-      from: { expectedReleaseAt: active.expectedReleaseAt ?? null, nextAvailableAt: active.nextAvailableAt },
+      from: { expectedReleaseAt: active.expectedReleaseAt ?? null, nextAvailableAt: active.nextAvailableAt ?? null },
       to: { expectedReleaseAt: expected, nextAvailableAt: next }, source: "VEHICLE_FORM",
     });
     if (active.activeDriver) await (await import("./allotmentDriver.service.js")).syncDriverSchedule({ ...active, expectedReleaseAt: expected, nextAvailableAt: next }, username);

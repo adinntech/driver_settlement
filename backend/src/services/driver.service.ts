@@ -34,6 +34,35 @@ function dupError(e: unknown): AppError | null {
   return null;
 }
 
+/**
+ * Once a driver is saved its details are locked: only the bank details (and the operational Status / availability, which other
+ * workflows manage) can change. Every other field sent in an update must equal the saved value, or the update is refused.
+ */
+export const LOCKED_DRIVER_FIELDS = [
+  ["driverName", "Name"], ["driverType", "Driver type"], ["address", "Address"], ["mobileNumber", "Mobile number"],
+  ["licenceNumber", "Licence number"], ["licenceType", "Licence type"], ["licenceExpiryDate", "Licence expiry date"],
+  ["attachment", "Attachment"], ["salary", "Salary"],
+] as const;
+
+/** The saved driver as an update request would send it, so a bank-only request validates against the stored details. */
+const asInput = (d: any) => ({
+  driverName: d.driverName, driverType: d.driverType, address: d.address, mobileNumber: d.mobileNumber, accountName: d.accountName,
+  accountNumber: d.accountNumber, ifscCode: d.ifscCode, bankName: d.bankName, licenceNumber: d.licenceNumber, licenceType: d.licenceType,
+  licenceExpiryDate: d.licenceExpiryDate, salary: d.salary, status: d.status,
+  attachment: d.attachment ? { storage: d.attachment.storage, key: d.attachment.key, name: d.attachment.name, size: d.attachment.size, mimeType: d.attachment.mimeType } : null,
+});
+
+/** Labels of locked fields whose value in `next` differs from the saved driver. */
+export function lockedFieldChanges(existing: any, next: DriverData): string[] {
+  const norm = (k: string, x: unknown): unknown => {
+    if (x === undefined || x === null || x === "") return null;
+    if (k === "attachment") return (x as { key?: string }).key ?? null;
+    if (k === "salary") return Number(x) || 0;
+    return x;
+  };
+  return LOCKED_DRIVER_FIELDS.filter(([k]) => norm(k, existing[k]) !== norm(k, (next as any)[k])).map(([, label]) => label);
+}
+
 const DETAIL_KEYS = ["driverName", "driverType", "address", "mobileNumber", "accountName", "accountNumber", "ifscCode", "bankName", "licenceNumber", "licenceType", "licenceExpiryDate", "salary", "status"] as const;
 
 /** Resolves the approved project (read-only on RSOP data) and validates the availability block. */
@@ -77,8 +106,13 @@ export async function updateDriver(id: string, input: unknown, username: string)
   if (!validId(id)) throw new AppError("Invalid driver id", 400);
   const existing: any = await Driver.findById(id).lean();
   if (!existing) throw new AppError("Driver not found", 404);
-  const v = validateDriver(input);
+  // Fields left out of the request keep their saved value; fields that are sent are checked against the lock below.
+  const body = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const v = validateDriver({ ...asInput(existing), ...body });
   if (v.errors.length || !v.data) throw new AppError(v.errors.join("; "), 400);
+  const locked = lockedFieldChanges(existing, v.data);
+  if (locked.length)
+    throw new AppError(`Driver details are locked after saving; only bank details can be changed. Not allowed: ${locked.join(", ")}`, 403);
   const data = { ...v.data, status: v.data.status ?? existing.status };
   const av = await checkAvailability((input as any)?.availability, existing.availability);
   if (av.errors.length) throw new AppError(av.errors.join("; "), 400);

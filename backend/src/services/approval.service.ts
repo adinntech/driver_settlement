@@ -19,7 +19,7 @@ const ist = (d: Date) =>
 export const REJECTABLE_FIELDS = [
   "mileage", "estimatedKmPerDay", "onRoadDate", "completionDate", "sundayHalt", "numberOfDays",
   "dieselAmount", "salaryAmount", "salaryUnit", "foodAmount", "foodUnit", "haltFood", "tolls", "others",
-  "fromLocation", "toLocation", "totalKm", "upDownValue", "otherDetails",
+  "fromLocation", "toLocation", "totalKm", "fuelRate", "upDownValue", "otherDetails",
   "permitCharges", "tollCharges", "petrolAllowance", "foodAllowance", "accommodation", "iocCardPayment",
   "driverType", "driverSalary",
 ];
@@ -143,7 +143,7 @@ export interface RejectInput {
 export function validateRejection(input: RejectInput) {
   const errors: string[] = [];
   const reason = typeof input.reason === "string" ? input.reason.trim() : "";
-  if (!reason) errors.push("Rejection reason is required");
+  // The overall reason is optional for RSOM; the flagged fields and their comments stay mandatory.
   if (reason.length > 1000) errors.push("Rejection reason is too long");
   const fields: { field: string; comment: string }[] = [];
   const raw = Array.isArray(input.fields) ? input.fields : [];
@@ -168,7 +168,7 @@ export async function rejectBudget(budgetId: string, input: RejectInput, usernam
   const { budget, vehicle, project } = await guardPending(budgetId, input.version);
   const version = budget.currentVersion;
   const now = new Date();
-  const rejection = { version, reason: v.reason, fields: v.fields, rejectedBy: username, rejectedAt: now };
+  const rejection = { version, reason: v.reason || null, fields: v.fields, rejectedBy: username, rejectedAt: now };
   const updated = await Budget.findOneAndUpdate(
     { _id: budgetId, approvalStatus: "PENDING", currentVersion: version, submittedVersion: version },
     { $set: { approvalStatus: "REJECTED", rejectedVersion: version, reviewedBy: username, reviewedAt: now, rejection } },
@@ -176,16 +176,16 @@ export async function rejectBudget(budgetId: string, input: RejectInput, usernam
   ).lean();
   if (!updated) throw new AppError("This budget was already decided or changed; reload", 409);
 
-  await recordEvent(budgetId, version, "REJECTED", username, "RSOM", { reason: v.reason, fields: v.fields, total: budget.total });
+  await recordEvent(budgetId, version, "REJECTED", username, "RSOM", { reason: v.reason || null, fields: v.fields, total: budget.total });
   await notifyUsername(budget.createdBy, {
     type: "BUDGET_REJECTED",
     title: "Budget rejected",
     message:
       `Your budget for ${vehicle.trackupNumber} has been rejected by RSOM. Please review the rejection details. ` +
       `Client: ${project.clientName} · Amount ${inr(budget.total)} · Fields: ${v.fields.map((f) => f.field).join(", ")} · ` +
-      `Reason: ${v.reason} · Version V${version} · ${ist(now)}`,
+      `${v.reason ? `Reason: ${v.reason} · ` : ""}Version V${version} · ${ist(now)}`,
     link: `/rbp/budget?vehicle=${vehicle._id}`,
-    meta: { budgetId, version, total: budget.total, fields: v.fields, reason: v.reason, trackupNumber: vehicle.trackupNumber },
+    meta: { budgetId, version, total: budget.total, fields: v.fields, reason: v.reason || null, trackupNumber: vehicle.trackupNumber },
     dedupeKey: `REJECTED:${budgetId}:${version}`,
   });
   return updated;

@@ -36,6 +36,9 @@ export interface Draft {
   fromLocation: string;
   toLocation: string;
   totalKm: string;
+  /** Fuel price in Rs per litre: used only for the Up/Down value. */
+  fuelRate: string;
+  /** Read-only: kept for the saved value; the form always shows computeValues().upDownValue. */
   upDownValue: string;
 }
 
@@ -71,7 +74,7 @@ export function emptyDraft(ctx: DraftContext): Draft {
     numberOfDays: autoDays(ctx.campaignFrom, ctx.campaignTo, ctx.sundayHalt),
     dieselAmount: "", salaryAmount: "", salaryUnit: "PER_DAY", foodAmount: "", foodUnit: "PER_DAY",
     haltFood: "", tolls: [newTollRow()], tollVehicleClass: "", others: [newChargeRow()],
-    fromLocation: "", toLocation: "", totalKm: "", upDownValue: "",
+    fromLocation: "", toLocation: "", totalKm: "", fuelRate: "", upDownValue: "",
   };
 }
 
@@ -102,7 +105,7 @@ export function draftFromData(data: Stored | undefined | null, ctx: DraftContext
     tollVehicleClass: typeof data.tollVehicleClass === "string" ? (data.tollVehicleClass as TollVehicleClass) : "",
     others: restoreCharges(data),
     fromLocation: s(data.fromLocation), toLocation: s(data.toLocation),
-    totalKm: s(data.totalKm), upDownValue: s(data.upDownValue),
+    totalKm: s(data.totalKm), fuelRate: s(data.fuelRate), upDownValue: s(data.upDownValue),
   };
 }
 
@@ -131,7 +134,18 @@ export const filledCharges = (d: Draft): ChargeRow[] => d.others.filter((c) => c
 export const filledTolls = (d: Draft): TollRow[] => d.tolls.filter((t) => t.location.trim() || t.rate.trim());
 
 const n = (v: string) => Number(v) || 0;
+/** Halt Food applies only when the budget has Sunday Halt; otherwise it is hidden and never counted or saved. */
+export const haltFoodApplies = (d: Pick<Draft, "sundayHalt">): boolean => d.sundayHalt === true;
 const r2 = (x: number) => Math.round(x * 100) / 100;
+
+/**
+ * Up/Down value (same as the server) in Rs = (Total KM [km] / Mileage [km per litre] x Fuel Rate [Rs per litre]) + Toll Amount [Rs].
+ * Without a mileage the fuel part is 0.
+ */
+export function upDownOf(d: Pick<Draft, "totalKm" | "mileage" | "fuelRate">, tollAmount: number): number {
+  const mileage = n(d.mileage);
+  return r2((mileage > 0 ? (n(d.totalKm) / mileage) * n(d.fuelRate) : 0) + tollAmount);
+}
 
 export function computeValues(d: Draft) {
   const days = Number(d.numberOfDays) || 0;
@@ -140,8 +154,9 @@ export function computeValues(d: Draft) {
   const salaryValue = by(d.salaryAmount, d.salaryUnit);
   const foodValue = by(d.foodAmount, d.foodUnit);
   const tollAmount = r2(filledTolls(d).reduce((sum, t) => sum + n(t.rate), 0));
-  const totalValue = r2(dieselValue + salaryValue + foodValue + n(d.haltFood) + tollAmount + r2(filledCharges(d).reduce((sum, c) => sum + n(c.amount), 0)) + n(d.upDownValue));
-  return { dieselValue, salaryValue, foodValue, tollAmount, totalValue };
+  const upDownValue = upDownOf(d, tollAmount);
+  const totalValue = r2(dieselValue + salaryValue + foodValue + (haltFoodApplies(d) ? n(d.haltFood) : 0) + tollAmount + r2(filledCharges(d).reduce((sum, c) => sum + n(c.amount), 0)) + upDownValue);
+  return { dieselValue, salaryValue, foodValue, tollAmount, upDownValue, totalValue };
 }
 
 export interface DraftDateBounds {
@@ -168,11 +183,12 @@ export function validateDraft(d: Draft, bounds: DraftDateBounds = {}): string[] 
   if (d.onRoadDate && d.completionDate && d.completionDate < d.onRoadDate) e.push("Completion date cannot be before on road date");
   if (!(Number.isInteger(Number(d.numberOfDays)) && Number(d.numberOfDays) >= 1)) e.push("Number of days must be at least 1");
   const amounts: [string, string][] = [
-    [d.mileage, "Mileage"], [d.estimatedKmPerDay, "Estimated KM per day"], [d.dieselAmount, "Diesel cost"],
-    [d.salaryAmount, "Salary"], [d.foodAmount, "Food"], [d.haltFood, "Halt food"],
-    [d.totalKm, "Total km"], [d.upDownValue, "Up/Down value"],
+    [d.mileage, "Mileage"], [d.estimatedKmPerDay, "Estimated KM per day"], [d.dieselAmount, "Fuel cost"],
+    [d.salaryAmount, "Salary"], [d.foodAmount, "Food"], ...(haltFoodApplies(d) ? [[d.haltFood, "Halt food"] as [string, string]] : []),
+    [d.totalKm, "Total km"], [d.fuelRate, "Fuel rate"],
   ];
   for (const [v, label] of amounts) if (v !== "" && !(Number(v) >= 0)) e.push(`${label} must be a valid amount`);
+  if (n(d.totalKm) > 0 && n(d.fuelRate) > 0 && !(n(d.mileage) > 0)) e.push("Mileage is required to calculate the Up/Down value");
   filledTolls(d).forEach((t, i) => {
     if (!t.location.trim()) e.push(`Toll entry ${i + 1}: location is required`);
     if (t.rate === "" || !(Number(t.rate) >= 0))
@@ -195,12 +211,13 @@ export function toPayload(d: Draft) {
     dieselAmount: num(d.dieselAmount),
     salaryAmount: num(d.salaryAmount), salaryUnit: d.salaryUnit,
     foodAmount: num(d.foodAmount), foodUnit: d.foodUnit,
-    haltFood: num(d.haltFood),
+    haltFood: haltFoodApplies(d) ? num(d.haltFood) : 0,
     tolls: filledTolls(d).map((t) => ({ location: t.location.trim(), rate: Number(t.rate), ...(t.plaza ? { plaza: t.plaza } : {}) })),
     tollVehicleClass: d.tollVehicleClass || null,
     others: filledCharges(d).map((c) => ({ description: c.description.trim(), amount: num(c.amount) })),
     fromLocation: d.fromLocation, toLocation: d.toLocation,
-    totalKm: num(d.totalKm), upDownValue: num(d.upDownValue),
+    totalKm: num(d.totalKm), fuelRate: num(d.fuelRate),
+    upDownValue: computeValues(d).upDownValue, // the server recalculates it; sent for older API consumers only
   };
 }
 
