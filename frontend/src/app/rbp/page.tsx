@@ -66,6 +66,7 @@ function ProjectBlock({ p, open, onToggle }: { p: Project; open: boolean; onTogg
   const roadshow = p.projectType === "ROADSHOW";
   const master: [string, string][] = roadshow
     ? [
+        ["Project Code", p.projectCode ?? "—"],
         ["Billing Name", p.clientName],
         ["Total Vans", String(p.vehicleCount)],
         ["Trackup Numbers", String(p.vehicles.length)],
@@ -74,6 +75,7 @@ function ProjectBlock({ p, open, onToggle }: { p: Project; open: boolean; onTogg
         ["Reporting Date", formatDate(d.reportingDate as string)],
       ]
     : [
+        ["Project Code", p.projectCode ?? "—"],
         ["Client", p.clientName],
         ["Job Sheet", String(d.jobSheetNumber ?? "—")],
         ["Vehicles", String(p.vehicleCount)],

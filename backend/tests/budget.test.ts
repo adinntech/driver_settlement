@@ -177,12 +177,12 @@ const login = async (role: string, u: string, p: string) =>
   (await call("/auth/login", "POST", { role, username: u, password: p })).body.data.token as string;
 
 const roadshow = {
-  billingName: "Sapphire Foods (KFC)", stateCode: "33", numberOfVans: 2,
+  projectCode: "40000001", billingName: "Sapphire Foods (KFC)", stateCode: "33", numberOfVans: 2,
   startDate: "2027-10-22", endDate: "2027-10-23", reportingDate: "2027-10-22",
   sundayHalt: "NO", paSystem: "YES", reportingLocations: ["Madurai", "Salem"],
 };
 const signage = {
-  date: "2026-10-20", client: "DALMIA", jobSheetNumber: "22403", location: "RAMNAD",
+  projectCode: "40000002", date: "2026-10-20", client: "DALMIA", jobSheetNumber: "22403", location: "RAMNAD",
   numberOfVehicles: 1, fromDate: "2027-10-21", toDate: "2027-10-26",
 };
 

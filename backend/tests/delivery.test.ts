@@ -98,8 +98,8 @@ const mkProject = async (body: unknown) => {
   return r.body.data as any;
 };
 const sched = { expectedReleaseDate: d(3), expectedReleaseTime: "20:00", nextAvailableDate: d(4), nextAvailableTime: "09:00" };
-const sig = await mkProject({ projectType: "SIGNAGE", details: { client: "Kensign Lifestyles", jobSheetNumber: "ZZDL-1", location: "Coimbatore", date: d(0), fromDate: d(2), toDate: d(9), numberOfVehicles: 10 } });
-const road = await mkProject({ projectType: "ROADSHOW", details: { billingName: "Ken Roadshow Pvt", stateCode: "33", startDate: d(3), endDate: d(8), reportingDate: d(3), sundayHalt: "NO", numberOfVans: 6, reportingLocations: ["Chennai", "Trichy"] } });
+const sig = await mkProject({ projectType: "SIGNAGE", details: { projectCode: "15000001", client: "Kensign Lifestyles", jobSheetNumber: "ZZDL-1", location: "Coimbatore", date: d(0), fromDate: d(2), toDate: d(9), numberOfVehicles: 10 } });
+const road = await mkProject({ projectType: "ROADSHOW", details: { projectCode: "15000002", billingName: "Ken Roadshow Pvt", stateCode: "33", startDate: d(3), endDate: d(8), reportingDate: d(3), sundayHalt: "NO", numberOfVans: 6, reportingLocations: ["Chennai", "Trichy"] } });
 const nextIdx = new Map<any, number>();
 let next = 0;
 /** A fresh project vehicle with budget + vehicle + driver allotted through the real API; the clearance is created by the assignment. */

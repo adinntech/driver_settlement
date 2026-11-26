@@ -8,6 +8,7 @@ import { tollDirectory } from "./toll.service.js";
 import { recordEvent, statusOf } from "./budgetEvents.js";
 import { buildActivity } from "./budgetActivity.js";
 import { AppError } from "../utils/AppError.js";
+import { kmAllowanceOf } from "../utils/kmAllowance.js";
 
 const isDup = (e: unknown) => (e as { code?: number })?.code === 11000;
 const validId = (id: string) => /^[a-f0-9]{24}$/i.test(id);
@@ -30,6 +31,7 @@ export function buildContext(
     campaignTo: roadshow ? d.endDate : d.toDate,
     reportingDate: roadshow ? d.reportingDate : null, // Roadshow only
     numberOfDays: roadshow ? d.numberOfDays : d.totalDaysOfWork,
+    km: kmAllowanceOf(project.projectType, d), // RoadShow KM allotment incl. the one-time Extra KM pool (null for signage)
     trackupNumber: vehicle.trackupNumber,
     pifNumber: vehicle.pifNumber,
     displayNumber: vehicle.displayNumber,

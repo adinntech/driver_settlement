@@ -6,6 +6,7 @@ import { Budget } from "../models/Budget.js";
 import { releaseActiveAllotments } from "./allotment.core.js";
 import { istNowAt, joinLabel, type AvailabilityData } from "../validators/availability.validator.js";
 import { diffVehicle, type Change } from "../validators/vehicle.validator.js";
+import { kmAllowanceOf } from "../utils/kmAllowance.js";
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -94,6 +95,7 @@ export function projectFromTracking(tv: any, proj: any, budget?: any) {
   const d = proj?.details ?? {};
   const road = proj?.projectType === "ROADSHOW";
   const client = proj?.clientName ?? "";
+  const km = kmAllowanceOf(proj?.projectType, d);
   return {
     trackingProject: String(proj._id),
     trackingVehicle: String(tv._id),
@@ -109,6 +111,9 @@ export function projectFromTracking(tv: any, proj: any, budget?: any) {
     location: road ? arr(d.reportingLocations).join(", ") || null : d.location ?? null,
     remarks: null,
     billNumber: (d.billNumber ?? d.invoiceNumber ?? null) as string | null, // only when the tracking record carries one
+    // RoadShow KM allotment shown with the project (read-only; the availability validators never store these)
+    totalAllowedKm: km?.totalAllowedKm ?? null,
+    extraKmAllotted: km ? km.extraKmAllotted : null,
   };
 }
 

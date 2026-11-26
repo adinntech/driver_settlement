@@ -13,6 +13,7 @@ import StatCard from "@/components/ui/StatCard";
 import { useDebounce } from "@/hooks/useDebounce";
 import type { Project, Stats, Vehicle } from "@/types/domain";
 import { formatDate, formatDateTime, labelize } from "@/utils/format";
+import { groupByProjectCode, type ProjectGroup } from "@/utils/projectCode";
 
 export default function RsopDashboard() {
   return (
@@ -42,7 +43,12 @@ function Dashboard() {
   const stats = useApi<Stats>("/tracking/stats");
   const list = useApi<Project[]>(`/tracking${qs ? `?${qs}` : ""}`);
 
-  const rows = (list.data ?? []).flatMap((p) => p.vehicles.map((v) => ({ p, v })));
+  // One row per Project Code (Roadshow and Signage separately); each expands to its vehicles. While searching, groups open by default.
+  const groups = useMemo(() => groupByProjectCode(list.data ?? []), [list.data]);
+  const [toggled, setToggled] = useState<Set<string>>(new Set());
+  const searching = !!dq.trim();
+  const isOpen = (key: string) => toggled.has(key) !== searching;
+  const toggle = (key: string) => setToggled((s) => { const n = new Set(s); if (n.has(key)) n.delete(key); else n.add(key); return n; });
 
   return (
     <>
@@ -87,7 +93,7 @@ function Dashboard() {
       <div className="card">
         <div className="filters">
           <input
-            placeholder="Search Trackup / PIF / Display / Client"
+            placeholder="Search Project Code / Trackup / PIF / Display / Client"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             aria-label="Search"
@@ -118,28 +124,26 @@ function Dashboard() {
           <Skeleton rows={6} />
         ) : list.error ? (
           <ErrorState message={list.error} onRetry={list.reload} />
-        ) : rows.length === 0 ? (
+        ) : groups.length === 0 ? (
           <EmptyState title="No tracking requests found" hint="Create your first request or adjust the filters." />
         ) : (
           <TableWrap>
-            <table className="table">
+            <table className="table pc-table">
               <thead>
                 <tr>
-                  <th>Trackup Number</th>
+                  <th><span className="sr-only">Expand</span></th>
+                  <th>Project Code</th>
                   <th>Type</th>
                   <th>Client / Billing</th>
-                  <th>Vehicle</th>
-                  <th>PIF</th>
-                  <th>Display</th>
-                  <th>Created (IST)</th>
-                  <th>Created By</th>
+                  <th>Campaign</th>
+                  <th>Vehicles</th>
+                  <th>Last Created (IST)</th>
                   <th>Budget</th>
-                  <th />
                 </tr>
               </thead>
               <tbody>
-                {rows.map(({ p, v }) => (
-                  <Row key={v._id} p={p} v={v} onView={() => setDetail(p)} />
+                {groups.map((g) => (
+                  <GroupRows key={g.key} g={g} open={isOpen(g.key)} onToggle={() => toggle(g.key)} onView={setDetail} />
                 ))}
               </tbody>
             </table>
@@ -163,7 +167,56 @@ const Stat = ({ label, value, accent }: { label: string; value: number; accent?:
   </div>
 );
 
-function Row({ p, v, onView }: { p: Project; v: Vehicle; onView: () => void }) {
+/** Collapsed project row (one per Project Code and type) + its vehicles when expanded. */
+function GroupRows({ g, open, onToggle, onView }: { g: ProjectGroup; open: boolean; onToggle: () => void; onView: (p: Project) => void }) {
+  const bodyId = `pc-${g.key.replace(/[^A-Za-z0-9]/g, "-")}`;
+  const label = g.projectCode ?? "No project code";
+  return (
+    <>
+      <tr className={`pc-row${open ? " is-open" : ""}`} onClick={onToggle}>
+        <td>
+          <button type="button" className="icon-btn pc-toggle" aria-expanded={open} aria-controls={bodyId} aria-label={`${open ? "Collapse" : "Expand"} project ${label}`} onClick={(e) => { e.stopPropagation(); onToggle(); }}>
+            {open ? "▾" : "▸"}
+          </button>
+        </td>
+        <td>{g.projectCode ? <span className="num"><strong>{g.projectCode}</strong><CopyButton value={g.projectCode} label="Project Code" /></span> : <span className="muted" title="Created before Project Codes were introduced">—</span>}</td>
+        <td><span className={`type type-${g.projectType.toLowerCase()}`}>{g.projectType === "ROADSHOW" ? "Roadshow" : "Signage"}</span></td>
+        <td>{g.clientName}</td>
+        <td className="ds-nowrap">{formatDate(g.startDate)}<br /><small className="muted">to {formatDate(g.endDate)}</small></td>
+        <td><strong>{g.vehicleCount}</strong>{g.requests.length > 1 && <><br /><small className="muted">{g.requests.length} requests</small></>}</td>
+        <td>{formatDateTime(g.lastCreatedAt)}</td>
+        <td><small className="muted">{g.budgetsCreated} / {g.vehicleCount} created</small></td>
+      </tr>
+      {open && (
+        <tr className="pc-sub" id={bodyId}>
+          <td colSpan={8}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Trackup Number</th>
+                  <th>Vehicle</th>
+                  <th>PIF</th>
+                  <th>Display</th>
+                  <th>Created (IST)</th>
+                  <th>Created By</th>
+                  <th>Budget</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {g.rows.map(({ p, v, position }) => (
+                  <Row key={v._id} p={p} v={v} position={position} total={g.vehicleCount} onView={() => onView(p)} />
+                ))}
+              </tbody>
+            </table>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function Row({ p, v, position, total, onView }: { p: Project; v: Vehicle; position: number; total: number; onView: () => void }) {
   return (
     <tr>
       <td>
@@ -172,12 +225,8 @@ function Row({ p, v, onView }: { p: Project; v: Vehicle; onView: () => void }) {
           <CopyButton value={v.trackupNumber} label="Trackup Number" />
         </span>
       </td>
-      <td>
-        <span className={`type type-${p.projectType.toLowerCase()}`}>{p.projectType === "ROADSHOW" ? "Roadshow" : "Signage"}</span>
-      </td>
-      <td>{p.clientName}</td>
-      <td>
-        {v.vehicleIndex} / {p.vehicleCount}
+      <td title={`Vehicle ${v.vehicleIndex} of ${p.vehicleCount} in its request`}>
+        {position} / {total}
       </td>
       <td>
         <span className="num">

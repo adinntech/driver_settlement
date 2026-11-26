@@ -12,6 +12,7 @@ import { useToast } from "@/context/ToastContext";
 import { request, uploadAttachment } from "@/services/api";
 import type { AllotmentDriverRef, AllotmentProject, AvailableVehicle } from "@/types/domain";
 import { formatDate, formatInr } from "@/utils/format";
+import { kmText } from "@/utils/kmAllowance";
 import { deductionValue, formatDeduction, sanitizeDeduction, validateDeduction } from "@/utils/driverBank";
 import {
   ALLOT_MODE_LABEL, MAX_ATTACHMENTS, emptyAllotForm, emptyChangeDriverForm, emptyChangeForm, emptyDriverPick, fmtInstant, projectPeriod, scheduleFromAllotment,
@@ -57,6 +58,9 @@ export function ProjectSummary({ p }: { p: AllotmentProject }) {
       <KV k="Project Start Date" v={p.startDate ? formatDate(p.startDate) : null} />
       <KV k="Project End Date" v={p.endDate ? formatDate(p.endDate) : null} />
       <KV k="Project Period" v={projectPeriod(p.startDate, p.endDate, formatDate)} />
+      {p.projectType === "ROADSHOW" && p.totalAllowedKm !== undefined && (
+        <KV k="Total Allowed KM" v={p.totalAllowedKm === null ? null : `${kmText(p.totalAllowedKm)}${p.extraKmAllotted ? ` (incl. ${kmText(p.extraKmAllotted)}/day extra)` : ""}`} />
+      )}
     </dl>
   );
 }

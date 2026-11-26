@@ -14,6 +14,12 @@ export const SEED_TAG = "dev-seed:v1";
 
 const today = todayYmd();
 const d = (n: number) => addDays(today, n);
+/** Stable 8-digit demo Project Code per client and project type (FNV-1a hash), so a client's requests group together. */
+export const seedProjectCode = (key: string) => {
+  let h = 0x811c9dc5;
+  for (const ch of key) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193) >>> 0;
+  return String(10_000_000 + (h % 90_000_000));
+};
 
 // ---------------------------------------------------------------- drivers
 
@@ -197,17 +203,21 @@ interface RoadshowIn {
   client: string; state: string; vans: number; start: number; end: number; reporting: number; halt: "YES" | "NO"; locations: string[];
   person: string; contact: string; email: string; address: string; km: string; innovation: string; timing: string; extra: Record<string, unknown>;
 }
-const roadshow = (r: RoadshowIn): Record<string, unknown> => ({
-  billingName: r.client, stateCode: r.state, numberOfVans: r.vans, innovationModel: r.innovation, sundayHalt: r.halt,
-  startDate: d(r.start), endDate: d(r.end), reportingDate: d(r.reporting), reportingLocations: r.locations, reportingPerson: r.person,
-  contactNumber: r.contact, email: r.email, address: r.address, kmAllotted: r.km, extraKmAllowed: "NO", timing: r.timing,
-  paSystem: "YES", mike: "YES", tv: "NO", promoter: "YES", leaflet: "YES", otherElements: "As per approved creative, all required elements",
-  artsFileDate: d(r.reporting - 20), printingDate: d(r.reporting - 14), fabricationDate: d(r.reporting - 9), vehicleDeliveryDate: d(r.reporting - 2),
-  supportingDate: d(r.reporting - 6), invoiceDate: d(r.end + 5), ...r.extra,
-});
+const roadshow = (r: RoadshowIn): Record<string, unknown> => {
+  // Elements & Billing dates must lie within the campaign: clamp each one (clamping keeps the production order).
+  const inCampaign = (offset: number) => d(Math.min(r.end, Math.max(r.start, offset)));
+  return {
+    projectCode: seedProjectCode(`R:${r.client}`), billingName: r.client, stateCode: r.state, numberOfVans: r.vans, innovationModel: r.innovation, sundayHalt: r.halt,
+    startDate: d(r.start), endDate: d(r.end), reportingDate: d(r.reporting), reportingLocations: r.locations, reportingPerson: r.person,
+    contactNumber: r.contact, email: r.email, address: r.address, kmAllotted: r.km, extraKmAllowed: "NO", timing: r.timing,
+    paSystem: "YES", mike: "YES", tv: "NO", promoter: "YES", leaflet: "YES", otherElements: "As per approved creative, all required elements",
+    artsFileDate: inCampaign(r.reporting - 20), printingDate: inCampaign(r.reporting - 14), fabricationDate: inCampaign(r.reporting - 9), vehicleDeliveryDate: inCampaign(r.reporting - 2),
+    supportingDate: inCampaign(r.reporting - 6), invoiceDate: inCampaign(r.end + 5), ...r.extra,
+  };
+};
 interface SignageIn { client: string; job: string; location: string; vehicles: number; budget: number; from: number; to: number; work: string; site: string }
 const signage = (s: SignageIn): Record<string, unknown> => ({
-  date: d(s.from - 6), client: s.client, jobSheetNumber: s.job, location: s.location, numberOfVehicles: s.vehicles, arrivedBudget: s.budget,
+  projectCode: seedProjectCode(`S:${s.client}`), date: d(s.from - 6), client: s.client, jobSheetNumber: s.job, location: s.location, numberOfVehicles: s.vehicles, arrivedBudget: s.budget,
   fromDate: d(s.from), toDate: d(s.to), briefWorkDetails: s.work, siteDetails: s.site,
 });
 
@@ -220,7 +230,7 @@ export const PROJECTS: ProjectSpec[] = [
     details: roadshow({
       client: "Tata Motors Ltd", state: "27", vans: 2, start: -3, end: 21, reporting: -3, halt: "YES",
       locations: ["Pune – Pimpri Chinchwad", "Nashik", "Kolhapur"], person: "Amit Deshmukh", contact: "98220 55102", email: "amit.deshmukh@example.com",
-      address: "Plot 18, Chinchwad Industrial Area, Pune 411019", km: "90 KM per day", innovation: "2 Sided LED Van", timing: "9 Hours", extra: {},
+      address: "Plot 18, Chinchwad Industrial Area, Pune 411019", km: "90 KM per day", innovation: "2 Sided LED Van", timing: "9 Hours", extra: { extraKmAllowed: "YES", extraKmAllotted: 20 },
     }),
     vehicles: [
       {

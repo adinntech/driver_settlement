@@ -44,8 +44,10 @@ const call = async (path: string, method = "GET", body?: unknown, token?: string
 const login = async (role: string, u: string, p: string) =>
   (await call("/auth/login", "POST", { role, username: u, password: p })).body.data.token as string;
 
+// one Project Code per client (a code belongs to one client's project)
+const codeOf = (client: string) => String(10_000_000 + ([...client].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 90_000_000));
 const signage = (client: string) => ({
-  date: "2026-10-20", client, jobSheetNumber: "22403", location: "RAMNAD",
+  projectCode: codeOf(client), date: "2026-10-20", client, jobSheetNumber: "22403", location: "RAMNAD",
   numberOfVehicles: 1, fromDate: "2026-10-21", toDate: "2026-10-26",
 });
 const budgetBody = {

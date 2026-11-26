@@ -1804,3 +1804,11 @@ button.stat, button.ds-kpi { font: inherit; text-align: left; color: inherit; wi
 @media (max-width: 640px) { .toll-basis { grid-template-columns: 1fr; } .toll-results { min-width: 0; } }
 .toll { overflow: visible; }
 .toll-head { border-radius: 12px 12px 0 0; }
+
+/* RSOP dashboard: one row per Project Code, expanding to its vehicles */
+.pc-table > tbody > .pc-row { cursor: pointer; }
+.pc-table > tbody > .pc-row:hover > td, .pc-table > tbody > .pc-row.is-open > td { background: var(--surface-2, var(--bg)); }
+.pc-table > tbody > .pc-row > td:first-child { width: 1%; padding-right: 0; }
+.pc-toggle { font-size: 1rem; line-height: 1; padding: 4px 8px; }
+.pc-table > tbody > .pc-sub > td { padding: 0 0 12px 36px; max-width: none; background: var(--surface-2, var(--bg)); }
+.pc-table > tbody > .pc-sub .table { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }

@@ -14,6 +14,7 @@ import { ActivitySummary, ApprovalHistory, VersionHistory } from "@/components/H
 import type { Activity, Budget, BudgetContext, BudgetEvent, BudgetVersion, Details } from "@/types/domain";
 import { describeBudget, fieldLabel, rejectableFields, show, statusOf } from "@/utils/budgetDescribe";
 import { formatDate, formatDateTime, formatInr, labelize } from "@/utils/format";
+import { allowanceText, kmText } from "@/utils/kmAllowance";
 
 interface Review {
   context: BudgetContext;
@@ -110,6 +111,17 @@ function Body({ data, reload }: { data: Review; reload: () => void }) {
           <KV k="Campaign Period" v={`${formatDate(c.campaignFrom)} → ${formatDate(c.campaignTo)}`} />
           {c.projectType === "ROADSHOW" && <KV k="Reporting Date" v={formatDate(c.reportingDate)} />}
           <KV k="Number of Days" v={String(c.numberOfDays ?? "—")} />
+          {c.km && (
+            <>
+              <KV k="Extra KM / Day" v={c.km.extraKmAllowed ? kmText(c.km.extraKmAllotted) : "Not allowed"} />
+              <KV k="Campaign Total Allowed KM" v={c.km.totalAllowedKm === null ? "" : allowanceText(c.km)} />
+              {c.km.totalAllowedKm !== null && (() => {
+                const est = Math.round((Number(budget.data.estimatedKmPerDay) || 0) * (Number(budget.data.numberOfDays) || 0) * 100) / 100;
+                const over = est > c.km.totalAllowedKm;
+                return <KV k="Budget Estimated KM" cls={over ? "kv-rej" : undefined} v={`${kmText(est)}${over ? ` · exceeds the allowance by ${kmText(Math.round((est - c.km.totalAllowedKm) * 100) / 100)}` : " · within the allowance"}`} />;
+              })()}
+            </>
+          )}
           {[["Trackup Number", c.trackupNumber], ["PIF Number", c.pifNumber], ["Display Number", c.displayNumber]].map(([k, v]) => (
             <div key={k}>
               <dt>{k}</dt>

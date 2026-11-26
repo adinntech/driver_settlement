@@ -10,14 +10,21 @@ import { ConfirmDialog, Modal } from "@/components/ui/Ui";
 import { useToast } from "@/context/ToastContext";
 import { request } from "@/services/api";
 import type { Project, ProjectType } from "@/types/domain";
-import { countDays } from "@/utils/format";
-import { inYmdRange, isYmd, keepInRange, todayIst } from "@/utils/dates";
-import { PhoneInput } from "@/components/ui/Inputs";
+import { countDays, formatDate } from "@/utils/format";
+import { earlierOf, inYmdRange, isYmd, keepInRange, laterOf, todayIst } from "@/utils/dates";
+import { DecimalInput, PhoneInput } from "@/components/ui/Inputs";
 import { isValidPhone, toFullPhone } from "@/utils/phone";
+import { allowanceText, extraKmError, kmAllowance, parseKmPerDay } from "@/utils/kmAllowance";
+import { projectCodeError } from "@/utils/projectCode";
 
 type Form = Record<string, string>;
 const CITIES = ["Chennai", "Madurai", "Thanjavur", "Salem", "Vellore", "Coimbatore", "Trichy", "Virudhunagar", "Tirunelveli", "Erode", "Tiruppur", "Kanyakumari", "Ramnad", "Pondicherry"];
 const YN = ["YES", "NO"];
+/** Elements & Billing dates (same list and labels as the server). Every one lies within the campaign start and end dates. */
+const ELEMENT_DATES = [
+  ["artsFileDate", "Arts File Date"], ["printingDate", "Printing Date"], ["fabricationDate", "Fabrication Date"],
+  ["vehicleDeliveryDate", "Vehicle Delivery Date"], ["supportingDate", "Supporting Date"], ["invoiceDate", "Invoice Date"],
+] as const;
 
 export default function NewTrackingPage() {
   return (
@@ -70,6 +77,16 @@ function useFormState(initial: Form) {
   const set = (k: string, v: string) => setF((s) => ({ ...s, [k]: v }));
   const bind = (k: string) => ({ value: f[k] ?? "", onChange: (e: { target: { value: string } }) => set(k, e.target.value) });
   return { f, set, bind, errors, setErrors };
+}
+
+/** Project Code (both project types): 8 digits. Typed characters are kept as entered so a wrong one is shown, not hidden. */
+function ProjectCodeField({ bind }: { bind: { value: string; onChange: (e: { target: { value: string } }) => void } }) {
+  const err = bind.value ? projectCodeError(bind.value) : null;
+  return (
+    <Field label="Project Code *" hint={err ?? "8 digits. Use the same code to add more vehicles to the same project."}>
+      <input {...bind} inputMode="numeric" maxLength={8} placeholder="12345678" aria-label="Project Code" aria-invalid={!!err} className={err ? "is-invalid" : undefined} />
+    </Field>
+  );
 }
 
 function YesNo({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -204,16 +221,29 @@ function RoadshowForm() {
   const [locs, setLocs] = useState<string[]>([]);
   const today = todayIst();
   const [dateNote, setDateNote] = useState("");
-  // Campaign dates drive the Reporting Date: when they change, a Reporting Date outside the new period is cleared (never moved).
+  const [elementNote, setElementNote] = useState("");
+  // Campaign dates drive the Reporting Date and the Elements & Billing dates: when they change, any of those dates outside the
+  // new period is cleared (never moved) and the user is told which ones to pick again.
   const setCampaign = (k: "startDate" | "endDate", v: string) => {
     const start = k === "startDate" ? v : f.startDate;
     const end = k === "endDate" ? v : f.endDate;
     set(k, v);
     const kept = keepInRange(f.reportingDate ?? "", start, end);
+    const cleared = ELEMENT_DATES.filter(([key]) => f[key] && !keepInRange(f[key], start, end));
+    cleared.forEach(([key]) => set(key, ""));
+    const elements = cleared.map(([, label]) => label).join(", ");
+    setElementNote(cleared.length ? `${elements} ${cleared.length > 1 ? "were" : "was"} cleared because ${cleared.length > 1 ? "they are" : "it is"} outside the new campaign period. Pick ${cleared.length > 1 ? "them" : "it"} again.` : "");
     if (f.reportingDate && !kept) {
       set("reportingDate", "");
-      setDateNote("Reporting date was cleared because it is outside the new campaign period. Pick it again.");
-    } else setDateNote("");
+      setDateNote(`Reporting date${cleared.length ? ` and ${elements}` : ""} ${cleared.length ? "were" : "was"} cleared because ${cleared.length ? "they are" : "it is"} outside the new campaign period. Pick ${cleared.length ? "them" : "it"} again.`);
+    } else setDateNote(cleared.length ? `${elements} (Elements & Billing) ${cleared.length > 1 ? "were" : "was"} cleared because ${cleared.length > 1 ? "they are" : "it is"} outside the new campaign period.` : "");
+  };
+  const campStart = isYmd(f.startDate) ? f.startDate : undefined;
+  const campEnd = isYmd(f.endDate) ? f.endDate : undefined;
+  const extraYes = f.extraKmAllowed === "YES";
+  const setExtraAllowed = (v: string) => {
+    set("extraKmAllowed", v);
+    if (v !== "YES") set("extraKmAllotted", ""); // No -> the field is hidden and the value is 0 (the server stores 0)
   };
   const [step, setStep] = useState(0);
   const [confirm, setConfirm] = useState(false);
@@ -223,10 +253,13 @@ function RoadshowForm() {
     () => (f.startDate && f.endDate ? countDays(f.startDate, f.endDate, f.sundayHalt === "YES") : 0),
     [f.startDate, f.endDate, f.sundayHalt],
   );
+  const allowance = kmAllowance(f.kmAllotted, days, extraYes, f.extraKmAllotted);
 
   function stepErrors(s: number): string[] {
     const e: string[] = [];
     if (s === 0) {
+      const pc = projectCodeError(f.projectCode);
+      if (pc) e.push(pc);
       if (!f.billingName?.trim()) e.push("Billing name is required");
       if (!f.stateCode?.trim()) e.push("State code is required");
       const n = Number(f.numberOfVans);
@@ -243,6 +276,10 @@ function RoadshowForm() {
         e.push("Reporting date must be within the campaign start and end dates");
     }
     if (s === 2) {
+      // same rule as the server: every Elements & Billing date lies within the campaign start and end dates
+      if (campStart && campEnd)
+        for (const [k, label] of ELEMENT_DATES)
+          if (f[k] && isYmd(f[k]) && !inYmdRange(f[k], campStart, campEnd)) e.push(`${label} must be within the campaign start and end dates`);
       // same order as the server: arts file -> printing -> fabrication -> vehicle delivery (supporting / invoice are free)
       const chain = ["artsFileDate", "printingDate", "fabricationDate", "vehicleDeliveryDate"] as const;
       for (let i = 1; i < chain.length; i++) {
@@ -256,6 +293,11 @@ function RoadshowForm() {
       if (locs.length === 0) e.push("Add at least one reporting location");
       if (f.contactNumber && !isValidPhone(f.contactNumber)) e.push("Contact number must be a valid 10-digit mobile number");
       if (f.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) e.push("Email is invalid");
+      if (extraYes) {
+        const x = extraKmError(f.extraKmAllotted ?? "");
+        if (x) e.push(x);
+        if (parseKmPerDay(f.kmAllotted) === null) e.push("KM Allotted (KM per day) is required as a number when Extra KM Allowed is Yes");
+      }
     }
     return e;
   }
@@ -273,7 +315,11 @@ function RoadshowForm() {
       setConfirm(false);
       return;
     }
-    const err = await submit({ ...clean(f), contactNumber: toFullPhone(f.contactNumber ?? "") || undefined, numberOfVans: Number(f.numberOfVans), reportingLocations: locs });
+    const { extraKmAllotted, ...rest } = clean(f);
+    const err = await submit({
+      ...rest, contactNumber: toFullPhone(f.contactNumber ?? "") || undefined, numberOfVans: Number(f.numberOfVans), reportingLocations: locs,
+      ...(extraYes ? { extraKmAllotted: Number(extraKmAllotted) } : {}), // No -> not sent; the server stores 0
+    });
     setConfirm(false);
     if (err) setErrors([err]);
   }
@@ -301,6 +347,7 @@ function RoadshowForm() {
 
       {step === 0 && (
         <div className="grid">
+          <ProjectCodeField bind={bind("projectCode")} />
           <Field label="Billing Name *"><input {...bind("billingName")} placeholder="Sapphire Foods (KFC)" /></Field>
           <Field label="State Code *"><input {...bind("stateCode")} placeholder="33" /></Field>
           <Field label="Number of Vans *"><input type="number" min={1} max={100} {...bind("numberOfVans")} /></Field>
@@ -324,8 +371,19 @@ function RoadshowForm() {
           <Field label="Contact Number" hint="+91 added automatically"><PhoneInput value={f.contactNumber ?? ""} onChange={(v) => set("contactNumber", v)} placeholder="75488 10034" /></Field>
           <Field label="Email"><input type="email" {...bind("email")} /></Field>
           <Field label="Address"><input {...bind("address")} /></Field>
-          <Field label="KM Allotted"><input {...bind("kmAllotted")} placeholder="60 KM per day" /></Field>
-          <Field label="Extra KM Allowed"><YesNo value={f.extraKmAllowed} onChange={(v) => set("extraKmAllowed", v)} /></Field>
+          <Field label={`KM Allotted${extraYes ? " *" : ""}`} hint="KM per day"><input {...bind("kmAllotted")} placeholder="60 KM per day" /></Field>
+          <Field label="Extra KM Allowed"><YesNo value={f.extraKmAllowed} onChange={setExtraAllowed} /></Field>
+          {extraYes && (
+            <Field label="Extra KM Allotted *" hint="Extra KM per day, added to the KM Allotted per day">
+              <DecimalInput value={f.extraKmAllotted ?? ""} onChange={(v) => set("extraKmAllotted", v)} placeholder="20" aria-label="Extra KM Allotted" />
+            </Field>
+          )}
+          <Field label="Total Allowed KM / Day" hint={extraYes ? "KM Allotted + Extra KM, per day" : "KM Allotted per day"}>
+            <input value={allowance.allowedKmPerDay === null ? "" : `${allowance.allowedKmPerDay} km/day`} readOnly aria-label="Total Allowed KM per day" />
+          </Field>
+          <Field label="Campaign Total Allowed KM" hint="Total Allowed KM / day x campaign days">
+            <input value={allowance.totalAllowedKm === null ? "" : allowanceText(allowance)} readOnly aria-label="Campaign Total Allowed KM" />
+          </Field>
           <Field label="Timing"><input {...bind("timing")} placeholder="8 Hours" /></Field>
         </div>
       )}
@@ -344,12 +402,16 @@ function RoadshowForm() {
             </Select>
           </Field>
           <Field label="Other Elements" wide><input {...bind("otherElements")} placeholder="As per design, all required elements" /></Field>
-          <Field label="Arts File Date"><DateInput {...bind("artsFileDate")} max={f.printingDate || undefined} /></Field>
-          <Field label="Printing Date"><DateInput {...bind("printingDate")} min={f.artsFileDate || undefined} max={f.fabricationDate || undefined} /></Field>
-          <Field label="Fabrication Date"><DateInput {...bind("fabricationDate")} min={f.printingDate || undefined} max={f.vehicleDeliveryDate || undefined} /></Field>
-          <Field label="Vehicle Delivery Date"><DateInput {...bind("vehicleDeliveryDate")} min={f.fabricationDate || undefined} /></Field>
-          <Field label="Supporting Date"><DateInput {...bind("supportingDate")} /></Field>
-          <Field label="Invoice Date"><DateInput {...bind("invoiceDate")} /></Field>
+          <p className="field wide muted" role="status">
+            Campaign dates {formatDate(campStart)} → {formatDate(campEnd)}: every date below must fall within this period.
+            {elementNote && <> <strong>{elementNote}</strong></>}
+          </p>
+          <Field label="Arts File Date"><DateInput {...bind("artsFileDate")} min={campStart} max={earlierOf(f.printingDate, campEnd)} aria-label="Arts File Date" /></Field>
+          <Field label="Printing Date"><DateInput {...bind("printingDate")} min={laterOf(f.artsFileDate, campStart)} max={earlierOf(f.fabricationDate, campEnd)} aria-label="Printing Date" /></Field>
+          <Field label="Fabrication Date"><DateInput {...bind("fabricationDate")} min={laterOf(f.printingDate, campStart)} max={earlierOf(f.vehicleDeliveryDate, campEnd)} aria-label="Fabrication Date" /></Field>
+          <Field label="Vehicle Delivery Date"><DateInput {...bind("vehicleDeliveryDate")} min={laterOf(f.fabricationDate, campStart)} max={campEnd} aria-label="Vehicle Delivery Date" /></Field>
+          <Field label="Supporting Date"><DateInput {...bind("supportingDate")} min={campStart} max={campEnd} aria-label="Supporting Date" /></Field>
+          <Field label="Invoice Date"><DateInput {...bind("invoiceDate")} min={campStart} max={campEnd} aria-label="Invoice Date" /></Field>
         </div>
       )}
 
@@ -391,6 +453,8 @@ function SignageForm() {
 
   function validate(): string[] {
     const e: string[] = [];
+    const pc = projectCodeError(f.projectCode);
+    if (pc) e.push(pc);
     if (!f.client?.trim()) e.push("Client is required");
     if (!f.jobSheetNumber?.trim()) e.push("Job sheet number is required");
     if (!f.location?.trim()) e.push("Location is required");
@@ -428,6 +492,7 @@ function SignageForm() {
         </div>
       )}
       <div className="grid">
+        <ProjectCodeField bind={bind("projectCode")} />
         <Field label="Date"><DateInput {...bind("date")} max={today} /></Field>
         <Field label="Client *"><input {...bind("client")} placeholder="DALMIA" /></Field>
         <Field label="Job Sheet Number *"><input {...bind("jobSheetNumber")} placeholder="22070649" /></Field>

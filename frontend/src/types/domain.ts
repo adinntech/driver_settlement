@@ -1,3 +1,5 @@
+import type { KmAllowance } from "@/utils/kmAllowance";
+
 export type RoleKey = "RSOP" | "RBP" | "RSOM" | "RSA" | "RSO";
 export type ProjectType = "ROADSHOW" | "SIGNAGE";
 
@@ -31,6 +33,8 @@ export interface Project {
   _id: string;
   projectType: ProjectType;
   clientName: string;
+  /** 8-digit Project Code (absent on requests created before it existed). */
+  projectCode?: string;
   vehicleCount: number;
   details: Details;
   createdByName: string;
@@ -129,6 +133,8 @@ export interface BudgetContext {
   campaignTo: string;
   reportingDate: string | null;
   numberOfDays: number | string;
+  /** RoadShow KM allotment incl. the one-time Extra KM pool (null for signage; absent from older servers). */
+  km?: KmAllowance | null;
   trackupNumber: string;
   pifNumber: string;
   displayNumber: string;
@@ -247,6 +253,7 @@ export interface AllotmentProject {
   trackingProject: string; trackingVehicle: string; budget: string | null; budgetVersion: number | null; budgetNumber?: string;
   projectType: string; projectName: string; clientName: string; trackupNumber: string; pifNumber: string; billNumber: string | null;
   startDate: string | null; endDate: string | null; location: string | null;
+  totalAllowedKm?: number | null; extraKmAllotted?: number | null; // RoadShow KM allotment (read-only)
   vehicleCount: number | null; budgetAmount: number | null; approvedAt: string | null; budgetStatus: string; allotment: AllotmentRef | null;
 }
 export interface Allotment {

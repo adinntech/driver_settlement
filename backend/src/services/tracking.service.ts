@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { TrackingProject } from "../models/TrackingProject.js";
 import { TrackingVehicle } from "../models/TrackingVehicle.js";
 import { validateTracking, type TrackingValidationOptions } from "../validators/tracking.validator.js";
@@ -8,6 +9,35 @@ import { AppError } from "../utils/AppError.js";
 interface Actor {
   id: string;
   username: string;
+}
+
+const sameClient = (a: string, b: string) => a.trim().replace(/\s+/g, " ").toLowerCase() === b.trim().replace(/\s+/g, " ").toLowerCase();
+
+/**
+ * One Project Code is one project of one project type. More tracking requests may be added to it later (they are grouped on
+ * the dashboard), but only for the same client: a code already used by another client's project of the same type is rejected,
+ * so vehicles of different clients can never end up in one project. Roadshow and Signage codes are independent.
+ */
+export async function assertProjectCodeFits(projectType: string, projectCode: string, clientName: string) {
+  const clash = (owner: string) =>
+    new AppError(`Project Code ${projectCode} is already used by the ${projectType === "ROADSHOW" ? "Roadshow" : "Signage"} project of ${owner}. Use that client's name to add vehicles to it, or enter a different Project Code.`, 409);
+  // Requests saved before the claim below existed (or by older code paths) are checked directly.
+  const used = await TrackingProject.find({ projectType, projectCode }).select("clientName").limit(50).lean();
+  const other = used.find((p) => !sameClient(String(p.clientName), clientName));
+  if (other) throw clash(String(other.clientName));
+  // Atomic claim (unique _id per type + code): of two simultaneous requests by different clients only the first owns the code.
+  const claims = mongoose.connection.collection<{ _id: string; client: string; clientName: string; at: Date }>("projectcodes");
+  const key = `${projectType}:${projectCode}`;
+  const norm = clientName.trim().replace(/\s+/g, " ").toLowerCase();
+  for (let i = 0; i < 2; i++) {
+    try {
+      const c = await claims.findOneAndUpdate({ _id: key }, { $setOnInsert: { client: norm, clientName: clientName.trim(), at: new Date() } }, { upsert: true, returnDocument: "after" });
+      if (c && c.client !== norm) throw clash(c.clientName);
+      return;
+    } catch (e) {
+      if ((e as { code?: number }).code !== 11000) throw e; // concurrent upsert of the same new key: read the winner
+    }
+  }
 }
 
 export async function createTracking(
@@ -23,12 +53,14 @@ export async function createTracking(
     const existing = await TrackingProject.findOne({ requestId });
     if (existing) return loadProject(existing._id.toString()); // idempotent retry
   }
+  await assertProjectCodeFits(String(body.projectType), v.projectCode, v.clientName);
 
   let project;
   try {
     project = await TrackingProject.create({
       projectType: body.projectType,
       clientName: v.clientName,
+      projectCode: v.projectCode,
       vehicleCount: v.vehicleCount,
       details: v.details,
       createdBy: actor.id,
@@ -42,7 +74,6 @@ export async function createTracking(
     }
     throw e;
   }
-
   const store: NumberStore = {
     exists: async (s) =>
       !!(await TrackingVehicle.exists({
@@ -98,7 +129,7 @@ export async function listTracking(f: ListFilters) {
     const vehicleHits = await TrackingVehicle.find({
       $or: [{ trackupNumber: rx }, { pifNumber: rx }, { displayNumber: rx }],
     }).distinct("project");
-    pf.$or = [{ clientName: rx }, { _id: { $in: vehicleHits } }];
+    pf.$or = [{ clientName: rx }, { projectCode: rx }, { _id: { $in: vehicleHits } }];
   }
   const projects = await TrackingProject.find(pf).sort({ createdAt: -1 }).lean();
   const vehicles = await TrackingVehicle.find({ project: { $in: projects.map((p) => p._id) } })

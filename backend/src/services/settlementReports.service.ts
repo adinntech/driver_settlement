@@ -169,6 +169,8 @@ export async function vehicleMisWorkbook(rows: Awaited<ReturnType<typeof vehicle
   });
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
+const kmCell = (v: unknown): number | "" => (typeof v === "number" && Number.isFinite(v) ? v : "");
+
 export async function driverSalaryRows(q: ReportQuery) {
   const filter: any = { category: "FINAL", status: { $in: ["APPROVED", "COMPLETED"] } };
   if (q.from && YMD.test(q.from)) filter.toDate = { $gte: q.from };
@@ -177,6 +179,9 @@ export async function driverSalaryRows(q: ReportQuery) {
   return rows.map((p) => ({
     _id: String(p._id), paymentNumber: p.paymentNumber, status: p.status, driverNumber: p.driverNumber, driverName: p.driverName, vehicleNo: p.vehicleNo, trackupNumber: p.trackupNumber, jsNumber: p.jsNumber ?? "",
     clientName: p.clientName ?? "", fromDate: p.fromDate, toDate: p.toDate, onRoadDays: p.data?.days?.onRoadDays ?? 0, onRoadSundays: p.data?.days?.onRoadSundays ?? 0, haltDays: p.data?.days?.haltDays ?? 0,
+    // KM allowance (blank for signage and for settlements saved before it was recorded); actual KM is always the Result KM
+    regularKmPerDay: kmCell(p.data?.km?.kmPerDay), extraKmPerDay: kmCell(p.data?.km ? p.data.km.extraKmAllotted : null), allowedKmPerDay: kmCell(p.data?.km?.allowedKmPerDay),
+    totalAllowedKm: kmCell(p.data?.km?.totalAllowedKm), actualKm: kmCell(p.data?.km?.actualKm ?? p.data?.fuel?.resultKm), excessKm: kmCell(p.data?.km?.excessKm),
     earnings: p.data?.earningsTotal ?? 0, approvedExpenses: p.data?.approvedTotal ?? 0, gross: p.data?.gross ?? 0, totalDeduction: p.data?.totalDeduction ?? 0, suspenseAmount: p.data?.suspenseAmount ?? 0,
     netAmount: p.amount, approvedBy: p.reviewedBy ?? "", approvedAt: p.reviewedAt ?? null, ...payRef(p),
   }));
@@ -244,6 +249,8 @@ export async function reportWorkbook(kind: string, q: ReportQuery): Promise<{ na
       { header: "DSE No", key: "paymentNumber", width: 20 }, { header: "Status", key: "status" }, { header: "Driver Code", key: "driverNumber" }, { header: "Driver", key: "driverName", width: 22 },
       { header: "Vehicle No", key: "vehicleNo", width: 14 }, { header: "Trackup No", key: "trackupNumber", width: 16 }, { header: "JS No", key: "jsNumber" }, { header: "Client", key: "clientName", width: 24 },
       { header: "From", key: "fromDate" }, { header: "To", key: "toDate" }, { header: "On Road Days", key: "onRoadDays" }, { header: "On Road Sundays", key: "onRoadSundays" }, { header: "Halt Days", key: "haltDays" },
+      { header: "Regular KM/Day", key: "regularKmPerDay" }, { header: "Extra KM/Day", key: "extraKmPerDay" }, { header: "Allowed KM/Day", key: "allowedKmPerDay" },
+      { header: "Total Allowed KM", key: "totalAllowedKm" }, { header: "Actual KM", key: "actualKm" }, { header: "Excess KM", key: "excessKm" },
       { header: "Earnings", key: "earnings", money: true }, { header: "Approved Expenses", key: "approvedExpenses", money: true }, { header: "Gross", key: "gross", money: true },
       { header: "Total Deduction", key: "totalDeduction", money: true }, { header: "Suspense", key: "suspenseAmount", money: true }, { header: "Net Amount", key: "netAmount", money: true },
       { header: "Approved By", key: "approvedBy" }, { header: "Approved On", key: "approvedAt", date: true, width: 18 }, ...REF_COLS,
@@ -325,6 +332,12 @@ export async function driverSalaryPdf(id: string): Promise<{ name: string; buffe
   lv("Driver Code", p.driverNumber ?? "", 299, 218, 387, 170);
   lv("Reporting Date", dmy(d.reportingDate), 299, 231, 387, 170);
   lv("Estimated KM Per Day", plain(d.estimatedKmPerDay), 299, 244, 387, 170);
+  // KM allowance (RoadShow, settlements saved with it): free slots of the right-hand column, existing positions unchanged
+  const km = d.km;
+  if (km && km.totalAllowedKm !== null && km.totalAllowedKm !== undefined) {
+    lv("Regular / Extra KM/day", `${plain(km.kmPerDay)} + ${plain(km.extraKmAllotted)} = ${plain(km.allowedKmPerDay ?? Number(km.kmPerDay) + Number(km.extraKmAllotted))} KM/day`, 299, 190, 387, 170);
+    lv("Actual / Excess KM", `${plain(km.actualKm)} / ${plain(km.excessKm)}`, 299, 203, 387, 170);
+  }
 
   // ---- ON-ROAD EXPENSES bar
   doc.rect(L, 259, R - L, 15).fillAndStroke(GREY, "#888");
@@ -337,7 +350,8 @@ export async function driverSalaryPdf(id: string): Promise<{ name: string; buffe
   [["Fixed Mileage", plain(d.fuel.fixedMileage), `Diesel Cost : ${plain(d.fuel.dieselCost)}`], ["Opening KM", plain(d.fuel.openingKm), `IOCL card usage in Ltrs : ${plain(d.fuel.ioclLitres)}`],
     ["Closing KM", plain(d.fuel.closingKm), `IOCL card usage in KMs : ${plain(d.fuel.ioclKms)}`], ["Result", plain(d.fuel.resultKm), `Variation in ltrs : ${plain(d.fuel.variationLitres)}`]]
     .forEach(([a, b, c], i) => { txt(a, L, fy[i]); txt(b, 124, fy[i]); txt(c, 175, fy[i]); });
-  [["Estimated Budget", num2(d.estimate.estimatedBudget)], ["Estimated KM", plain(d.estimate.estimatedKm)], ["Estimated Fuel", num2(d.estimate.estimatedFuel)]]
+  [["Estimated Budget", num2(d.estimate.estimatedBudget)], ["Estimated KM", plain(d.estimate.estimatedKm)], ["Estimated Fuel", num2(d.estimate.estimatedFuel)],
+    ...(km && km.totalAllowedKm !== null && km.totalAllowedKm !== undefined ? [["Total Allowed KM", plain(km.totalAllowedKm)]] : [])]
     .forEach(([a, b], i) => { txt(a, 330, fy[i]); txt(b, 452, fy[i]); });
 
   // ---- ON-ROAD EXPENSES DETAILS table

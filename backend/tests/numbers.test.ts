@@ -108,6 +108,7 @@ test("concurrent allocation yields all-unique numbers", async () => {
 });
 
 const roadshow = {
+  projectCode: "20000001",
   billingName: "Sapphire Foods (KFC)",
   stateCode: "33",
   numberOfVans: 7,
@@ -120,6 +121,7 @@ const roadshow = {
   email: "deluxshan@sapphirefoods.in",
 };
 const signage = {
+  projectCode: "20000002",
   date: "2026-10-20",
   client: "DALMIA",
   jobSheetNumber: "22070649",

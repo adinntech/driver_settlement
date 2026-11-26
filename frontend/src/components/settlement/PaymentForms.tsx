@@ -16,6 +16,7 @@ import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { formatDate, formatDateTime, formatInr } from "@/utils/format";
 import { earlierOf, keepInRange, laterOf } from "@/utils/dates";
 import { amountPaise, money, newSubmissionKey, rowId, sanitizeAmount, type RsaProjectRow } from "@/utils/rsa";
+import { allowanceText, kmText, kmUsage } from "@/utils/kmAllowance";
 import {
   DEDUCTION_KEYS, campaignDays, paymentsBase, finalFormFrom, finalPayload, finalTotals, validateFinalForm, type FinalForm, type FinalNumberKey, type SettlementContext, type SettlementDetail, type SettlementOptions,
 } from "@/utils/settlement";
@@ -376,6 +377,7 @@ function DailyInner({ ctx, existing, expenseOptions }: { ctx: SettlementContext;
               <div>Vehicle No: <b>{ctx.vehicleNo}</b></div>
               <div>Client Name: <b>{ctx.clientName}</b></div>
               <div>Driver Name: <b>{ctx.driverName}</b></div>
+              {ctx.campaign.km && ctx.campaign.km.totalAllowedKm !== null && <div>Total Allowed KM: <b>{allowanceText(ctx.campaign.km)}</b></div>}
             </div>
             <div className="vp-payno">Payment No: <b>{existing?.paymentNumber ?? "Auto on save"}</b></div>
           </div>
@@ -442,6 +444,7 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
   const [entryDate] = useState(() => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10));
   const key = useRef(newSubmissionKey());
   const t = useMemo(() => finalTotals(f), [f]);
+  const km = ctx.campaign.km ? kmUsage(ctx.campaign.km, t.resultKm) : null; // the server recalculates and saves the same figures
   const days = useMemo(() => campaignDays(ctx), [ctx]);
   const pv = (s: string) => amountPaise(s) ?? 0;
   const setN = (k: FinalNumberKey, v: string) => setF({ ...f, n: { ...f.n, [k]: v } });
@@ -551,7 +554,20 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
             <label>IOCL card usage in Ltrs</label>{num("ioclLitres")}<span /><span />
             <label>IOCL card usage in KMs</label>{num("ioclKms")}<span /><span />
             <label>Variation in Ltrs</label>{ro(String(t.variationLitres))}<span className="dsf-hint" style={{ gridColumn: "span 2" }}>Expected {t.expectedLitres} l for {t.resultKm} km</span>
+            {km && km.totalAllowedKm !== null && (
+              <>
+                <label>Regular KM / Day</label>{ro(String(km.kmPerDay))}<label>Extra KM / Day</label>{ro(String(km.extraKmAllotted))}
+                <label>Total Allowed KM</label>{ro(String(km.totalAllowedKm))}<label>Actual KM</label>{ro(String(km.actualKm))}
+                <label>Excess KM</label>{ro(String(km.excessKm))}<span /><span />
+              </>
+            )}
           </div>
+          {km && km.totalAllowedKm !== null && (
+            <p className={`dsf-hint${km.excessKm ? " text-danger" : ""}`}>
+              Allowed {allowanceText(ctx.campaign.km)}; actual {kmText(km.actualKm)} (closing - opening).{" "}
+              {km.excessKm ? `${kmText(km.excessKm)} over the allowance.` : "Within the allowance."} KM only: no amount is added or deducted for extra KM.
+            </p>
+          )}
           <div className="dsf-days">
             <label>On Road Days</label>{num("onRoadDays", { w: "dsf-w-xs" })}{ro(money(earn("On Road Days Salary")))}
             <label>On Road Sunday</label>{num("onRoadSundays", { w: "dsf-w-xs" })}{ro(money(earn("On Road Sunday Salary")))}

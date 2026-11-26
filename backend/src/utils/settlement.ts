@@ -1,5 +1,6 @@
 import { EXPENSE_OPTIONS } from "../config/rsaOptions.js";
 import { calculatePayable, parseAmountPaise, rupees, validatePaymentInput, type PaymentInput } from "./rsaPayment.js";
+import { kmUsage, type KmAllowance } from "./kmAllowance.js";
 
 /**
  * Validation and calculations of the two settlement categories. All money is handled in integer paise and every quantity in
@@ -200,13 +201,18 @@ export function calculateFinal(d: FinalInput) {
   return { resultKm, expectedLitres, variationLitres, mileageShortSuggestedP, earnings, earningsP, expenses, claimedP, approvedP, rejectedP: claimedP - approvedP, grossP, totalDeductionP, netP };
 }
 
-/** The stored shape of a final settlement (rupees, quantities as plain numbers). */
-export function finalData(d: FinalInput, campaign: { fromDate: string; toDate: string; totalDays: number | null }) {
+/**
+ * The stored shape of a final settlement (rupees, quantities as plain numbers).
+ * `km` compares the actual KM (Result KM) with the campaign's Total Allowed KM, including the one-time Extra KM pool. It is a
+ * KM report only: no amount is derived from it, so Gross / Net stay exactly as calculated above (no second diesel payment).
+ */
+export function finalData(d: FinalInput, campaign: { fromDate: string; toDate: string; totalDays: number | null; km?: KmAllowance | null }) {
   const c = calculateFinal(d);
   const h = (k: NumKey) => d.n[k] / 100;
   return {
     jsNumber: d.jsNumber, location: d.location, reportingDate: d.reportingDate, travelDetails: d.travelDetails ?? null, campaignFrom: campaign.fromDate, campaignTo: campaign.toDate, totalDays: campaign.totalDays,
     estimatedKmPerDay: h("estimatedKmPerDay"),
+    km: campaign.km ? kmUsage(campaign.km, c.resultKm) : null,
     fuel: { fixedMileage: h("fixedMileage"), openingKm: h("openingKm"), closingKm: h("closingKm"), resultKm: c.resultKm, dieselCost: h("dieselCost"), ioclLitres: h("ioclLitres"), ioclKms: h("ioclKms"), expectedLitres: c.expectedLitres, variationLitres: c.variationLitres, mileageShortSuggested: rupees(c.mileageShortSuggestedP) },
     estimate: { estimatedBudget: h("estimatedBudget"), estimatedKm: h("estimatedKm"), estimatedFuel: h("estimatedFuel") },
     rates: { perDaySalary: h("perDaySalary"), perDayFood: h("perDayFood"), haltDayPay: h("haltDayPay"), travelPay: h("travelPay"), overtimeRate: h("overtimeRate") },

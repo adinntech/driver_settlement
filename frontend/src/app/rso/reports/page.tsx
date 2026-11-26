@@ -48,7 +48,8 @@ const REPORTS: { kind: Kind; label: string; hint: string; dates: boolean; cols: 
     kind: "driver-salary", label: "Driver Salary Report", hint: "Approved final settlements. Download each driver's salary statement as a PDF.", dates: true,
     cols: [
       { key: "paymentNumber", label: "DSE No" }, { key: "driverNumber", label: "Driver Code" }, { key: "driverName", label: "Driver" }, { key: "vehicleNo", label: "Vehicle" }, { key: "clientName", label: "Client" },
-      { key: "onRoadDays", label: "Days", type: "num" }, { key: "gross", label: "Gross", type: "money" }, { key: "totalDeduction", label: "Deduction", type: "money" },
+      { key: "onRoadDays", label: "Days", type: "num" }, { key: "extraKmPerDay", label: "Extra KM/Day", type: "num" }, { key: "totalAllowedKm", label: "Allowed KM", type: "num" },
+      { key: "actualKm", label: "Actual KM", type: "num" }, { key: "excessKm", label: "Excess KM", type: "num" }, { key: "gross", label: "Gross", type: "money" }, { key: "totalDeduction", label: "Deduction", type: "money" },
       { key: "suspenseAmount", label: "Suspense", type: "money" }, { key: "netAmount", label: "Net", type: "money" }, { key: "status", label: "Status" },
     ],
   },

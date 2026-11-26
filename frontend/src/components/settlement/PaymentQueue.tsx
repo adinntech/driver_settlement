@@ -14,6 +14,7 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { useSessionState } from "@/hooks/useSessionState";
 import { downloadFile, request } from "@/services/api";
 import { formatDate, formatDateTime, formatInr } from "@/utils/format";
+import { kmText } from "@/utils/kmAllowance";
 import {
   ACTION_LABEL, CATEGORY_SHORT, STATUS_LABEL, actionsFor, modeLabel, paymentsBase, emptyQueueFilters, queueQuery, type PaymentCategory, type QueueFilters, type SettlementDetail, type SettlementPage,
   type SettlementRow, type SettlementStatus,
@@ -335,6 +336,12 @@ function FinalBreakdown({ data }: { data: Record<string, any> }) {
           ["Fixed Mileage", `${data.fuel.fixedMileage} km/l`], ["Opening / Closing KM", `${data.fuel.openingKm} / ${data.fuel.closingKm}`], ["Result", `${data.fuel.resultKm} km`],
           ["Diesel Cost", `${formatInr(data.fuel.dieselCost)} / l`], ["IOCL (litres / KMs)", `${data.fuel.ioclLitres} / ${data.fuel.ioclKms}`], ["Variation in Litres", data.fuel.variationLitres],
           ["Estimated Budget", formatInr(data.estimate.estimatedBudget)], ["Estimated KM / Fuel", `${data.estimate.estimatedKm} km / ${data.estimate.estimatedFuel} l`],
+          // KM allowance saved with the settlement (RoadShow; absent on settlements saved before it was recorded)
+          ...(data.km && data.km.totalAllowedKm !== null && data.km.totalAllowedKm !== undefined ? [
+            ["Regular KM / Day", kmText(data.km.kmPerDay)], ["Extra KM / Day", kmText(data.km.extraKmAllotted)],
+            ["Total Allowed KM", `${kmText(data.km.totalAllowedKm)}${data.km.campaignDays ? ` (${kmText(data.km.allowedKmPerDay ?? (data.km.kmPerDay ?? 0) + (data.km.extraKmAllotted ?? 0))}/day x ${data.km.campaignDays} days)` : ""}`],
+            ["Actual KM", kmText(data.km.actualKm)], ["Excess KM", kmText(data.km.excessKm)],
+          ] as [string, string][] : []),
         ]} />
       </section>
       <section className="ds-sec">

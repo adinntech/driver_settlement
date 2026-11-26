@@ -26,6 +26,7 @@ import {
 } from "@/utils/tolls";
 import { canEdit, describeBudget, statusOf } from "@/utils/budgetDescribe";
 import { formatDate, formatDateTime, formatInr } from "@/utils/format";
+import { allowanceText, kmText } from "@/utils/kmAllowance";
 
 export default function BudgetPage() {
   return (
@@ -73,6 +74,14 @@ function BudgetView() {
           <KV k="Campaign Period" v={`${formatDate(c.campaignFrom)} → ${formatDate(c.campaignTo)}`} />
           {c.projectType === "ROADSHOW" && <KV k="Reporting Date" v={formatDate(c.reportingDate)} />}
           <KV k="Number of Days" v={String(c.numberOfDays ?? "—")} />
+          {c.km && (
+            <>
+              <KV k="Regular KM / Day" v={c.km.kmPerDay === null ? "" : kmText(c.km.kmPerDay)} />
+              <KV k="Extra KM / Day" v={c.km.extraKmAllowed ? kmText(c.km.extraKmAllotted) : "Not allowed"} />
+              <KV k="Total Allowed KM / Day" v={c.km.allowedKmPerDay === null ? "" : kmText(c.km.allowedKmPerDay)} />
+              <KV k="Campaign Total Allowed KM" v={c.km.totalAllowedKm === null ? "" : allowanceText(c.km)} />
+            </>
+          )}
           {[
             ["Trackup Number", c.trackupNumber],
             ["PIF Number", c.pifNumber],
@@ -199,6 +208,8 @@ function BudgetForm({
   const [busy, setBusy] = useState(false);
   const saving = useRef(false); // blocks double submits
   const v = useMemo(() => computeValues(f), [f]);
+  // Budget KM estimate against the campaign allowance (KM / day x days + the one-time Extra KM pool). Shown only; no money effect.
+  const estimatedKm = Math.round((Number(f.estimatedKmPerDay) || 0) * (Number(f.numberOfDays) || 0) * 100) / 100;
 
   const set = <K extends keyof Draft>(k: K, val: Draft[K]) => setF((s) => ({ ...s, [k]: val }));
   const [dateNote, setDateNote] = useState("");
@@ -299,6 +310,12 @@ function BudgetForm({
           <Row label="Number of days" k="numberOfDays">
             <IntInput value={f.numberOfDays} onChange={(x) => { setDaysManual(true); set("numberOfDays", x); }} />
           </Row>
+          {context.km && context.km.totalAllowedKm !== null && (
+            <p className={`muted b-date-hint${estimatedKm > context.km.totalAllowedKm ? " toll-warn" : ""}`} role="status">
+              Estimated KM {kmText(estimatedKm)} (KM per day x days) · Total Allowed KM {allowanceText(context.km)}
+              {estimatedKm > context.km.totalAllowedKm && ` · exceeds the allowance by ${kmText(Math.round((estimatedKm - context.km.totalAllowedKm) * 100) / 100)}`}
+            </p>
+          )}
           <Row label="Diesel Cost" k="dieselAmount">
             <DecimalInput value={f.dieselAmount} onChange={(x) => set("dieselAmount", x)} placeholder="0.00" />
             <UnitSelect value="PER_CAMPAIGN" fixed />

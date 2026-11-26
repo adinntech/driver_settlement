@@ -1,6 +1,7 @@
 import { amountPaise } from "./rsa";
 import { countDays } from "./format";
 import { inYmdRange, isYmd } from "./dates";
+import type { KmAllowance } from "./kmAllowance";
 
 // ---------------------------------------------------------------- API types
 export type PaymentCategory = "DAILY" | "FINAL";
@@ -46,7 +47,7 @@ export interface SettlementPage { items: SettlementRow[]; total: number; page: n
 export interface SettlementContext {
   trackingVehicle: string; trackupNumber: string; pifNumber: string; clientName: string; projectType: "ROADSHOW" | "SIGNAGE"; vehicleNo: string; driverNumber: string; driverName: string;
   approvedBudgetAmount: number | null; budgetVersion: number | null;
-  campaign: { fromDate: string | null; toDate: string | null; totalDays: number | null; location: string | null; jsNumber: string | null; reportingDate: string | null; sundayHalt?: boolean };
+  campaign: { fromDate: string | null; toDate: string | null; totalDays: number | null; location: string | null; jsNumber: string | null; reportingDate: string | null; sundayHalt?: boolean; km?: KmAllowance | null };
   advances?: { source: string; date: string; amount: number; note: string }[];
   previousPayments?: { source: string; paymentNumber: string; status: string; date: string; amount: number; mode: string; bankName: string | null; referenceNumber?: string | null }[];
   dailyPayments?: { paymentNumber: string; status: string; fromDate: string; toDate: string; amount: number; salaryAdvance: number; diesel: number; food: number }[];

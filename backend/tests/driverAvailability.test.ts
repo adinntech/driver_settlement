@@ -69,7 +69,7 @@ const budgetNo = (() => { let n = 0; return () => `BUD-D-${++n}`; })();
   const t = await T();
   const r = await call("/tracking", "POST", {
     projectType: "SIGNAGE",
-    details: { client: "Pepsi India", jobSheetNumber: "ZZDRV-77", location: "Coimbatore", date: d(0), fromDate: d(2), toDate: d(9), numberOfVehicles: 6 },
+    details: { projectCode: "14000001", client: "Pepsi India", jobSheetNumber: "ZZDRV-77", location: "Coimbatore", date: d(0), fromDate: d(2), toDate: d(9), numberOfVehicles: 6 },
   }, t.rsop);
   assert.equal(r.status, 201, JSON.stringify(r.body));
   proj = r.body.data;

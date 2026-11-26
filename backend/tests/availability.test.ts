@@ -201,13 +201,13 @@ const mkBudget = (tv: any, projectId: string, state: Record<string, unknown>) =>
   const t = await T();
   const r = await call("/tracking", "POST", {
     projectType: "SIGNAGE",
-    details: { client: "Pepsi India", jobSheetNumber: "ZZPEP-77", location: "Coimbatore", date: d(0), fromDate: d(2), toDate: d(9), numberOfVehicles: 14 },
+    details: { projectCode: "13000001", client: "Pepsi India", jobSheetNumber: "ZZPEP-77", location: "Coimbatore", date: d(0), fromDate: d(2), toDate: d(9), numberOfVehicles: 14 },
   }, t.rsop);
   assert.equal(r.status, 201, JSON.stringify(r.body));
   proj = r.body.data;
   const rr = await call("/tracking", "POST", {
     projectType: "ROADSHOW",
-    details: { billingName: "KFC", stateCode: "33", startDate: d(2), endDate: d(6), reportingDate: d(2), sundayHalt: "NO", numberOfVans: 2, reportingLocations: ["Chennai", "Trichy"] },
+    details: { projectCode: "13000002", billingName: "KFC", stateCode: "33", startDate: d(2), endDate: d(6), reportingDate: d(2), sundayHalt: "NO", numberOfVans: 2, reportingLocations: ["Chennai", "Trichy"] },
   }, t.rsop);
   assert.equal(rr.status, 201, JSON.stringify(rr.body));
   road = rr.body.data;
@@ -221,7 +221,7 @@ const mkBudget = (tv: any, projectId: string, state: Record<string, unknown>) =>
   // vehicles[13]: no budget at all
   for (const tv of road.vehicles) await mkBudget(tv, road._id, approved);
   const ar = await call("/tracking", "POST", {
-    projectType: "SIGNAGE", details: { client: "Auto Motors", jobSheetNumber: "ZZAUTO-1", location: "Salem", date: d(0), fromDate: d(2), toDate: d(9), numberOfVehicles: 12 },
+    projectType: "SIGNAGE", details: { projectCode: "13000003", client: "Auto Motors", jobSheetNumber: "ZZAUTO-1", location: "Salem", date: d(0), fromDate: d(2), toDate: d(9), numberOfVehicles: 12 },
   }, t.rsop);
   assert.equal(ar.status, 201, JSON.stringify(ar.body));
   auto = ar.body.data;

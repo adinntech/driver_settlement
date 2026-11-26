@@ -11,6 +11,7 @@ import { ENTRY_PAYMENT_MODES, PAYMENT_MODE_LABEL, SettlementPayment, SettlementP
 import { TrackingProject } from "../models/TrackingProject.js";
 import { AppError } from "../utils/AppError.js";
 import { financialYear } from "../utils/numbers.js";
+import { kmAllowanceOf } from "../utils/kmAllowance.js";
 import { maskTail, seal } from "../utils/secureField.js";
 import { daysBetween, dailyData, finalData, FINAL_EXPENSE_CATEGORIES, DEDUCTION_LABELS, validateDailyInput, validateFinalInput } from "../utils/settlement.js";
 import { notifyRole, notifyUsername } from "./notification.service.js";
@@ -91,6 +92,7 @@ const campaignOf = (proj: any) => {
     jsNumber: d.jobSheetNumber ?? null,
     reportingDate: d.reportingDate ?? null,
     sundayHalt: roadshow && d.sundayHalt === "YES", // the RSOP tracking rule: Sundays are halt days for this campaign
+    km: kmAllowanceOf(proj?.projectType, d), // KM / day x days + the one-time Extra KM pool (RoadShow only, else null)
   };
 };
 
@@ -250,7 +252,7 @@ function buildFinal(input: unknown, camp: ReturnType<typeof campaignOf>) {
   if (!camp.fromDate || !camp.toDate) throw new AppError("The campaign period of this project is not set", 409);
   const v = validateFinalInput(input, { totalDays: daysBetween(camp.fromDate, camp.toDate), fromDate: camp.fromDate, toDate: camp.toDate }); // on-road + Sunday + halt days and reporting date fit inside the campaign calendar
   if (v.errors.length || !v.data) throw new AppError(v.errors.join("; "), 400);
-  const data = finalData(v.data, { fromDate: camp.fromDate, toDate: camp.toDate, totalDays: camp.totalDays });
+  const data = finalData(v.data, { fromDate: camp.fromDate, toDate: camp.toDate, totalDays: camp.totalDays, km: camp.km });
   return { data, key: v.data.idempotencyKey, fromDate: camp.fromDate, toDate: camp.toDate, amount: data.netAmount };
 }
 

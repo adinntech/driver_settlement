@@ -1,6 +1,13 @@
 import { countDays } from "../utils/days.js";
 import { isYmd, todayIst } from "../utils/dates.js";
 import { normalizeIndianPhone } from "../utils/phone.js";
+import { kmAllowanceOf, MAX_EXTRA_KM, parseKmPerDay } from "../utils/kmAllowance.js";
+
+/** RSOP "Elements & Billing" dates: [key, label]. All of them must fall within the campaign. */
+export const ELEMENT_DATES = [
+  ["artsFileDate", "Arts File Date"], ["printingDate", "Printing Date"], ["fabricationDate", "Fabrication Date"],
+  ["vehicleDeliveryDate", "Vehicle Delivery Date"], ["supportingDate", "Supporting Date"], ["invoiceDate", "Invoice Date"],
+] as const;
 
 type Obj = Record<string, unknown>;
 export interface ValidationResult {
@@ -8,7 +15,11 @@ export interface ValidationResult {
   clientName: string;
   vehicleCount: number;
   details: Obj;
+  projectCode: string;
 }
+
+/** Project Code: exactly 8 digits. */
+export const PROJECT_CODE = /^\d{8}$/;
 
 const isDate = isYmd;
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
@@ -35,6 +46,11 @@ export function validateTracking(projectType: unknown, input: unknown, opts: Tra
   const details: Obj = { ...b };
   if (projectType === "ROADSHOW") delete details.model;
   let clientName = "";
+  // Project Code (both types): exactly 8 digits, kept as text so leading zeros survive.
+  const projectCode = typeof b.projectCode === "string" ? b.projectCode.trim() : "";
+  if (b.projectCode === undefined || b.projectCode === null || b.projectCode === "") errors.push("Project Code is required");
+  else if (!PROJECT_CODE.test(projectCode)) errors.push("Project Code must be exactly 8 digits (0-9 only)");
+  else details.projectCode = projectCode;
 
   if (projectType === "ROADSHOW") {
     clientName = str(b.billingName);
@@ -60,6 +76,11 @@ export function validateTracking(projectType: unknown, input: unknown, opts: Tra
       if (reporting < String(b.startDate) || reporting > String(b.endDate))
         errors.push("Reporting date must be within the campaign start and end dates");
     }
+    // Elements & Billing dates belong to the campaign: each one lies within the campaign start and end dates.
+    if (isDate(b.startDate) && isDate(b.endDate))
+      for (const [k, label] of ELEMENT_DATES)
+        if (isDate(b[k]) && (String(b[k]) < String(b.startDate) || String(b[k]) > String(b.endDate)))
+          errors.push(`${label} must be within the campaign start and end dates`);
     // Production order: arts file -> printing -> fabrication -> vehicle delivery. Supporting and invoice dates have no fixed order.
     const milestones = ["artsFileDate", "printingDate", "fabricationDate", "vehicleDeliveryDate"] as const;
     for (let i = 1; i < milestones.length; i++) {
@@ -81,6 +102,19 @@ export function validateTracking(projectType: unknown, input: unknown, opts: Tra
     if (b.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str(b.email))) errors.push("Email is invalid");
     if (isDate(b.startDate) && isDate(b.endDate) && yesNo(b.sundayHalt))
       details.numberOfDays = countDays(String(b.startDate), String(b.endDate), b.sundayHalt === "YES");
+    // Extra KM: an extra daily allowance (KM per day), entered only when Extra KM Allowed = YES (otherwise always 0).
+    if (b.extraKmAllowed === "YES") {
+      const raw = b.extraKmAllotted;
+      const n = typeof raw === "number" ? raw : typeof raw === "string" && /^\d+(\.\d{1,2})?$/.test(raw.trim()) ? Number(raw.trim()) : NaN;
+      if (raw === undefined || raw === null || raw === "") errors.push("Extra KM Allotted is required when Extra KM Allowed is Yes");
+      else if (!Number.isFinite(n) || n <= 0 || Math.abs(Math.round(n * 100) - n * 100) > 1e-6) errors.push("Extra KM Allotted must be a number greater than 0 (up to 2 decimals)");
+      else if (n > MAX_EXTRA_KM) errors.push(`Extra KM Allotted cannot be more than ${MAX_EXTRA_KM} KM per day`);
+      else details.extraKmAllotted = n;
+      if (parseKmPerDay(b.kmAllotted) === null) errors.push("KM Allotted (KM per day) is required as a number when Extra KM Allowed is Yes");
+    } else details.extraKmAllotted = 0;
+    const allowance = kmAllowanceOf("ROADSHOW", details);
+    if (allowance?.totalAllowedKm !== null && allowance?.totalAllowedKm !== undefined) details.totalAllowedKm = allowance.totalAllowedKm;
+    else delete details.totalAllowedKm; // derived on the server only, never taken from the browser
   } else if (projectType === "SIGNAGE") {
     clientName = str(b.client);
     req("client", "Client");
@@ -102,5 +136,5 @@ export function validateTracking(projectType: unknown, input: unknown, opts: Tra
   } else {
     errors.push("Project type must be ROADSHOW or SIGNAGE");
   }
-  return { errors, clientName, vehicleCount: count, details };
+  return { errors, clientName, vehicleCount: count, details, projectCode };
 }
