@@ -13,7 +13,8 @@ COPY . .
 RUN npm run build
 
 FROM node:24-alpine AS runtime
-ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
+ARG NEXT_PUBLIC_BASE_PATH
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_BASE_PATH=$NEXT_PUBLIC_BASE_PATH
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
