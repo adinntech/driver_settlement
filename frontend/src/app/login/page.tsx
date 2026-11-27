@@ -161,7 +161,7 @@ export default function LoginPage() {
       <main className="lx-auth">
         <div className="lx-auth-inner">
           <header className="lx-auth-head">
-            <h2>Welcome back #1</h2>
+            <h2>Welcome back #2</h2>
             <p>Select your workspace to continue.</p>
           </header>
 
