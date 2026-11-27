@@ -14,6 +14,8 @@ RUN npm ci --no-audit --no-fund
 
 # Throwaway MongoDB that lives only inside this build step; the live database is never reachable from here.
 # Both packages are present because each side's tests import a few files of the other.
+# The logins below are the fixed fixtures the tests sign in with; they exist only in this throwaway database.
+# timeout: a hung test fails the build instead of blocking the deploy.
 FROM mongo:8.0 AS tests
 COPY --from=backend-deps /usr/local /usr/local
 ENV TZ=Asia/Kolkata
@@ -24,8 +26,11 @@ COPY --from=backend-deps /repo/backend/node_modules ./backend/node_modules
 COPY --from=frontend-deps /repo/frontend/node_modules ./frontend/node_modules
 RUN mkdir -p /tmp/db \
   && mongod --dbpath /tmp/db --bind_ip 127.0.0.1 --port 27017 --wiredTigerCacheSizeGB 0.25 --fork --logpath /tmp/mongod.log \
-  && cd /repo/backend && npm test \
-  && cd /repo/frontend && npm test \
+  && cd /repo/backend && JWT_SECRET=test-only-jwt-secret \
+     RSOP_USERNAME=RSOP RSOP_PASSWORD=pass2 RBP_USERNAME=RBP RBP_PASSWORD=123123 \
+     RSOM_USERNAME=RSOM RSOM_PASSWORD=pass3 RSA_USERNAME=RSA RSA_PASSWORD=pass4 \
+     timeout 1800 npm test \
+  && cd /repo/frontend && timeout 600 npm test \
   && rm -rf /tmp/db
 
 FROM tests AS backend-build
