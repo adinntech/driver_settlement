@@ -1,14 +1,15 @@
 // Job: "driver settlement backend". Trigger on branch main; deploys only if backend/** changed.
-// Placeholders to confirm: GIT_CRED_ID and the SSH mechanism used by existing jobs.
+// Placeholders to confirm: github-driver-settlement and the SSH mechanism used by existing jobs.
 pipeline {
   agent any
   options { disableConcurrentBuilds(); timestamps() }
-  environment { DEPLOY_HOST = 'root@168.144.123.41' }
+  triggers { githubPush() }
+  environment { DEPLOY_HOST = 'jenkins-deploy@172.17.0.1' }
   stages {
     stage('Checkout main') {
       steps {
         checkout([$class: 'GitSCM', branches: [[name: '*/main']],
-          userRemoteConfigs: [[url: 'https://github.com/adinntech/driver_settlement.git', credentialsId: 'GIT_CRED_ID']]])
+          userRemoteConfigs: [[url: 'https://github.com/adinntech/driver_settlement.git', credentialsId: 'github-driver-settlement']]])
       }
     }
     stage('Changed paths') {
@@ -21,7 +22,7 @@ pipeline {
     }
     stage('Deploy backend only') {
       when { environment name: 'RUN', value: 'yes' }
-      steps { sh 'ssh -o BatchMode=yes $DEPLOY_HOST /opt/deploy/deploy-driver-settlement.sh backend' }
+      steps { sshagent(credentials: ['jenkins-deploy-ssh']) { sh 'ssh -o BatchMode=yes -o StrictHostKeyChecking=yes $DEPLOY_HOST sudo -n /opt/deploy/deploy-driver-settlement.sh backend' } }
     }
   }
 }
