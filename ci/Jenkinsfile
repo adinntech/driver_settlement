@@ -1,0 +1,233 @@
+// Job: "driver-settlement" (one job for both services). Triggered by a push to main_build.
+// Flow: developer builds locally from main, copies the build into frontend-build/ and/or backend-build/ on main_build, pushes.
+// Jenkins deploys only the containers whose files changed since the last successful run (no source build, no loop).
+// Every deployed service reports to Google Chat (Secret text credential "google-chat-webhook"); reporting can never change the result.
+pipeline {
+  agent any
+  options { disableConcurrentBuilds(); timestamps() }
+  triggers { githubPush() }
+  environment {
+    DEPLOY_HOST = 'jenkins-deploy@172.17.0.1'
+    SERVER = '168.144.123.41'
+  }
+  stages {
+    stage('Checkout main_build') {
+      steps {
+        script { env.FAILED_STAGE = 'Checkout main_build' }
+        sh 'rm -f deploy-*.log gchat-payload.json'
+        script {
+          def scm = checkout([$class: 'GitSCM', branches: [[name: '*/main_build']],
+            userRemoteConfigs: [[url: 'https://github.com/adinntech/driver_settlement.git', credentialsId: 'github-driver-settlement']]])
+          env.BASE_COMMIT = scm.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: 'HEAD~1'
+          env.CHECKED_OUT = 'yes'
+        }
+      }
+    }
+    stage('Changed paths') {
+      steps {
+        script {
+          env.FAILED_STAGE = 'Changed paths'
+          // empty diff ("Build Now" on an already deployed commit) or an unknown base: deploy both
+          def diff = sh(returnStdout: true, script: 'git diff --name-only "$BASE_COMMIT" HEAD || true').trim()
+          def changed = { String dir -> (diff == '' || diff.split('\n').any { it.startsWith(dir) || it.startsWith('deploy/') || it == 'docker-compose.prod.yml' }) ? 'yes' : 'no' }
+          env.RUN_BACKEND = changed('backend-build/')
+          env.RUN_FRONTEND = changed('frontend-build/')
+        }
+      }
+    }
+    stage('Deploy backend') {
+      when { environment name: 'RUN_BACKEND', value: 'yes' }
+      steps {
+        // a backend failure still fails the build, but does not stop the frontend deploy
+        catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+          script { deploy('backend'); env.OK_BACKEND = 'yes' }
+        }
+      }
+    }
+    stage('Deploy frontend') {
+      when { environment name: 'RUN_FRONTEND', value: 'yes' }
+      steps {
+        catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+          script { deploy('frontend'); env.OK_FRONTEND = 'yes' }
+        }
+      }
+    }
+  }
+  post {
+    cleanup {
+      script {
+        try {
+          def result = currentBuild.currentResult
+          def ran = []
+          if (env.RUN_BACKEND == 'yes') ran << 'backend'
+          if (env.RUN_FRONTEND == 'yes') ran << 'frontend'
+          // nothing selected: one message (skipped, or the failure that happened before any deploy)
+          for (svc in (ran ?: ['none'])) {
+            notifyChat(svc, result)
+          }
+        } catch (Throwable err) {
+          // Errors too (e.g. a missing plugin step); currentBuild.result is never assigned here
+          echo 'Google Chat notification skipped (build result unchanged)'
+        } finally {
+          try { sh 'rm -f deploy-*.log gchat-payload.json' } catch (Throwable err) { echo 'could not remove notification files' }
+        }
+      }
+    }
+  }
+}
+
+def deploy(String svc) {
+  env.FAILED_STAGE = "Deploy ${svc}"
+  sshagent(credentials: ['jenkins-deploy-ssh']) {
+    // the output is also kept for the notification, and a failure still fails the stage
+    withEnv(["SVC=${svc}"]) {
+      sh '''#!/usr/bin/env bash
+set -o pipefail
+ssh -o BatchMode=yes -o StrictHostKeyChecking=yes $DEPLOY_HOST sudo -n /opt/deploy/deploy-driver-settlement.sh "$SVC" 2>&1 | tee "deploy-$SVC.log"
+'''
+    }
+  }
+}
+
+def serviceInfo(String svc) {
+  if (svc == 'backend') {
+    return [app: 'Backend', service: 'backend', container: 'driver-settlement-backend', ports: '127.0.0.1:3017 → 5000',
+      networks: 'mongodb_default, driver-settlement-network', healthUrl: 'http://127.0.0.1:3017/api/health',
+      url: 'https://adinntech.in/driver-settlement/api/']
+  }
+  if (svc == 'frontend') {
+    return [app: 'Frontend', service: 'frontend', container: 'driver-settlement-frontend', ports: '127.0.0.1:3016 → 3000',
+      networks: 'driver-settlement-network', healthUrl: 'http://127.0.0.1:3016/driver-settlement/login',
+      url: 'https://adinntech.in/driver-settlement/']
+  }
+  return [app: 'App', service: 'frontend/backend', container: '-', ports: '-', networks: '-', healthUrl: '-',
+    url: 'https://adinntech.in/driver-settlement/']
+}
+
+def notifyChat(String svc, String result) {
+  def status = result
+  if (svc == 'none' && result == 'SUCCESS') status = 'SKIPPED'
+  if (svc == 'backend' && env.OK_BACKEND == 'yes') status = 'SUCCESS'
+  if (svc == 'frontend' && env.OK_FRONTEND == 'yes') status = 'SUCCESS'
+  // without a completed checkout the workspace still holds an earlier build: read nothing from it
+  def checkedOut = env.CHECKED_OUT == 'yes'
+  def logFile = "deploy-${svc}.log"
+  def log = (checkedOut && fileExists(logFile)) ? readFile(logFile) : ''
+  def git = { String args -> sh(returnStdout: true, script: "git log -1 --format='%h — %s (%an)' ${args} 2>/dev/null || true").trim() }
+  def commit = checkedOut ? git('HEAD') : ''
+  def head = checkedOut ? sh(returnStdout: true, script: 'git rev-parse HEAD 2>/dev/null || true').trim() : ''
+  // what the server really moved to; shown only when it is not the commit that triggered this run
+  def serverHead = updatedTo(log)
+  def deployed = ''
+  if (serverHead && head && !head.startsWith(serverHead)) {
+    deployed = git(serverHead) ?: serverHead
+  }
+  def now = sh(returnStdout: true, script: "TZ='IST-05:30' date '+%d %b %Y, %H:%M:%S IST'").trim()
+  def causes = currentBuild.getBuildCauses().collect { it.shortDescription }.join(', ')
+  def text = chatMessage(serviceInfo(svc) + [
+    status: status, build: env.BUILD_NUMBER, commit: commit, deployed: deployed, now: now, server: env.SERVER,
+    log: log, stage: svc == 'none' ? (env.FAILED_STAGE ?: 'unknown') : "Deploy ${svc}",
+    causes: causes ?: 'unknown', duration: currentBuild.durationString.replace(' and counting', ''), console: "${env.BUILD_URL}console",
+  ])
+  writeFile(file: 'gchat-payload.json', text: groovy.json.JsonOutput.toJson([text: text]), encoding: 'UTF-8')
+  withCredentials([string(credentialsId: 'google-chat-webhook', variable: 'GCHAT_WEBHOOK')]) {
+    // single-quoted: the webhook is expanded by the shell only; curl output is discarded so it can never be logged
+    sh '''set +x
+curl -fsS --max-time 20 -X POST -H 'Content-Type: application/json; charset=UTF-8' --data-binary @gchat-payload.json "$GCHAT_WEBHOOK" >/dev/null 2>&1 || echo 'Google Chat notification could not be sent (build result unchanged)'
+'''
+  }
+}
+
+/** Masks recognisable secret values; used as is for commit subjects and build causes. */
+@NonCPS
+String maskValues(String s) {
+  s.replaceAll(/\u001B\[[0-9;]*[A-Za-z]/, '')
+    .replaceAll(/(?i)mongodb(\+srv)?:\/\/\S+/, '[database url]')
+    .replaceAll(/(?i)https:\/\/chat\.googleapis\.com\S*/, '[webhook]')
+    .replaceAll(/(?i)\b([a-z][a-z0-9+.-]*):\/\/[^\s\/@]+@/, '$1://[credentials]@')
+    .replaceAll(/(?i)\bbearer\s+\S+/, 'Bearer [hidden]')
+    .replaceAll(/(?i)([A-Z0-9_-]*(password|passwd|passphrase|pwd|secret|token|api[_-]?key|webhook|mongo_uri|username)[A-Z0-9_-]*)["']?\s*[=:]\s*("[^"]*"|'[^']*'|\S+)/, '$1=[hidden]')
+    .replaceAll(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/, '[token]')
+    .replaceAll(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/, '[email]')
+}
+
+/**
+ * For deployment output: a line that mentions a secret is dropped whole, whatever its format.
+ * Keeps one output line per input line.
+ */
+@NonCPS
+String sanitize(String s) {
+  def out = []
+  boolean inKey = false
+  boolean hideNext = false
+  for (line in s.split('\n', -1)) {
+    boolean named = (line =~ /(?i)(passw|passphrase|\bpass\b|pwd|secret|token|api[_ -]?key|access[_ -]?key|private[_ -]?key|webhook|mongo(db)?_ur[il]|database_url|user[_ ]?name|authorization|bearer|credential|cookie|jwt)/).find()
+    if (line.contains('-----BEGIN')) inKey = true
+    boolean hide = inKey || named || hideNext
+    out << (hide ? '[line hidden: possible secret]' : maskValues(line))
+    if (line.contains('-----END')) inKey = false
+    // a value that continues on the following line
+    hideNext = (named || hideNext) && (line =~ /[:=\[{(\\|>]\s*["']?\s*$/).find()
+  }
+  return out.join('\n')
+}
+
+/** "Updating abc123..def456" of the server's fast-forward merge; "" when the output does not say. */
+@NonCPS
+String updatedTo(String log) {
+  def m = log =~ /(?m)^Updating [0-9a-f]{7,40}\.\.([0-9a-f]{7,40})/
+  m.find() ? m.group(1) : ''
+}
+
+/** Only what the deploy script itself printed; nothing is assumed healthy. */
+@NonCPS
+String healthLine(String log, String url) {
+  def ok = log.readLines().find { it.startsWith('healthy: ') }
+  if (ok) return "deploy script check passed — ${sanitize(ok.trim())} (${url})"
+  if (log.contains('HEALTH CHECK FAILED')) return "FAILED — HEALTH CHECK FAILED (${url})"
+  return 'not confirmed (the deploy script reported no health result)'
+}
+
+/** A few relevant lines of the output (errors and the script's own messages), sanitized and short. */
+@NonCPS
+String errorDetails(String log) {
+  def raw = log.split('\n', -1)
+  def safe = sanitize(log).split('\n', -1)
+  def picked = []
+  def others = []
+  for (int i = 0; i < raw.size(); i++) {
+    if (!raw[i].trim()) continue
+    others << safe[i].trim()
+    if ((raw[i] =~ /(?i)(error|fail|fatal|denied|refused|not running|missing|cannot|timeout|unhealthy|exit code|^Rollback:)/).find()) picked << safe[i].trim()
+  }
+  def lines = picked ?: others
+  if (!lines) return 'no deployment output; see the console'
+  def last = []
+  for (int i = Math.max(0, lines.size() - 8); i < lines.size(); i++) last << lines[i].take(200)
+  return last.join('\n').take(900)
+}
+
+@NonCPS
+String chatMessage(Map m) {
+  def emoji = [SUCCESS: '✅', FAILURE: '❌', ABORTED: '⏹️', UNSTABLE: '⚠️', SKIPPED: '⏭️'][m.status] ?: 'ℹ️'
+  def ran = m.log as boolean
+  def confirmed = m.status == 'SUCCESS' && m.log.readLines().any { it.startsWith('healthy: ') }
+  def out = []
+  out << "${emoji} *Driver Settlement ${m.app} — ${m.status}*"
+  out << 'Environment: Production'
+  out << "Branch: main_build · Build #${m.build}"
+  out << "Commit: ${maskValues(m.commit ?: 'unknown (checkout did not complete)')}"
+  if (m.deployed) out << "Deployed: ${maskValues(m.deployed)}"
+  out << (m.status == 'SKIPPED' ? "Checked at: ${m.now}" : confirmed ? "Deployed at: ${m.now}" : "Finished at: ${m.now} (deployment not confirmed)")
+  out << "Server: ${m.server}"
+  out << "Container: ${m.container} (${m.networks}) · service ${m.service} · port ${m.ports}"
+  out << "Health: ${m.status == 'SKIPPED' ? 'not run (no ' + m.service + ' changes, nothing deployed)' : healthLine(m.log, m.healthUrl)}"
+  out << "URL: ${m.url}"
+  if (!(m.status in ['SUCCESS', 'SKIPPED'])) {
+    out << "Failed stage: ${m.stage}"
+    out << "Error: ${ran ? '\n' + errorDetails(m.log) : 'no deployment output; see the console'}"
+  }
+  out << "Triggered: ${maskValues(m.causes)} · Duration ${m.duration}"
+  out << "<${m.console}|Open console>"
+  return out.join('\n')
+}
