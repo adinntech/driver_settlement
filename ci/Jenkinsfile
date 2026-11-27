@@ -1,8 +1,9 @@
 // Job: "driver-settlement" (Scripted Pipeline, one job for both services). Triggered by a push to main_build.
 // main_build holds the source. The server builds each image with deploy/Dockerfile: tests (frontend + backend), then build.
 // Deploys only the services whose source (or the shared deploy files) changed since the last successful run.
-// The server does test + build + deploy in one command per service, so the Test / Build / Deploy stages
-// report the outcome of each phase (read from the deploy output) after that command has finished.
+// The server does test + build + deploy in one command per service. That command runs in the background and each
+// stage follows its output until its phase is over, so the stage view moves live. With two services, the second
+// one runs entirely inside the Deploy stage (its tests come from the first one's cache).
 // One Google Chat message per run (Secret text credential "google-chat-webhook"); reporting can never change the result.
 // Trigger and concurrency are NOT set here: configure them on the job. This script changes no job property.
 
@@ -17,7 +18,7 @@ timestamps {
       def failure = ''
       def phaseNames = [['test', 'Test'], ['build', 'Build'], ['deploy', 'Deploy']]
       try {
-        sh 'rm -f deploy-*.log gchat-payload.json'
+        sh 'rm -f deploy-* gchat-payload.json'
         def scmVars = checkout([$class: 'GitSCM', branches: [[name: '*/main_build']],
           userRemoteConfigs: [[url: 'https://github.com/adinntech/driver_settlement.git', credentialsId: 'github-driver-settlement']]])
         def base = scmVars.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: 'HEAD~1'
@@ -34,41 +35,55 @@ timestamps {
         if (shared || files.any { it.startsWith('backend/') }) selected << 'backend'
         if (shared || files.any { it.startsWith('frontend/') }) selected << 'frontend'
 
-        for (svc in selected) {
-          failedStage = "Deploy ${svc}"
-          attempted << svc
-          def code = 1
-          sshagent(credentials: ['jenkins-deploy-ssh']) {
-            // the output is also kept to work out the Test / Build / Deploy status
-            withEnv(["SVC=${svc}"]) {
-              code = sh(returnStatus: true, script: '''#!/usr/bin/env bash
-set -o pipefail
-ssh -o BatchMode=yes -o StrictHostKeyChecking=yes $DEPLOY_HOST sudo -n /opt/deploy/deploy-driver-settlement.sh "$SVC" 2>&1 | tee "deploy-$SVC.log"
-''')
-            }
+        if (!selected) {
+          for (phase in phaseNames) {
+            stage(phase[1]) { notBuilt("${phase[1]}: no changes") }
           }
-          def result = phases(readFile("deploy-${svc}.log"), svc)
-          if (code != 0 && result.deploy == 'OK') result.deploy = 'FAIL'
-          results[svc] = result
-          // the first failure stops the run: nothing after it is deployed
-          if (code != 0) break
-        }
-
-        for (phase in phaseNames) {
-          def key = phase[0]
-          def label = phase[1]
-          def values = []
-          for (svc in attempted) values << results[svc][key]
-          def state = combine(values)
-          stage(label) {
-            if (state == 'FAIL') {
-              failedStage = label
-              catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') { error("${label} failed") }
-            } else if (state == 'NOT_RUN') {
-              // buildResult SUCCESS never lowers or raises the result; it only greys out the stage
-              catchError(buildResult: 'SUCCESS', stageResult: 'NOT_BUILT') { error(selected ? "${label} not run" : "${label}: no changes") }
-            } else {
-              echo "${label} passed"
+        } else {
+          def first = selected[0]
+          sshagent(credentials: ['jenkins-deploy-ssh']) {
+            timeout(time: 60, unit: 'MINUTES') {
+              for (phase in phaseNames) {
+                def key = phase[0]
+                def label = phase[1]
+                stage(label) {
+                  // keeps the first failing stage as the one reported
+                  if (currentBuild.currentResult == 'SUCCESS') failedStage = label
+                  if (!attempted) {
+                    attempted << first
+                    startDeploy(first)
+                  }
+                  follow(first, key)
+                  def state = phases(readFile("deploy-${first}.log"), first)[key]
+                  if (key == 'deploy') {
+                    results[first] = outcome(first)
+                    // the first failure stops the run: nothing after it is deployed
+                    if (results[first].deploy == 'OK') {
+                      for (int i = 1; i < selected.size(); i++) {
+                        def svc = selected[i]
+                        attempted << svc
+                        startDeploy(svc)
+                        follow(svc, 'deploy')
+                        results[svc] = outcome(svc)
+                        if (results[svc].deploy != 'OK') break
+                      }
+                    }
+                    def values = []
+                    for (svc in attempted) values << results[svc].deploy
+                    // red when the deploy itself, or anything about a later service, failed; grey when tests or build did
+                    def firstBuilt = results[first].test == 'OK' && results[first].build == 'OK'
+                    state = combine(values) == 'OK' ? 'OK' : firstBuilt ? 'FAIL' : 'NOT_RUN'
+                  }
+                  if (state == 'FAIL') {
+                    failedStage = label
+                    catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') { error("${label} failed") }
+                  } else if (state == 'NOT_RUN') {
+                    notBuilt("${label} not run")
+                  } else {
+                    echo "${label} passed"
+                  }
+                }
+              }
             }
           }
         }
@@ -125,11 +140,59 @@ curl -fsS --max-time 20 -X POST -H 'Content-Type: application/json; charset=UTF-
           // console only: names a missing plugin or a signature awaiting Script Approval
           try { echo "Reason: ${err.message}" } catch (Throwable ignored) { echo 'Reason unavailable' }
         } finally {
-          try { sh 'rm -f deploy-*.log gchat-payload.json' } catch (Throwable err) { echo 'could not remove notification files' }
+          try { sh 'rm -f deploy-* gchat-payload.json' } catch (Throwable err) { echo 'could not remove notification files' }
         }
       }
     }
   }
+}
+
+/** Greys a stage out; buildResult SUCCESS never changes the build result. */
+def notBuilt(String reason) {
+  catchError(buildResult: 'SUCCESS', stageResult: 'NOT_BUILT') { error(reason) }
+}
+
+/** Starts the server deploy in the background: output goes to deploy-<svc>.log, its exit code to deploy-<svc>.rc. */
+def startDeploy(String svc) {
+  withEnv(["SVC=${svc}"]) {
+    sh '''#!/usr/bin/env bash
+rm -f "deploy-$SVC.rc" "deploy-$SVC.pos"
+: > "deploy-$SVC.log"
+JENKINS_NODE_COOKIE=dontKillMe nohup bash -c 'ssh -n -o BatchMode=yes -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 "$DEPLOY_HOST" sudo -n /opt/deploy/deploy-driver-settlement.sh "$SVC" > "deploy-$SVC.log" 2>&1; echo $? > "deploy-$SVC.rc"' > /dev/null 2>&1 &
+'''
+  }
+}
+
+/** Prints the new deploy output until the phase (test, build or deploy) is over or the command has ended. */
+def follow(String svc, String phase) {
+  withEnv(["SVC=${svc}", "PHASE=${phase}"]) {
+    sh '''#!/usr/bin/env bash
+set +x
+log="deploy-$SVC.log"
+pos=$(cat "deploy-$SVC.pos" 2>/dev/null || echo 0)
+while true; do
+  ended=no
+  [ -s "deploy-$SVC.rc" ] && ended=yes   # checked before printing, so the last lines are not missed
+  total=$(wc -l < "$log")
+  if [ "$total" -gt "$pos" ]; then sed -n "$((pos + 1)),${total}p" "$log"; pos=$total; echo "$pos" > "deploy-$SVC.pos"; fi
+  [ "$ended" = yes ] && break
+  step=$(grep -m1 -E '^#[0-9]+ [[][^]]*tests [0-9]+/[0-9]+] RUN ' "$log" | cut -d' ' -f1)
+  case "$PHASE" in
+    test) [ -n "$step" ] && grep -qE "^$step (DONE|CACHED|ERROR)" "$log" && break ;;
+    build) grep -qF -e "naming to docker.io/library/driver-settlement-$SVC:latest done" -e "Container driver-settlement-$SVC " "$log" && break ;;
+  esac
+  sleep 5
+done
+'''
+  }
+}
+
+/** Test / build / deploy result of a finished deploy command. */
+def outcome(String svc) {
+  def result = phases(readFile("deploy-${svc}.log"), svc)
+  def code = readFile("deploy-${svc}.rc").trim()
+  if (code != '0' && result.deploy == 'OK') result.deploy = 'FAIL'
+  return result
 }
 
 /** Test / build / deploy outcome of one service, read from the deploy script output (docker plain progress). */
