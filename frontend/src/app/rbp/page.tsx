@@ -1,5 +1,6 @@
 "use client";
 
+import VerticalSelect from "@/components/ui/VerticalSelect";
 import Link from "next/link";
 import { useState } from "react";
 import AppShell from "@/components/AppShell";
@@ -28,9 +29,10 @@ export function overallStatus(p: Project): "PENDING" | "CREATED" | "PARTIAL" {
 
 function Projects() {
   const [q, setQ] = useState("");
+  const [vertical, setVertical] = useState("");
   const [open, setOpen] = useState<string | null>(null);
   const dq = useDebounce(q); // one request after typing pauses, not one per keystroke
-  const list = useApi<Project[]>(`/tracking${dq.trim() ? `?q=${encodeURIComponent(dq.trim())}` : ""}`);
+  const list = useApi<Project[]>(`/tracking?${new URLSearchParams({ ...(dq.trim() ? { q: dq.trim() } : {}), ...(vertical ? { projectType: vertical } : {}) })}`);
 
   return (
     <>
@@ -42,6 +44,7 @@ function Projects() {
       </div>
       <div className="card">
         <div className="filters">
+          <VerticalSelect value={vertical} onChange={setVertical} />
           <input placeholder="Search client, Trackup or PIF number" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         {list.loading ? (

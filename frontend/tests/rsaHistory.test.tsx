@@ -64,7 +64,7 @@ test("summary cards show the five real totals; amounts in the app currency forma
 // ================================================================== filters
 test("filters: one mass search, Payment For, status, payment date range, created by (only when several users), Clear Filters", () => {
   const html = renderToStaticMarkup(<RsaHistoryFilters f={emptyHistoryFilters()} onChange={noop} onClear={noop} createdByOptions={["RSA"]} />);
-  for (const l of ['aria-label="Mass search"', 'aria-label="Payment For filter"', 'aria-label="Payment status filter"', 'aria-label="Payment date from"', 'aria-label="Payment date to"', "Clear Filters", ">Roadshow<", ">Signage<"]) assert.ok(html.includes(l), l);
+  for (const l of ['aria-label="Mass search"', 'aria-label="Vertical"', '>All Verticals<', 'aria-label="Payment status filter"', 'aria-label="Payment date from"', 'aria-label="Payment date to"', "Clear Filters", ">Roadshow<", ">Signage<"]) assert.ok(html.includes(l), l);
   assert.equal((html.match(/aria-label="Mass search"/g) ?? []).length, 1);
   assert.ok(html.includes("payment no") && html.includes("expense description") && html.includes("vehicle") && html.includes("driver") && html.includes("PIF"));
   assert.ok(!html.includes('aria-label="Created by filter"')); // a single RSA user: nothing to choose
@@ -94,7 +94,7 @@ test("filters are combined into one server request together with the page and pa
 
 // ================================================================== table, empty, pagination
 test("history table: the twelve requested columns with correct values; order as delivered (latest first); no undefined", () => {
-  assert.deepEqual([...HISTORY_COLUMNS], ["Payment Number", "Trackup Number", "PIF Number", "Project Type", "Client / Billing Name", "Vehicle Number", "Driver Name", "From Date", "To Date", "Total Payable", "Entry Date & Time", "Created By", "Actions"]);
+  assert.deepEqual([...HISTORY_COLUMNS], ["Payment Number", "Trackup Number", "PIF Number", "Vertical", "Client / Billing Name", "Vehicle Number", "Driver Name", "From Date", "To Date", "Total Payable", "Entry Date & Time", "Created By", "Actions"]);
   const html = renderToStaticMarkup(<RsaHistoryTable items={[pay(3), pay(2), pay(1, { driverName: null, clientName: null, campaignFromDate: null, campaignToDate: null })]} onView={noop} />);
   for (const h of HISTORY_COLUMNS.filter((c) => c !== "Actions")) assert.ok(html.includes(`<th>${h.replace(/&/g, "&amp;")}</th>`), h);
   for (const v of ["PAY-000003/2026-27", "JS-10003/2026-27", "Signage", "Roadshow", "KEN LIFESTYLES", "TN58BK3088", "SAMPATH M", "24-Nov-2026", "02-Dec-2026", "₹3,000.50", "23-Nov-2026, 10:00 AM", "RSA"]) assert.ok(html.includes(v), v);

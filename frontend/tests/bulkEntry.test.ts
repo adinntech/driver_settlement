@@ -13,7 +13,7 @@ test("every selected payment needs its own complete, distinct entry", () => {
   assert.match(bulkEntryError(rows, { a: row("R1") }, today, today)!, /^DVP-2: .*payment mode/, "nothing is carried over from another payment");
   assert.match(check(row(""))!, /^DVP-1: .*reference number/);
   assert.match(check(row("R1", { paymentDate: "2026-11-26" }))!, /before the approval date/);
-  assert.match(check(row("R1"), row("R2", { paymentMode: "DD" }))!, /^DVP-2: .*bank name/);
+  assert.match(check(row("R1"), row("R2", { paymentMode: "DD" }))!, /^DVP-2: .*mode of payment/);
   assert.match(check(row("r2"))!, /also entered for DVP-1/);
 });
 

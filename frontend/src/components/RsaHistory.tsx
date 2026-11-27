@@ -1,5 +1,6 @@
 "use client";
 
+import VerticalSelect from "@/components/ui/VerticalSelect";
 import TableWrap from "@/components/ui/TableWrap";
 import StatCard from "@/components/ui/StatCard";
 import Select from "@/components/ui/Select";
@@ -63,9 +64,7 @@ export function RsaHistoryFilters({
     <div className="filters-vehicle rsa-filters" data-section="history-filters">
       <input className="search-wide" aria-label="Mass search" value={f.q} onChange={(e) => set("q", e.target.value)}
         placeholder="Search payment no, trackup / PIF / bill no, client, vehicle, driver, expense description" />
-      <Select value={f.paymentFor} aria-label="Payment For filter" onChange={(e) => set("paymentFor", e.target.value)}>
-        <option value="">All</option><option value="ROADSHOW">Roadshow</option><option value="SIGNAGE">Signage</option>
-      </Select>
+      <VerticalSelect value={f.paymentFor} onChange={(v) => set("paymentFor", v)} />
       <Select value={f.paymentStatus} aria-label="Payment status filter" onChange={(e) => set("paymentStatus", e.target.value)}>
         <option value="">All status</option><option value="ENTERED">Entered</option>
       </Select>
@@ -82,7 +81,7 @@ export function RsaHistoryFilters({
 }
 
 export const HISTORY_COLUMNS = [
-  "Payment Number", "Trackup Number", "PIF Number", "Project Type", "Client / Billing Name", "Vehicle Number", "Driver Name", "From Date", "To Date", "Total Payable", "Entry Date & Time", "Created By", "Actions",
+  "Payment Number", "Trackup Number", "PIF Number", "Vertical", "Client / Billing Name", "Vehicle Number", "Driver Name", "From Date", "To Date", "Total Payable", "Entry Date & Time", "Created By", "Actions",
 ] as const;
 
 export function RsaHistoryTable({ items, onView }: { items: RsaPaymentRow[]; onView: (p: RsaPaymentRow) => void }) {

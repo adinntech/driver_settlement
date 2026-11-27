@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { asVertical } from "../utils/vertical.js";
 import ExcelJS from "exceljs";
 import { Driver } from "../models/Driver.js";
 import { IoclTransaction } from "../models/IoclTransaction.js";
@@ -32,7 +33,7 @@ export async function importIocl(file: { buffer: Buffer; originalname: string } 
   return { imported, duplicate, failed: failed.length, corrected, errors: failed.slice(0, 100) };
 }
 
-export interface IoclQuery { from?: string; to?: string; vehicleNo?: string; product?: string; page?: number; limit?: number }
+export interface IoclQuery { projectType?: string; from?: string; to?: string; vehicleNo?: string; product?: string; page?: number; limit?: number }
 export type MatchStatus = "MATCHED" | "NO_DRIVER" | "NO_PROJECT" | "UNKNOWN_VEHICLE" | "NO_VEHICLE";
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
@@ -109,18 +110,20 @@ const paise = (n: number | null | undefined) => Math.round((n ?? 0) * 100);
 
 export async function listIocl(q: IoclQuery) {
   const filter = filterOf(q);
-  const rows = await read(filter);
-  const match = await matcher(rows);
+  const found = await read(filter);
+  const match = await matcher(found);
+  // vertical comes from the matched project, so unmatched lines appear under All Verticals only
+  const rows = asVertical(q.projectType) ? found.filter((r) => match(r).department === q.projectType) : found;
   const all = rows.map((r) => ({
     _id: String(r._id), txnId: r.txnId, txnDate: r.txnDate, txnTime: r.txnTime, txnType: r.txnType, vehicleNo: r.vehicleNo ?? null, product: r.product ?? null,
     rsp: r.rsp ?? null, quantity: r.quantity ?? null, amount: r.amount ?? null, fileAmount: r.fileAmount ?? null, amountCorrected: !!r.amountCorrected,
     odometer: r.odometer ?? null, location: r.location ?? null, match: match(r),
   }));
   // totals and corrections cover fuel sales; recharges and loyalty points are listed but never added up
-  const totals = new Map<string, { vehicleNo: string; count: number; quantityH: number; amountP: number; status: MatchStatus }>();
+  const totals = new Map<string, { vehicleNo: string; count: number; quantityH: number; amountP: number; status: MatchStatus; vertical: string | null }>();
   for (const r of all.filter(isSale)) {
     const key = r.vehicleNo ?? "";
-    const t = totals.get(key) ?? { vehicleNo: key, count: 0, quantityH: 0, amountP: 0, status: r.match.status };
+    const t = totals.get(key) ?? { vehicleNo: key, count: 0, quantityH: 0, amountP: 0, status: r.match.status, vertical: r.match.department };
     t.count++;
     t.quantityH += paise(r.quantity);
     t.amountP += paise(r.amount);
@@ -146,9 +149,10 @@ const AMOUNT_COLUMN = 11;
 /** Fuel sales of the chosen dates in the sample's layout. Unmatched details are left blank, never filled in. */
 export async function exportIocl(q: IoclQuery): Promise<{ name: string; buffer: Buffer }> {
   if (!q.from || !q.to) throw new AppError("Choose the From and To dates to export", 400);
-  const rows = (await read(filterOf(q))).filter(isSale);
+  const sales = (await read(filterOf(q))).filter(isSale);
+  const match = await matcher(sales);
+  const rows = asVertical(q.projectType) ? sales.filter((r) => match(r).department === q.projectType) : sales;
   if (!rows.length) throw new AppError("There are no fuel transactions for these filters", 404);
-  const match = await matcher(rows);
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("Sheet1");
   ws.columns = WIDTHS.map((width) => ({ width }));

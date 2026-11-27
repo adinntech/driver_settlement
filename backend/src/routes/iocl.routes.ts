@@ -9,7 +9,7 @@ import { sendResponse } from "../utils/sendResponse.js";
 const wrap = (fn: (req: Request, res: Response) => Promise<void>) => (req: Request, res: Response, next: NextFunction) => fn(req, res).catch(next);
 const q = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
 const n = (v: unknown) => (typeof v === "string" && /^\d+$/.test(v) ? Number(v) : undefined);
-const query = (req: Request) => ({ from: q(req.query.from), to: q(req.query.to), vehicleNo: q(req.query.vehicleNo), product: q(req.query.product), page: n(req.query.page), limit: n(req.query.limit) });
+const query = (req: Request) => ({ projectType: q(req.query.projectType), from: q(req.query.from), to: q(req.query.to), vehicleNo: q(req.query.vehicleNo), product: q(req.query.product), page: n(req.query.page), limit: n(req.query.limit) });
 
 const uploader = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } }).single("file");
 const receive = (req: Request, res: Response, next: NextFunction) =>

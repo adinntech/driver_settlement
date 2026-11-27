@@ -56,7 +56,7 @@ test("rejection form rules: reason mandatory, Other needs an explanation, remark
 });
 
 test("RSA table: required columns, Review action, Not Available for unverified advance", () => {
-  assert.deepEqual([...RSA_COLUMNS], ["Trackup Number", "PIF Number", "Project Type", "Client / Billing Name", "Vehicle Number", "Driver Number", "Driver Name", "Advance Amount", "Approval Status", "Allocated Date", "Actions"]);
+  assert.deepEqual([...RSA_COLUMNS], ["Trackup Number", "PIF Number", "Vertical", "Client / Billing Name", "Vehicle Number", "Driver Number", "Driver Name", "Advance Amount", "Approval Status", "Allocated Date", "Actions"]);
   const html = renderToStaticMarkup(<ClearanceTable mode="RSA" hrefFor={(id) => `/rsa/clearance/review?id=${id}`} items={[row({ outstandingAdvance: null, financialStatus: "UNAVAILABLE" }), row({ _id: "d".repeat(24), status: "APPROVED" })]} />);
   assert.match(html, /JS-22342\/2026-27/);
   assert.match(html, /Review/);
@@ -67,7 +67,7 @@ test("RSA table: required columns, Review action, Not Available for unverified a
 });
 
 test("RBP table: delivery columns, View + Deliver actions only where allowed", () => {
-  assert.deepEqual([...RBP_COLUMNS], ["Trackup Number", "PIF Number", "Project Type", "Client / Billing Name", "Vehicle Number", "Driver Number", "Driver Name", "RSA Approval Status", "Delivery Status", "RSA Approved Date", "Delivered Date", "Actions"]);
+  assert.deepEqual([...RBP_COLUMNS], ["Trackup Number", "PIF Number", "Vertical", "Client / Billing Name", "Vehicle Number", "Driver Number", "Driver Name", "RSA Approval Status", "Delivery Status", "RSA Approved Date", "Delivered Date", "Actions"]);
   const items = [
     row({ _id: "a".repeat(24), status: "APPROVED", deliveryStatus: "YET_TO_DELIVER", approvedAt: "2026-11-24T05:30:00.000Z" }),
     row({ _id: "b".repeat(24), status: "APPROVED", deliveryStatus: "DELIVERED", approvedAt: "2026-11-24T05:30:00.000Z", deliveredAt: "2026-11-25T05:30:00.000Z" }),
@@ -85,7 +85,7 @@ test("RBP table: delivery columns, View + Deliver actions only where allowed", (
 
 test("filters bar: mass search, status, project type, date range, Clear Filters", () => {
   const html = renderToStaticMarkup(<ClearanceFiltersBar f={emptyClearanceFilters()} onChange={noop} onClear={noop} searchHint="Search" />); // RSA variant
-  for (const t of ["Mass search", "Status filter", "Project type filter", "Allocation date from", "Allocation date to", "Clear Filters", "Yet to Approve", "Approved", "Rejected"]) assert.match(html, new RegExp(t));
+  for (const t of ["Mass search", "Status filter", "Vertical", "Allocation date from", "Allocation date to", "Clear Filters", "Yet to Approve", "Approved", "Rejected"]) assert.match(html, new RegExp(t));
   assert.match(html, /disabled=""/); // Clear Filters is disabled while nothing is filtered
 });
 

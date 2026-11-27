@@ -1,5 +1,6 @@
 "use client";
 
+import VerticalSelect from "@/components/ui/VerticalSelect";
 import TableWrap from "@/components/ui/TableWrap";
 import Select from "@/components/ui/Select";
 import { useState } from "react";
@@ -27,11 +28,12 @@ export default function AllotmentPage() {
 
 function Allotment() {
   const [q, setQ] = useState("");
+  const [vertical, setVertical] = useState("");
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [action, setAction] = useState<Action>(null);
   const dq = useDebounce(q);
-  const list = useApi<Page>(`/vehicle-allotments/projects?q=${encodeURIComponent(dq.trim())}&page=${page}&limit=${limit}`);
+  const list = useApi<Page>(`/vehicle-allotments/projects?q=${encodeURIComponent(dq.trim())}&page=${page}&limit=${limit}${vertical ? `&projectType=${vertical}` : ""}`);
   const pages = list.data ? Math.max(1, Math.ceil(list.data.total / limit)) : 1;
   const done = () => { setAction(null); list.reload(); };
 
@@ -47,6 +49,7 @@ function Allotment() {
 
       <div className="card">
         <div className="filters-vehicle">
+          <VerticalSelect value={vertical} onChange={(v) => { setVertical(v); setPage(1); }} />
           <input className="search-wide" placeholder="Search client, project, trackup no, PIF no, job sheet, roadshow / signage" value={q}
             onChange={(e) => { setQ(e.target.value); setPage(1); }} aria-label="Search approved projects" />
           {q && <button className="btn btn-ghost" onClick={() => { setQ(""); setPage(1); }}>Clear Filters</button>}
@@ -65,7 +68,7 @@ function Allotment() {
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Client / Billing</th><th>Type</th><th>Trackup No</th><th>PIF No</th><th>Bill No</th><th>Project</th><th>Period</th>
+                    <th>Client / Billing</th><th>Vertical</th><th>Trackup No</th><th>PIF No</th><th>Bill No</th><th>Project</th><th>Period</th>
                     <th>Vehicles</th><th>Vehicle Type</th><th>Approved Budget</th><th>Approved On</th><th>Budget</th><th>Allotted Vehicle</th><th>Driver</th><th />
                   </tr>
                 </thead>

@@ -1,5 +1,6 @@
 "use client";
 
+import VerticalSelect from "@/components/ui/VerticalSelect";
 import TableWrap from "@/components/ui/TableWrap";
 import DateInput from "@/components/ui/DateInput";
 import { useMemo, useState } from "react";
@@ -19,7 +20,7 @@ const REPORTS: { kind: Kind; label: string; hint: string; dates: boolean; cols: 
   {
     kind: "approved-payments", label: "Approved Payment Report", hint: "Approved and paid daily and final payments.", dates: true,
     cols: [
-      { key: "paymentNumber", label: "Payment No" }, { key: "category", label: "Category" }, { key: "status", label: "Status" }, { key: "clientName", label: "Client" }, { key: "vehicleNo", label: "Vehicle" },
+      { key: "paymentNumber", label: "Payment No" }, { key: "category", label: "Category" }, { key: "projectType", label: "Vertical" }, { key: "status", label: "Status" }, { key: "clientName", label: "Client" }, { key: "vehicleNo", label: "Vehicle" },
       { key: "driverName", label: "Driver" }, { key: "fromDate", label: "From", type: "date" }, { key: "toDate", label: "To", type: "date" }, { key: "amount", label: "Amount", type: "money" },
       { key: "approvedBy", label: "Approved By" }, { key: "approvedAt", label: "Approved On", type: "datetime" }, { key: "referenceNumber", label: "Ref. No." },
       { key: "referenceDate", label: "Ref. Date", type: "date" }, { key: "paymentMode", label: "Mode" }, { key: "paymentDate", label: "Pay. Date", type: "date" },
@@ -28,7 +29,7 @@ const REPORTS: { kind: Kind; label: string; hint: string; dates: boolean; cols: 
   {
     kind: "vehicle-mis", label: "Vehicle MIS Report", hint: "Vehicle master register (all non-draft vehicles), in the Vehicle MIS format. Document columns show the latest renewal date.", dates: false,
     cols: [
-      { key: "vehicleNo", label: "Vehicle No" }, { key: "make", label: "Make" }, { key: "model", label: "Model" }, { key: "yom", label: "Y.O.M", type: "num" },
+      { key: "vehicleNo", label: "Vehicle No" }, { key: "projectType", label: "Vertical" }, { key: "make", label: "Make" }, { key: "model", label: "Model" }, { key: "yom", label: "Y.O.M", type: "num" },
       { key: "purchaseDate", label: "Purchase Date", type: "date" }, { key: "type", label: "Vehicle Type" }, { key: "stepneyStatus", label: "Stepney Status" },
       { key: "batteryStatus", label: "Battery Status" }, { key: "oilTopUpOn", label: "Oil Top Up On", type: "date" }, { key: "greasePackingOn", label: "Grease Packing On", type: "date" },
       { key: "generalCheckUpOn", label: "General Check Up On", type: "date" }, { key: "currentRunning", label: "Current Running", type: "num" }, { key: "totalRunning", label: "Total Running", type: "num" },
@@ -39,7 +40,7 @@ const REPORTS: { kind: Kind; label: string; hint: string; dates: boolean; cols: 
   {
     kind: "driver-list", label: "Driver List Report", hint: "All drivers with salary, bank (masked) and settlement totals.", dates: false,
     cols: [
-      { key: "driverNumber", label: "Driver Code" }, { key: "driverName", label: "Name" }, { key: "driverType", label: "Type" }, { key: "mobileNumber", label: "Mobile" }, { key: "status", label: "Status" },
+      { key: "driverNumber", label: "Driver Code" }, { key: "driverName", label: "Name" }, { key: "projectType", label: "Vertical" }, { key: "driverType", label: "Type" }, { key: "mobileNumber", label: "Mobile" }, { key: "status", label: "Status" },
       { key: "availability", label: "Availability" }, { key: "perDaySalary", label: "Per Day Salary", type: "money" }, { key: "bankName", label: "Bank" }, { key: "accountNumber", label: "Account" },
       { key: "settlements", label: "Settlements", type: "num" }, { key: "settledAmount", label: "Settled", type: "money" },
     ],
@@ -47,7 +48,7 @@ const REPORTS: { kind: Kind; label: string; hint: string; dates: boolean; cols: 
   {
     kind: "driver-salary", label: "Driver Salary Report", hint: "Approved final settlements. Download each driver's salary statement as a PDF.", dates: true,
     cols: [
-      { key: "paymentNumber", label: "DSE No" }, { key: "driverNumber", label: "Driver Code" }, { key: "driverName", label: "Driver" }, { key: "vehicleNo", label: "Vehicle" }, { key: "clientName", label: "Client" },
+      { key: "paymentNumber", label: "DSE No" }, { key: "driverNumber", label: "Driver Code" }, { key: "driverName", label: "Driver" }, { key: "vehicleNo", label: "Vehicle" }, { key: "clientName", label: "Client" }, { key: "projectType", label: "Vertical" },
       { key: "onRoadDays", label: "Days", type: "num" }, { key: "extraKmPerDay", label: "Extra KM/Day", type: "num" }, { key: "totalAllowedKm", label: "Allowed KM", type: "num" },
       { key: "actualKm", label: "Actual KM", type: "num" }, { key: "excessKm", label: "Excess KM", type: "num" }, { key: "gross", label: "Gross", type: "money" }, { key: "totalDeduction", label: "Deduction", type: "money" },
       { key: "suspenseAmount", label: "Suspense", type: "money" }, { key: "netAmount", label: "Net", type: "money" }, { key: "status", label: "Status" },
@@ -87,11 +88,12 @@ function Report({ def }: { def: (typeof REPORTS)[number] }) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [q, setQ] = useState("");
+  const [vertical, setVertical] = useState("");
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 }>({ key: def.cols[0].key, dir: 1 });
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState("");
   const dq = useDebounce(q);
-  const qs = new URLSearchParams({ ...(from ? { from } : {}), ...(to ? { to } : {}), ...(dq ? { q: dq } : {}) }).toString();
+  const qs = new URLSearchParams({ ...(vertical ? { projectType: vertical } : {}), ...(from ? { from } : {}), ...(to ? { to } : {}), ...(dq ? { q: dq } : {}) }).toString();
   const r = useApi<Row[]>(`/settlements/reports/${def.kind}?${qs}`);
   const limit = 15;
 
@@ -124,6 +126,7 @@ function Report({ def }: { def: (typeof REPORTS)[number] }) {
   return (
     <div className="card ds-card">
       <div className="ds-toolbar">
+        <VerticalSelect value={vertical} onChange={(v) => { setVertical(v); setPage(1); }} />
         <input className="ds-search" placeholder="Search this report" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} aria-label="Search report" />
         {def.dates && <label className="ds-range">From<DateInput value={from} onChange={(e) => { setFrom(e.target.value); setPage(1); }} /></label>}
         {def.dates && <label className="ds-range">To<DateInput value={to} min={from || undefined} onChange={(e) => { setTo(e.target.value); setPage(1); }} /></label>}

@@ -12,7 +12,8 @@
     "dev:tsx": "tsx watch src/server.ts",
     "seed:dev": "tsx src/seed/seedDev.cli.ts",
     "seed:dev:verify": "tsx src/seed/verifyDev.cli.ts",
-    "seed:mock": "tsx src/seed/mockData.cli.ts"
+    "seed:mock": "tsx src/seed/mockData.cli.ts",
+    "seed:suspense": "tsx src/seed/suspenseMock.cli.ts"
   },
   "author": "",
   "license": "ISC",

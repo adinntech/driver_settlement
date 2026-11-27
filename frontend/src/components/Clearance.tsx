@@ -1,5 +1,6 @@
 "use client";
 
+import VerticalSelect from "@/components/ui/VerticalSelect";
 import TableWrap from "@/components/ui/TableWrap";
 import Select from "@/components/ui/Select";
 import DateInput from "@/components/ui/DateInput";
@@ -53,9 +54,7 @@ export function ClearanceFiltersBar({ f, onChange, onClear, searchHint, mode = "
           ? RBP_STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)
           : <><option value="">All</option><option value="YET_TO_APPROVE">Yet to Approve</option><option value="APPROVED">Approved</option><option value="REJECTED">Rejected</option></>}
       </Select>
-      <Select value={f.projectType} aria-label="Project type filter" onChange={(e) => set("projectType", e.target.value)}>
-        <option value="">Roadshow / Signage</option><option value="ROADSHOW">Roadshow</option><option value="SIGNAGE">Signage</option>
-      </Select>
+      <VerticalSelect value={f.projectType} onChange={(v) => set("projectType", v)} />
       <label className="rsa-range">Allocation date from<DateInput value={f.from} aria-label="Allocation date from" onChange={(e) => set("from", e.target.value)} /></label>
       <label className="rsa-range">to<DateInput value={f.to} min={f.from || undefined} aria-label="Allocation date to" onChange={(e) => set("to", e.target.value)} /></label>
       <button type="button" className="btn btn-outline" onClick={onClear} disabled={!clearanceFiltersActive(f)}>Clear Filters</button>
@@ -64,10 +63,10 @@ export function ClearanceFiltersBar({ f, onChange, onClear, searchHint, mode = "
 }
 
 export const RSA_COLUMNS = [
-  "Trackup Number", "PIF Number", "Project Type", "Client / Billing Name", "Vehicle Number", "Driver Number", "Driver Name", "Advance Amount", "Approval Status", "Allocated Date", "Actions",
+  "Trackup Number", "PIF Number", "Vertical", "Client / Billing Name", "Vehicle Number", "Driver Number", "Driver Name", "Advance Amount", "Approval Status", "Allocated Date", "Actions",
 ] as const;
 export const RBP_COLUMNS = [
-  "Trackup Number", "PIF Number", "Project Type", "Client / Billing Name", "Vehicle Number", "Driver Number", "Driver Name", "RSA Approval Status", "Delivery Status", "RSA Approved Date", "Delivered Date", "Actions",
+  "Trackup Number", "PIF Number", "Vertical", "Client / Billing Name", "Vehicle Number", "Driver Number", "Driver Name", "RSA Approval Status", "Delivery Status", "RSA Approved Date", "Delivered Date", "Actions",
 ] as const;
 
 export function ClearanceTable({ items, mode, hrefFor }: { items: ClearanceRow[]; mode: "RSA" | "RBP"; hrefFor: (id: string) => string }) {
@@ -123,7 +122,7 @@ export function ClearanceList({ mode }: { mode: "RSA" | "RBP" }) {
   const [limit, setLimit] = useState(10);
   const dq = useDebounce(f.q); // no request per keystroke; a newer request always wins over an older one
   const list = useApi<Page>(`${base}?${clearanceQuery({ ...f, q: dq }, page, limit)}`);
-  const summary = useApi<ClearanceSummary & Partial<DeliverySummary>>(`${base}/summary`);
+  const summary = useApi<ClearanceSummary & Partial<DeliverySummary>>(`${base}/summary?projectType=${f.projectType}`);
   const change = (n: ClearanceFilters) => { setF(n); setPage(1); };
   const hint = mode === "RSA" ? "Search Trackup / PIF / bill no, client, vehicle, driver number or name" : "Search Trackup / PIF no, client, project, vehicle, driver number or name";
   const labels: [string, string, string, string] = mode === "RSA" ? ["Total Submissions", "Yet to Approve", "Approved", "Rejected"] : ["Total Allocations", "Yet to Approve", "Approved", "Rejected"];

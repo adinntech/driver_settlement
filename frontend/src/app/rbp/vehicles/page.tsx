@@ -1,5 +1,7 @@
 "use client";
 
+import VerticalSelect from "@/components/ui/VerticalSelect";
+import { verticalLabel } from "@/utils/vertical";
 import TableWrap from "@/components/ui/TableWrap";
 import Select from "@/components/ui/Select";
 import Link from "next/link";
@@ -22,7 +24,7 @@ import { BulkImportButton } from "@/components/BulkImport";
 interface Summary { total: number; active: number; draft: number; maintenanceDue: number; expiringSoon: number; availableNow?: number; inUse?: number; withIssue?: number; rules: { expiringDays: number; maintenanceDueDays: number } }
 interface Page { items: Vehicle[]; total: number; page: number; limit: number }
 
-const EMPTY = { q: "", availabilityStatus: "", docStatus: "", docType: "" };
+const EMPTY = { q: "", projectType: "", availabilityStatus: "", docStatus: "", docType: "" };
 type Filters = typeof EMPTY;
 const STATUS_TXT = { DRAFT: "Draft", ACTIVE: "Active", INACTIVE: "Inactive" } as const;
 
@@ -60,7 +62,7 @@ function Vehicles() {
     return p.toString();
   }, [f, dq, page, limit]);
 
-  const summary = useApi<Summary>("/vehicles/summary");
+  const summary = useApi<Summary>(`/vehicles/summary?projectType=${f.projectType}`);
   const list = useApi<Page>(`/vehicles?${qs}`);
   const pages = list.data ? Math.max(1, Math.ceil(list.data.total / limit)) : 1;
   const filtered = Object.values(f).some(Boolean);
@@ -117,6 +119,7 @@ function Vehicles() {
 
       <div className="card">
         <div className="filters-vehicle">
+          <VerticalSelect value={f.projectType} onChange={(v) => set("projectType", v)} />
           <input className="search-wide" placeholder="Search vehicle no, make, model, type, trackup no, PIF no, project name" value={f.q} onChange={(e) => set("q", e.target.value)} aria-label="Mass search" />
           <Select value={f.availabilityStatus} onChange={(e) => set("availabilityStatus", e.target.value)} aria-label="Vehicle availability">
             <option value="">Availability: All</option>
@@ -151,7 +154,7 @@ function Vehicles() {
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Vehicle No</th><th>Make</th><th>Model</th><th>Type</th><th>Year</th><th>Current Running</th>
+                    <th>Vehicle No</th><th>Vertical</th><th>Make</th><th>Model</th><th>Type</th><th>Year</th><th>Current Running</th>
                     <th>Insurance</th><th>FC</th><th>Availability</th><th>Current Project</th><th>Trackup No</th><th>PIF No</th><th>Client</th><th>Remarks</th><th>Expected Release</th><th>Next Available</th>
                     <th>Issue Reason</th><th>Status</th><th>Last Updated</th><th>Created</th><th />
                   </tr>
@@ -160,6 +163,7 @@ function Vehicles() {
                   {list.data.items.map((v) => (
                     <tr key={v._id}>
                       <td><strong className="num">{v.vehicleNo || <span className="muted">Not set</span>}</strong></td>
+                      <td>{verticalLabel(v.availability?.project?.projectType)}</td>
                       <td>{v.make || "—"}</td>
                       <td>{v.model || "—"}</td>
                       <td>{v.type || "—"}</td>

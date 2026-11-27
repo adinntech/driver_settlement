@@ -112,8 +112,8 @@ export async function searchAvailableVehicles(q: string, limit = 10, now = new D
 }
 
 /** Approved projects (one row per project vehicle = its own PIF) with their current allotment, if any. */
-export async function listAllotmentProjects(q: string, page = 1, limit = 10) {
-  const base = await searchApprovedProjects(q, page, limit);
+export async function listAllotmentProjects(q: string, page = 1, limit = 10, projectType?: string) {
+  const base = await searchApprovedProjects(q, page, limit, projectType);
   const items = base.items as any[];
   if (!items.length) return base;
   const [budgets, projects, allots]: any[][] = await Promise.all([

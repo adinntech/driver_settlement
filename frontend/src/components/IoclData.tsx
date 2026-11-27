@@ -1,5 +1,7 @@
 "use client";
 
+import VerticalSelect from "@/components/ui/VerticalSelect";
+import { verticalLabel } from "@/utils/vertical";
 import { useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
 import DateInput from "@/components/ui/DateInput";
@@ -18,7 +20,7 @@ const dash = (v: unknown) => (v === null || v === undefined || v === "" ? "-" : 
 export default function IoclData() {
   const toast = useToast();
   const file = useRef<HTMLInputElement>(null);
-  const [f, setF] = useState({ from: "", to: "", vehicleNo: "", product: "" });
+  const [f, setF] = useState({ from: "", to: "", vehicleNo: "", product: "", projectType: "" });
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState<null | "upload" | "export">(null);
   const [result, setResult] = useState<IoclSummary | null>(null);
@@ -86,6 +88,7 @@ export default function IoclData() {
         <label className="ds-range">From<DateInput value={f.from} max={f.to || undefined} onChange={(e) => change({ from: e.target.value })} aria-label="From date" /></label>
         <label className="ds-range">To<DateInput value={f.to} min={f.from || undefined} onChange={(e) => change({ to: e.target.value })} aria-label="To date" /></label>
         <input placeholder="Vehicle number" value={f.vehicleNo} onChange={(e) => change({ vehicleNo: e.target.value })} aria-label="Vehicle number" />
+        <VerticalSelect value={f.projectType} onChange={(v) => change({ projectType: v })} />
         <Select value={f.product} onChange={(e) => change({ product: e.target.value })} aria-label="Fuel type">
           <option value="">All fuel types</option>
           {data?.products.map((p) => <option key={p} value={p}>{p}</option>)}
@@ -109,11 +112,11 @@ export default function IoclData() {
               </p>
               <TableWrap>
                 <table className="table">
-                  <thead><tr><th>Vehicle No</th><th>Sales</th><th className="ds-amt">Quantity (L)</th><th className="ds-amt">Amount</th><th>Match</th></tr></thead>
+                  <thead><tr><th>Vehicle No</th><th>Vertical</th><th>Sales</th><th className="ds-amt">Quantity (L)</th><th className="ds-amt">Amount</th><th>Match</th></tr></thead>
                   <tbody>
                     {data.vehicleTotals.map((t) => (
                       <tr key={t.vehicleNo}>
-                        <td className="num">{dash(t.vehicleNo)}</td><td>{t.count}</td><td className="ds-amt">{t.quantity.toFixed(2)}</td><td className="ds-amt">{formatInr(t.amount)}</td>
+                        <td className="num">{dash(t.vehicleNo)}</td><td>{verticalLabel(t.vertical)}</td><td>{t.count}</td><td className="ds-amt">{t.quantity.toFixed(2)}</td><td className="ds-amt">{formatInr(t.amount)}</td>
                         <td><span className={`ds-badge ds-${t.status === "MATCHED" ? "approved" : "rejected"}`}>{MATCH_LABEL[t.status]}</span></td>
                       </tr>
                     ))}
@@ -127,13 +130,13 @@ export default function IoclData() {
             <TableWrap>
               <table className="table">
                 <thead>
-                  <tr><th>Txn Date</th><th>Txn ID</th><th>Type</th><th>Vehicle No</th><th>Fuel</th><th className="ds-amt">Quantity</th><th className="ds-amt">Amount</th><th>Odometer</th><th>Fuel Station</th><th>Project / Client</th><th>Driver</th><th>Match</th></tr>
+                  <tr><th>Txn Date</th><th>Txn ID</th><th>Type</th><th>Vertical</th><th>Vehicle No</th><th>Fuel</th><th className="ds-amt">Quantity</th><th className="ds-amt">Amount</th><th>Odometer</th><th>Fuel Station</th><th>Project / Client</th><th>Driver</th><th>Match</th></tr>
                 </thead>
                 <tbody>
                   {data.items.map((r) => (
                     <tr key={r._id}>
                       <td className="ds-nowrap">{formatDate(r.txnDate)}<br /><small className="muted">{r.txnTime}</small></td>
-                      <td className="num">{r.txnId}</td><td>{r.txnType}</td><td className="num">{dash(r.vehicleNo)}</td><td>{dash(r.product)}</td>
+                      <td className="num">{r.txnId}</td><td>{r.txnType}</td><td>{verticalLabel(r.match.department)}</td><td className="num">{dash(r.vehicleNo)}</td><td>{dash(r.product)}</td>
                       <td className="ds-amt">{dash(r.quantity)}</td>
                       <td className="ds-amt">
                         {r.amount === null ? "-" : formatInr(r.amount)}

@@ -1,5 +1,6 @@
 "use client";
 
+import VerticalSelect from "@/components/ui/VerticalSelect";
 import TableWrap from "@/components/ui/TableWrap";
 import Select from "@/components/ui/Select";
 import DateInput from "@/components/ui/DateInput";
@@ -67,7 +68,7 @@ function Dashboard() {
     return p.toString();
   }, [f, page]);
 
-  const stats = useApi<Stats>("/approvals/stats");
+  const stats = useApi<Stats>(`/approvals/stats?projectType=${f.projectType}`);
   const list = useApi<Page>(`/approvals?${qs}`);
   const pages = list.data ? Math.max(1, Math.ceil(list.data.total / LIMIT)) : 1;
   const filtered = Object.values(f).some(Boolean);
@@ -99,11 +100,7 @@ function Dashboard() {
           <input placeholder="Client / Billing name" value={f.client} onChange={(e) => set("client", e.target.value)} aria-label="Client name" />
           <input placeholder="Trackup number" value={f.trackup} onChange={(e) => set("trackup", e.target.value)} aria-label="Trackup number" />
           <input placeholder="PIF number" value={f.pif} onChange={(e) => set("pif", e.target.value)} aria-label="PIF number" />
-          <Select value={f.projectType} onChange={(e) => set("projectType", e.target.value)} aria-label="Project type">
-            <option value="">All types</option>
-            <option value="ROADSHOW">Roadshow</option>
-            <option value="SIGNAGE">Signage</option>
-          </Select>
+          <VerticalSelect value={f.projectType} onChange={(v) => set("projectType", v)} />
           <Select value={f.status} onChange={(e) => set("status", e.target.value)} aria-label="Approval status">
             <option value="">All statuses</option>
             <option value="PENDING">Pending</option>
@@ -130,7 +127,7 @@ function Dashboard() {
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Trackup Number</th><th>PIF</th><th>Type</th><th>Client / Billing</th><th>Vehicle</th>
+                    <th>Trackup Number</th><th>PIF</th><th>Vertical</th><th>Client / Billing</th><th>Vehicle</th>
                     <th>Campaign Period</th><th>Version</th><th>Total Budget</th><th>Submitted By</th><th>Submitted (IST)</th><th>Status</th><th />
                   </tr>
                 </thead>

@@ -195,7 +195,7 @@ const pay = (i: number, over: Partial<RsaPaymentRow> = {}): RsaPaymentRow => ({
 
 test("payment history: reference columns plus number, entry time, user and status; latest first; empty values are dashes", () => {
   const html = renderToStaticMarkup(<PaymentHistoryTable items={[pay(3), pay(2, { mode: "—" }), pay(1, { cashInHand: true, mode: "Cash in Hand" })]} total={3} page={1} limit={20} onPage={noop} />);
-  for (const h of ["<th>Date</th>", "<th>Payment No</th>", "<th>Amount</th>", "<th>Mode</th>", "<th>Bank Name</th>", "<th>Cheque/DD No</th>", "<th>By</th>", "<th>Status</th>"]) assert.ok(html.includes(h), h);
+  for (const h of ["<th>Date</th>", "<th>Payment No</th>", "<th>Amount</th>", "<th>Mode</th>", "<th>Mode of Payment</th>", "<th>Cheque/DD No</th>", "<th>By</th>", "<th>Status</th>"]) assert.ok(html.includes(h), h);
   for (const v of ["PAY-000003/2026-27", "₹3,000.50", "ePayment", "Cash in Hand", "RSA", "Entered", "23-Nov-2026"]) assert.ok(html.includes(v), v);
   assert.ok(html.indexOf("PAY-000003") < html.indexOf("PAY-000002") && html.indexOf("PAY-000002") < html.indexOf("PAY-000001")); // order preserved: newest on top
   assert.equal((html.match(/Expand ▼/g) ?? []).length, 3); // each row has an Expand button (no modal opens over the drawer)
@@ -221,7 +221,7 @@ const row = (over: Partial<RsaProjectRow> = {}): RsaProjectRow => ({
 });
 
 test("dashboard table: JS number, PIF, display number, type, client, vehicle, driver, campaign dates, budget, payment status, last payment", () => {
-  assert.deepEqual([...RSA_COLUMNS].slice(0, 12), ["Trackup No (JS)", "PIF No", "Type", "Client / Billing Name", "Vehicle No", "Driver No", "Driver Name", "Campaign From", "Campaign To", "Approved Budget", "Payment Status", "Last Payment"]);
+  assert.deepEqual([...RSA_COLUMNS].slice(0, 12), ["Trackup No (JS)", "PIF No", "Vertical", "Client / Billing Name", "Vehicle No", "Driver No", "Driver Name", "Campaign From", "Campaign To", "Approved Budget", "Payment Status", "Last Payment"]);
   const html = renderToStaticMarkup(<RsaProjectTable items={[row(), row({ trackingVehicle: "u".repeat(24), projectType: "SIGNAGE", paymentCount: 2, paymentStatus: "ENTERED", lastPaymentAt: "2026-11-24T06:30:00.000Z" })]} />);
   for (const v of ["JS-22342/2026-27", "PIF-11111", "4821", "Roadshow", "Signage", "KEN LIFESTYLES", "TN58BK3088", "DR-4821", "SAMPATH M", "24-Nov-2026", "02-Dec-2026", "₹1,25,000.50", "No entry yet", "Entered", "24-Nov-2026, 12:00 PM"])
     assert.ok(html.includes(v), v);
@@ -231,7 +231,7 @@ test("dashboard table: JS number, PIF, display number, type, client, vehicle, dr
 
 test("dashboard filters: mass search, project type, payment status, date range, clear; query is built for server-side paging", () => {
   const html = renderToStaticMarkup(<RsaFilters f={emptyRsaFilters()} onChange={noop} onClear={noop} />);
-  for (const l of ['aria-label="Mass search"', 'aria-label="Project type filter"', 'aria-label="Payment status filter"', 'aria-label="Date range from"', 'aria-label="Date range to"', "Clear Filters", ">Roadshow<", ">Signage<"]) assert.ok(html.includes(l), l);
+  for (const l of ['aria-label="Mass search"', 'aria-label="Vertical"', '>All Verticals<', 'aria-label="Payment status filter"', 'aria-label="Date range from"', 'aria-label="Date range to"', "Clear Filters", ">Roadshow<", ">Signage<"]) assert.ok(html.includes(l), l);
   assert.match(html, /<button[^>]*disabled=""[^>]*>Clear Filters/);
   assert.equal(rsaFiltersActive(emptyRsaFilters()), false);
   const f = { q: " kens ", projectType: "SIGNAGE", paymentStatus: "PENDING", from: "2026-11-01", to: "2026-11-30" };

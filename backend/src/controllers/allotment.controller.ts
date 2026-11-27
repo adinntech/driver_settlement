@@ -24,7 +24,7 @@ const submitClearance = async (a: unknown) => {
 };
 
 export const projects = wrap(async (req, res) => {
-  const data = await listAllotmentProjects(q(req.query.q) ?? "", n(req.query.page), n(req.query.limit));
+  const data = await listAllotmentProjects(q(req.query.q) ?? "", n(req.query.page), n(req.query.limit), q(req.query.projectType));
   res.status(200).json(sendResponse(true, "Approved projects fetched successfully", data));
 });
 

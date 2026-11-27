@@ -1,5 +1,6 @@
 "use client";
 
+import { verticalLabel } from "@/utils/vertical";
 import { useRef, useState } from "react";
 import DateInput, { todayIst } from "@/components/ui/DateInput";
 import Select from "@/components/ui/Select";
@@ -120,13 +121,13 @@ export function BulkEntryFields({ rows, picked, entries, date, today, onEntry, o
     <>
       <div className="table-wrap">
         <table className="table" data-section="bulk-entry">
-          <colgroup><col className="be-c-check" /><col className="be-c-no" /><col className="be-c-veh" /><col /><col className="be-c-amt" /></colgroup>
+          <colgroup><col className="be-c-check" /><col className="be-c-no" /><col className="be-c-vert" /><col className="be-c-veh" /><col /><col className="be-c-amt" /></colgroup>
           <thead>
             <tr>
               <th>
                 <input type="checkbox" aria-label="Select all payments" checked={all} ref={(el) => { if (el) el.indeterminate = count > 0 && !all; }} onChange={onToggleAll} />
               </th>
-              <th>Payment No</th><th>Vehicle</th><th>Driver</th><th className="ds-amt">Amount</th>
+              <th>Payment No</th><th>Vertical</th><th>Vehicle</th><th>Driver</th><th className="ds-amt">Amount</th>
             </tr>
           </thead>
           {rows.map((p) => {
@@ -137,6 +138,7 @@ export function BulkEntryFields({ rows, picked, entries, date, today, onEntry, o
                 <tr>
                   <td><input type="checkbox" aria-label={`Select ${p.paymentNumber}`} checked={on} onChange={() => onToggle(p._id)} /></td>
                   <td><strong>{p.paymentNumber}</strong><small>{CATEGORY_SHORT[p.category]}</small></td>
+                  <td>{verticalLabel(p.projectType)}</td>
                   <td>{p.vehicleNo ?? "-"}</td>
                   <td>{p.driverName ?? "-"}</td>
                   <td className="ds-amt">{formatInr(p.amount)}</td>
@@ -144,7 +146,7 @@ export function BulkEntryFields({ rows, picked, entries, date, today, onEntry, o
                 {on && (
                   <tr className="be-detail">
                     <td />
-                    <td colSpan={4}>
+                    <td colSpan={5}>
                       <EntryFields value={entry} date={date} today={today} label={p.paymentNumber} onChange={(patch) => onEntry(p._id, { ...entry, ...patch })} />
                     </td>
                   </tr>
@@ -172,8 +174,8 @@ function EntryFields({ value, date, today, label, onChange }: { value: RowEntry;
       <div className="pe-field"><span>Payment Date <i>*</i></span>
         <DateInput value={value.paymentDate} min={date} max={today} onChange={(e) => onChange({ paymentDate: e.target.value })} aria-label={name("Payment Date")} />
       </div>
-      <div className="pe-field"><span>Bank Name {value.paymentMode !== "CASH" && <i>*</i>}</span>
-        <input maxLength={120} placeholder="Paying bank" value={value.bankName} aria-label={name("Bank Name")} onChange={(e) => onChange({ bankName: e.target.value })} />
+      <div className="pe-field"><span>Mode of Payment {value.paymentMode !== "CASH" && <i>*</i>}</span>
+        <input maxLength={120} placeholder="Paying bank" value={value.bankName} aria-label={name("Mode of Payment")} onChange={(e) => onChange({ bankName: e.target.value })} />
       </div>
       <div className="pe-field"><span>Reference No. <i>*</i></span>
         <input maxLength={60} placeholder="UTR / cheque / DD" value={value.referenceNumber} aria-label={name("Reference Number")} onChange={(e) => onChange({ referenceNumber: cleanReference(e.target.value) })} />

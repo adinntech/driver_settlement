@@ -12,7 +12,7 @@ export const PAYMENT_CATEGORIES = ["DAILY", "FINAL"] as const;
 export type PaymentCategory = (typeof PAYMENT_CATEGORIES)[number];
 export const SETTLEMENT_STATUSES = ["PENDING", "APPROVED", "REJECTED", "COMPLETED"] as const;
 export type SettlementStatus = (typeof SETTLEMENT_STATUSES)[number];
-export const SETTLEMENT_ACTIONS = ["SUBMITTED", "RESUBMITTED", "APPROVED", "REJECTED", "EXPORTED", "COMPLETED"] as const;
+export const SETTLEMENT_ACTIONS = ["SUBMITTED", "RESUBMITTED", "APPROVED", "REJECTED", "EXPORTED", "COMPLETED", "MILEAGE_EDITED"] as const;
 /** Modes RSA chooses in the payment Entry popup. */
 export const ENTRY_PAYMENT_MODES = ["CASH", "CHEQUE", "DD", "EPAYMENT"] as const;
 export const PAYMENT_MODE_LABEL: Record<string, string> = { CASH: "Cash", CHEQUE: "Cheque", DD: "DD", EPAYMENT: "ePayment", NEFT: "NEFT", RTGS: "RTGS", IMPS: "IMPS", UPI: "UPI" };

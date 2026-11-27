@@ -31,8 +31,8 @@ export function validatePaymentEntry(f: PaymentEntryForm, today: string, approve
   else if (!isYmd(f.paymentDate)) e.paymentDate = "Payment date must be a valid date";
   else if (f.paymentDate > today) e.paymentDate = "Payment date cannot be in the future";
   else if (approvedOn && f.paymentDate < approvedOn) e.paymentDate = "Payment date cannot be before the approval date";
-  if (f.paymentMode && f.paymentMode !== "CASH" && !f.bankName.trim()) e.bankName = "Enter the bank name";
-  else if (/[<>]/.test(f.bankName)) e.bankName = "Bank name contains invalid characters";
+  if (f.paymentMode && f.paymentMode !== "CASH" && !f.bankName.trim()) e.bankName = "Enter the mode of payment";
+  else if (/[<>]/.test(f.bankName)) e.bankName = "Mode of Payment contains invalid characters";
   if (!f.referenceNumber.trim()) e.referenceNumber = "Enter the reference number of this payment";
   if (f.referenceDate && !isYmd(f.referenceDate)) e.referenceDate = "Reference date must be a valid date";
   else if (f.referenceDate && f.referenceDate > today) e.referenceDate = "Reference date cannot be in the future";
@@ -44,6 +44,9 @@ export interface HistoryEntry { action: string; version: number; fromStatus: str
 export interface SettlementDetail extends SettlementRow { data: Record<string, any>; history: HistoryEntry[] }
 export interface SettlementPage { items: SettlementRow[]; total: number; page: number; limit: number; summary: Record<string, { count: number; amount: number }> }
 
+/** Every line behind the Suspense Amount, as the server lists it. */
+export interface SuspenseRecords { rows: { source: string; date: string; description: string; amount: number }[]; total: number }
+
 export interface SettlementContext {
   trackingVehicle: string; trackupNumber: string; pifNumber: string; clientName: string; projectType: "ROADSHOW" | "SIGNAGE"; vehicleNo: string; driverNumber: string; driverName: string;
   approvedBudgetAmount: number | null; budgetVersion: number | null;
@@ -53,6 +56,7 @@ export interface SettlementContext {
   dailyPayments?: { paymentNumber: string; status: string; fromDate: string; toDate: string; amount: number; salaryAdvance: number; diesel: number; food: number }[];
   bank: { accountName: string | null; bankName: string | null; ifscCode: string | null; accountMasked: string | null };
   existingFinal: { paymentNumber: string; status: string } | null;
+  suspense?: SuspenseRecords;
   prefill: Record<string, number | string | null>;
 }
 export interface SettlementOptions {
@@ -65,9 +69,9 @@ export interface SettlementOptions {
 // ---------------------------------------------------------------- labels
 export const STATUS_LABEL: Record<SettlementStatus, string> = { PENDING: "Pending Approval", APPROVED: "Approved", REJECTED: "Rejected", COMPLETED: "Paid" };
 export const CATEGORY_SHORT: Record<PaymentCategory, string> = { DAILY: "Daily", FINAL: "Final" };
-export const ACTION_LABEL: Record<string, string> = { SUBMITTED: "Submitted", RESUBMITTED: "Resubmitted", APPROVED: "Approved", REJECTED: "Rejected", EXPORTED: "Exported to accounts", COMPLETED: "Payment completed" };
+export const ACTION_LABEL: Record<string, string> = { SUBMITTED: "Submitted", RESUBMITTED: "Resubmitted", APPROVED: "Approved", REJECTED: "Rejected", MILEAGE_EDITED: "Mileage edited", EXPORTED: "Exported to accounts", COMPLETED: "Payment completed" };
 
-export interface QueueFilters { category: "" | PaymentCategory; status: string; q: string; from: string; to: string; sort: string; dir: "asc" | "desc" }
+export interface QueueFilters { projectType?: string; category: "" | PaymentCategory; status: string; q: string; from: string; to: string; sort: string; dir: "asc" | "desc" }
 export const emptyQueueFilters = (category: "" | PaymentCategory = "", status = ""): QueueFilters => ({ category, status, q: "", from: "", to: "", sort: "submittedAt", dir: "desc" });
 
 /** The table's filters (not its sort or page) for Export Approved, so the file and the list are narrowed the same way. */
@@ -81,6 +85,7 @@ export function queueQuery(f: QueueFilters, page: number, limit: number): string
   const p = new URLSearchParams();
   if (f.category) p.set("category", f.category);
   if (f.status) p.set("status", f.status);
+  if (f.projectType) p.set("projectType", f.projectType);
   if (f.q.trim()) p.set("q", f.q.trim());
   if (f.from) p.set("from", f.from);
   if (f.to) p.set("to", f.to);
@@ -136,6 +141,7 @@ export function finalFormFrom(ctx: SettlementContext | null, saved?: Record<stri
   const s = saved as any;
   const n = Object.fromEntries(FINAL_NUMBER_FIELDS.map((k) => [k, ""])) as Record<FinalNumberKey, string>;
   if (s) {
+    if (ctx) n.suspenseAmount = str(ctx.prefill.suspenseAmount); // a correction takes the suspense as calculated now
     // what was added by hand stays; the driver-change part is replaced by what is owed now
     const manual = Math.round(((Number(s.deductions?.previousSalary) || 0) - (Number(s.driverChangeAmount) || 0)) * 100) / 100;
     Object.assign(n, {
@@ -208,8 +214,8 @@ export function finalTotals(f: FinalForm) {
   const claimed = rows.reduce((s, r) => s + r.claimed, 0);
   const approved = rows.reduce((s, r) => s + r.approved, 0);
   const gross = earningsTotal + approved;
-  const totalDeduction = DEDUCTION_KEYS.reduce((s, k) => s + v(f.deductions[k]), 0);
-  const net = gross - totalDeduction - n.suspenseAmount;
+  const totalDeduction = DEDUCTION_KEYS.reduce((s, k) => s + v(f.deductions[k]), 0) + n.suspenseAmount; // suspense counted here, once
+  const net = gross - totalDeduction;
   return { resultKm, expectedLitres, variationLitres, mileageShortSuggested, earnings, earningsTotal, rows, claimed, approved, rejected: claimed - approved, gross, totalDeduction, net };
 }
 
@@ -251,3 +257,32 @@ export function finalPayload(f: FinalForm, idempotencyKey: string) {
     deductions: { ...Object.fromEntries(DEDUCTION_KEYS.map((k) => [k, f.deductions[k].trim()])), otherRemark: f.otherRemark.trim() || undefined }, idempotencyKey,
   };
 }
+
+/** Live preview of an RSO mileage edit (mirrors recalcMileage in backend/src/utils/settlement.ts; the server saves its own figures). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function recalcMileage(data: any, mileage: number) {
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  const f = data.fuel;
+  const expectedLitres = r2(f.resultKm / mileage);
+  const variationLitres = r2(f.ioclLitres - expectedLitres);
+  const short = Math.max(0, Math.round(variationLitres * f.dieselCost * 100));
+  const diff = short - Math.round((data.deductions.mileageShort ?? 0) * 100);
+  const estimatedKm = Number(data.estimate?.estimatedKm) || 0;
+  return {
+    ...data,
+    fuel: { ...f, fixedMileage: mileage, expectedLitres, variationLitres, mileageShortSuggested: short / 100 },
+    estimate: { ...data.estimate, estimatedFuel: estimatedKm ? r2(estimatedKm / mileage) : data.estimate?.estimatedFuel ?? 0 },
+    deductions: { ...data.deductions, mileageShort: short / 100 },
+    totalDeduction: (Math.round(data.totalDeduction * 100) + diff) / 100,
+    netAmount: (Math.round(data.netAmount * 100) - diff) / 100,
+  };
+}
+
+/**
+ * Review highlight of Final Settlement rows: EVERY earning and expense row except Food and Fuel (Diesel / Petrol, and the IOCL
+ * card lines). Decided by the row's category / key, or its name for categories added later, so new ones are highlighted by default.
+ * Mirrors backend/src/utils/settlement.ts. Same rule on screen, in Excel and in the salary statement PDF.
+ */
+export const isHighlightedExpense = (e: { category?: string; key?: string; label?: string; description?: string | null }) =>
+  !/^(FOOD|FOOD_ALLOWANCE|FUEL|DIESEL|PETROL)$/i.test(e.category ?? e.key ?? "") && !/\b(food|fuel|diesel|petrol)\b/i.test(e.label ?? "") && !/iocl/i.test(e.description ?? "");
+

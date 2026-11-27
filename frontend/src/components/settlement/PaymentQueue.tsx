@@ -1,5 +1,7 @@
 "use client";
 
+import VerticalSelect from "@/components/ui/VerticalSelect";
+import { verticalLabel } from "@/utils/vertical";
 import TableWrap from "@/components/ui/TableWrap";
 import Select from "@/components/ui/Select";
 import DateInput from "@/components/ui/DateInput";
@@ -16,11 +18,12 @@ import { downloadFile, request } from "@/services/api";
 import { formatDate, formatDateTime, formatInr } from "@/utils/format";
 import { kmText } from "@/utils/kmAllowance";
 import {
-  ACTION_LABEL, CATEGORY_SHORT, STATUS_LABEL, actionsFor, modeLabel, paymentsBase, emptyQueueFilters, queueQuery, type PaymentCategory, type QueueFilters, type SettlementDetail, type SettlementPage,
-  type SettlementRow, type SettlementStatus,
+  ACTION_LABEL, CATEGORY_SHORT, STATUS_LABEL, actionsFor, isHighlightedExpense, modeLabel, recalcMileage, paymentsBase, emptyQueueFilters, queueQuery, type PaymentCategory, type QueueFilters, type SettlementDetail, type SettlementPage,
+  type SettlementRow, type SettlementStatus, type SuspenseRecords,
 } from "@/utils/settlement";
 import { PaymentEntryForm, PaymentEntryModal } from "@/components/settlement/PaymentEntry";
 import BulkApproveModal from "@/components/settlement/BulkApproveModal";
+import SuspenseTable from "@/components/settlement/SuspenseTable";
 import { canBulkApprove } from "@/utils/bulkApproval";
 
 const d = (v: unknown) => (v === null || v === undefined || v === "" ? "-" : String(v));
@@ -117,7 +120,7 @@ export function PaymentQueue({ mode, defaultCategory = "", toolbar, reloadKey = 
     clearPicked();
   };
   const sortBy = (key?: string) => key && change({ ...f, sort: key, dir: f.sort === key && f.dir === "desc" ? "asc" : "desc" });
-  const active = !!(f.q || f.from || f.to || (mode !== "completed" && f.status) || f.category !== defaultCategory);
+  const active = !!(f.projectType || f.q || f.from || f.to || (mode !== "completed" && f.status) || f.category !== defaultCategory);
 
   return (
     <>
@@ -141,6 +144,7 @@ export function PaymentQueue({ mode, defaultCategory = "", toolbar, reloadKey = 
               {STATUS_OPTIONS[mode].map((o) => <option key={o.v} value={o.v}>{o.l === "All" ? "All status" : o.l}</option>)}
             </Select>
           )}
+          <VerticalSelect value={f.projectType ?? ""} onChange={(v) => change({ ...f, projectType: v })} />
           <input className="ds-search" placeholder="Search payment no, trackup, client, vehicle, driver, reference" value={f.q} onChange={(e) => change({ ...f, q: e.target.value })} aria-label="Search" />
           <label className="ds-range">From<DateInput value={f.from} onChange={(e) => change({ ...f, from: e.target.value })} /></label>
           <label className="ds-range">To<DateInput value={f.to} min={f.from || undefined} onChange={(e) => change({ ...f, to: e.target.value })} /></label>
@@ -173,7 +177,7 @@ export function PaymentQueue({ mode, defaultCategory = "", toolbar, reloadKey = 
                       </th>
                     )}
                     {/* completed: the payment details replace Period / Submitted (both stay in View) so they fit without scrolling */}
-                    {(mode === "completed" ? [COLS[0], COLS[2], { key: "drv", label: "Driver / Vehicle", sort: "driverName" }, COLS[6], { key: "ref", label: "Reference No." }, { key: "paid", label: "Paid On · Mode / Bank" }, COLS[9]] : COLS).map((c) => (
+                    {(mode === "completed" ? [COLS[0], COLS[2], { key: "drv", label: "Driver / Vehicle", sort: "driverName" }, COLS[6], { key: "ref", label: "Reference No." }, { key: "paid", label: "Paid On · Mode of Payment" }, COLS[9]] : COLS).flatMap((c, i) => (i === 1 ? [{ key: "vert", label: "Vertical" }, c] : [c])).map((c) => (
                       <th key={c.key} aria-sort={"sort" in c && c.sort && f.sort === c.sort ? (f.dir === "asc" ? "ascending" : "descending") : undefined}>
                         {"sort" in c && c.sort ? (
                           <button type="button" className="ds-sort" onClick={() => sortBy(c.sort)}>
@@ -190,6 +194,7 @@ export function PaymentQueue({ mode, defaultCategory = "", toolbar, reloadKey = 
                     <tr key={p._id}>
                       {bulk && <td>{canBulkApprove(user?.role, p) && <input type="checkbox" aria-label={`Select ${p.paymentNumber}`} checked={picked.has(p._id)} onChange={() => toggle(p._id)} />}</td>}
                       <td><strong className="num">{p.paymentNumber}</strong>{p.version > 1 && <small className="muted"> v{p.version}</small>}{mode === "completed" && <div className="ds-cat-under"><CategoryTag c={p.category} /></div>}</td>
+                      <td>{verticalLabel(p.projectType)}</td>
                       {mode !== "completed" && <td><CategoryTag c={p.category} /></td>}
                       <td><div>{d(p.clientName)}</div><small className="muted">{[p.trackupNumber, p.pifNumber].filter(Boolean).join(" · ")}</small></td>
                       {mode === "completed" ? (
@@ -248,6 +253,39 @@ export function PaymentDetailModal({ id, onClose, onChanged }: { id: string; onC
   const [mode, setMode] = useState<null | "approve" | "reject" | "complete">(null);
   const [busy, setBusy] = useState(false);
   const p = r.data;
+  // RSO may correct the mileage while the settlement is pending; the breakdown previews every dependent figure as it is typed
+  const [mileage, setMileage] = useState<string | null>(null);
+  const typed = Number(mileage);
+  const preview = p && mileage !== null && typed > 0 ? recalcMileage(p.data, typed) : null;
+  const canEditMileage = !!p && p.category === "FINAL" && p.status === "PENDING" && user?.role === "RSO";
+  const saveMileage = async () => {
+    if (!p) return;
+    setBusy(true);
+    try {
+      await request(`/settlements/${id}/mileage`, "POST", { fixedMileage: mileage!.trim(), version: p.version });
+      toast("Mileage updated");
+      setMileage(null);
+      done();
+    } catch (e) {
+      toast((e as Error).message, "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const detailExcel = async () => {
+    setBusy(true);
+    try {
+      await downloadFile(`/settlements/${id}/detail-export`, "settlement.xlsx");
+    } catch (e) {
+      toast((e as Error).message, "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const [showSuspense, setShowSuspense] = useState(false);
+  const suspenseOpen = showSuspense && p?.category === "FINAL";
+  const suspense = useApi<SuspenseRecords & { saved: number }>(suspenseOpen ? `/settlements/${id}/suspense` : null);
+  const suspensePdf = () => downloadFile(`/settlements/${id}/suspense-pdf`, "payment-details.pdf").catch((e: Error) => toast(e.message, "error"));
   const can = p && user ? actionsFor(user.role, p) : null;
   const done = () => {
     setMode(null);
@@ -273,8 +311,22 @@ export function PaymentDetailModal({ id, onClose, onChanged }: { id: string; onC
             <SettlementBadge status={p.status} />
             <CategoryTag c={p.category} />
             <span className="muted">Version {p.version} · approval by {p.approver}</span>
-            <span className="ds-detail-amt">{formatInr(p.amount)}</span>
+            <span className="ds-detail-amt">{formatInr(preview ? preview.netAmount : p.amount)}</span>
+            {p.category === "FINAL" && (user?.role === "RSO" || user?.role === "RSA") && <button type="button" className="btn btn-outline btn-sm" disabled={busy} onClick={detailExcel}>Export Excel</button>}
+            {p.category === "FINAL" && (user?.role === "RSO" || user?.role === "RSA") && <button type="button" className="btn btn-outline btn-sm" aria-expanded={showSuspense} onClick={() => setShowSuspense((v) => !v)}>Suspense Records</button>}
           </div>
+          {suspenseOpen && (
+            <section className="ds-sec">
+              <h4>Suspense records (daily payments)</h4>
+              {suspense.loading ? <Skeleton rows={3} /> : suspense.error || !suspense.data ? <ErrorState message={suspense.error ?? "Could not load"} onRetry={suspense.reload} /> : (
+                <>
+                  <SuspenseTable records={suspense.data} />
+                  <p className="muted">Suspense Amount saved on this settlement: {formatInr(suspense.data.saved)}</p>
+                  <button type="button" className="btn btn-outline btn-sm" onClick={suspensePdf}>Download PDF</button>
+                </>
+              )}
+            </section>
+          )}
           {p.status === "REJECTED" && p.rejectionReason && <div className="alert">Rejected by {p.reviewedBy}: {p.rejectionReason}</div>}
 
           <section className="ds-sec">
@@ -285,7 +337,20 @@ export function PaymentDetailModal({ id, onClose, onChanged }: { id: string; onC
               ["Bank", p.bank ? `${d(p.bank.bankName)} · ${d(p.bank.accountMasked)} · ${d(p.bank.ifscCode)}` : "-"],
             ]} />
           </section>
-          {p.category === "DAILY" ? <DailyBreakdown data={p.data} /> : <FinalBreakdown data={p.data} />}
+          {p.category === "DAILY" ? <DailyBreakdown data={p.data} /> : (
+            <FinalBreakdown data={preview ?? p.data} mileage={!canEditMileage ? null : mileage === null ? (
+              <button type="button" className="ds-pencil" aria-label="Edit mileage" title="Edit mileage" onClick={() => setMileage(String(p.data.fuel.fixedMileage))}>
+                <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /></svg>
+              </button>
+            ) : (
+              <span className="ds-mileage-edit">
+                <input inputMode="decimal" aria-label="Fixed Mileage" autoFocus value={mileage} onChange={(e) => setMileage(e.target.value.replace(/[^0-9.]/g, ""))} />
+                <button type="button" className="btn btn-primary btn-sm" disabled={busy || !preview || preview.netAmount < 0 || typed === p.data.fuel.fixedMileage} onClick={saveMileage}>Save</button>
+                <button type="button" className="btn btn-outline btn-sm" disabled={busy} onClick={() => setMileage(null)}>Cancel</button>
+                {preview && preview.netAmount < 0 && <small className="field-error">Net Amount would be negative</small>}
+              </span>
+            )} />
+          )}
 
           {p.status === "APPROVED" && !p.completion && (
             <section className="ds-sec">
@@ -298,7 +363,7 @@ export function PaymentDetailModal({ id, onClose, onChanged }: { id: string; onC
               <h4>Payment Detail (paid)</h4>
               <KV items={[
                 ["Reference No.", p.completion.referenceNumber], ["Reference Date", p.completion.referenceDate ? formatDate(p.completion.referenceDate) : "-"],
-                ["Payment Mode", modeLabel(p.completion.paymentMode)], ["Payment Date", formatDate(p.completion.paymentDate)], ["Bank Name", d(p.completion.bankName)],
+                ["Payment Mode", modeLabel(p.completion.paymentMode)], ["Payment Date", formatDate(p.completion.paymentDate)], ["Mode of Payment", d(p.completion.bankName)],
                 ...(p.completion.transactionMasked ? [["Transaction", p.completion.transactionMasked] as [string, string]] : []),
                 ...(p.completion.remarks ? [["Remarks", p.completion.remarks] as [string, string]] : []),
                 ["Recorded by", `${p.completion.completedBy} · ${formatDateTime(p.completion.completedAt)}`],
@@ -319,7 +384,7 @@ export function PaymentDetailModal({ id, onClose, onChanged }: { id: string; onC
             </ol>
           </section>
 
-          {can && (can.canDecide || can.canResubmit || can.canComplete || can.canPdf) && !mode && (
+          {can && (can.canDecide || can.canResubmit || can.canComplete || can.canPdf) && !mode && mileage === null && (
             <div className="actions-row ds-actions">
               {can.canPdf && <button type="button" className="btn btn-outline" disabled={busy} onClick={pdf}>Download Salary PDF</button>}
               {can.canResubmit && <Link className="btn btn-primary" href={`${paymentsBase(user?.role)}/${p.category === "DAILY" ? "daily" : "final"}?id=${p._id}&tv=${p.trackingVehicle}`}>Correct &amp; Resubmit</Link>}
@@ -358,14 +423,14 @@ function DailyBreakdown({ data }: { data: Record<string, any> }) {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function FinalBreakdown({ data }: { data: Record<string, any> }) {
+function FinalBreakdown({ data, mileage }: { data: Record<string, any>; mileage?: ReactNode }) {
   return (
     <>
       <section className="ds-sec">
         <h4>Campaign &amp; fuel</h4>
         <KV items={[
           ["Campaign", `${formatDate(data.campaignFrom)} to ${formatDate(data.campaignTo)}`], ["Total Days", data.totalDays], ["Location", data.location], ["Reporting Date", formatDate(data.reportingDate)],
-          ["Fixed Mileage", `${data.fuel.fixedMileage} km/l`], ["Opening / Closing KM", `${data.fuel.openingKm} / ${data.fuel.closingKm}`], ["Result", `${data.fuel.resultKm} km`],
+          ["Fixed Mileage", <span key="m" className="ds-mileage">{data.fuel.fixedMileage} km/l {mileage}</span>], ["Opening / Closing KM", `${data.fuel.openingKm} / ${data.fuel.closingKm}`], ["Result", `${data.fuel.resultKm} km`],
           ...(data.rates?.travelKm ? [["Travel KM x Rate", `${data.rates.travelKm} km x ${formatInr(data.rates.travelRate)} = ${formatInr(data.rates.travelPay)}`] as [string, string]] : []),
           ["Fuel Cost", `${formatInr(data.fuel.dieselCost)} / l`], ["IOCL (litres / KMs)", `${data.fuel.ioclLitres} / ${data.fuel.ioclKms}`], ["Variation in Litres", data.fuel.variationLitres],
           ["Estimated Budget", formatInr(data.estimate.estimatedBudget)], ["Estimated KM / Fuel", `${data.estimate.estimatedKm} km / ${data.estimate.estimatedFuel} l`],
@@ -383,9 +448,9 @@ function FinalBreakdown({ data }: { data: Record<string, any> }) {
           <thead><tr><th>Description</th><th>Others</th><th className="ds-amt">Cost</th><th className="ds-amt">Qty / Days / Hrs</th><th className="ds-amt">Claimed</th><th className="ds-amt">Approved</th></tr></thead>
           <tbody>
             {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-            {data.earnings.filter((e: any) => e.amount > 0).map((e: any) => <tr key={e.key}><td>{e.label}</td><td /><td className="ds-amt">{formatInr(e.rate)}</td><td className="ds-amt">{e.quantity}</td><td className="ds-amt">{formatInr(e.amount)}</td><td className="ds-amt">{formatInr(e.amount)}</td></tr>)}
+            {data.earnings.filter((e: any) => e.amount > 0).map((e: any) => <tr key={e.key} className={isHighlightedExpense(e) ? "ds-hl" : undefined}><td>{e.label}</td><td /><td className="ds-amt">{formatInr(e.rate)}</td><td className="ds-amt">{e.quantity}</td><td className="ds-amt">{formatInr(e.amount)}</td><td className="ds-amt">{formatInr(e.amount)}</td></tr>)}
             {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-            {data.expenses.map((e: any, i: number) => <tr key={i}><td>{e.label}</td><td>{d(e.description)}</td><td className="ds-amt">{formatInr(e.cost)}</td><td className="ds-amt">{e.quantity}</td><td className="ds-amt">{formatInr(e.claimed)}</td><td className="ds-amt">{formatInr(e.approved)}{e.rejected > 0 && <small className="text-danger"> (−{formatInr(e.rejected)})</small>}</td></tr>)}
+            {data.expenses.map((e: any, i: number) => <tr key={i} className={isHighlightedExpense(e) ? "ds-hl" : undefined}><td>{e.label}</td><td>{d(e.description)}</td><td className="ds-amt">{formatInr(e.cost)}</td><td className="ds-amt">{e.quantity}</td><td className="ds-amt">{formatInr(e.claimed)}</td><td className="ds-amt">{formatInr(e.approved)}{e.rejected > 0 && <small className="text-danger"> (−{formatInr(e.rejected)})</small>}</td></tr>)}
           </tbody>
         </table>
       </section>
@@ -395,7 +460,7 @@ function FinalBreakdown({ data }: { data: Record<string, any> }) {
           ["Mileage Short", formatInr(data.deductions.mileageShort)], ...(data.deductions.driverChangeTravel !== undefined ? [["Driver Change Travel", formatInr(data.deductions.driverChangeTravel)] as [string, string]] : []), ["Vehicle Damage", formatInr(data.deductions.vehicleDamage)],
           ["Previous Salary", formatInr(data.deductions.previousSalary)], ["Other", `${formatInr(data.deductions.other)}${data.otherDeductionRemark ? ` (${data.otherDeductionRemark})` : ""}`],
         ]} />
-        <div className="ds-totals"><span>Gross <b>{formatInr(data.gross)}</b></span><span>Total Deduction <b>{formatInr(data.totalDeduction)}</b></span><span>Suspense <b>{formatInr(data.suspenseAmount)}</b></span><span className="ds-grand">Net Amount <b>{formatInr(data.netAmount)}</b></span></div>
+        <div className="ds-totals"><span>Gross <b>{formatInr(data.gross)}</b></span><span>Suspense <b>{formatInr(data.suspenseAmount)}</b></span><span>{data.totalDeductionIncludesSuspense ? "Total Deduction (incl. Suspense)" : "Total Deduction"} <b>{formatInr(data.totalDeduction)}</b></span><span className="ds-grand">Net Amount <b>{formatInr(data.netAmount)}</b></span></div>
       </section>
     </>
   );

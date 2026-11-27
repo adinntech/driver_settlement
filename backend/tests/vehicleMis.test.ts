@@ -20,7 +20,7 @@ const { seedUsers } = await import("../src/services/auth.service.js");
 const { vehicleMisRows, vehicleMisWorkbook, VEHICLE_MIS_COLUMNS } = await import("../src/services/settlementReports.service.js");
 
 const HEADERS = ["Vehicle No", "Make", "Model", "Y.O.M", "Purchase Date", "Vehicle Type", "Stepney Status", "Battery Status", "Oil Top Up On", "Grease Packing On",
-  "General Check Up On", "Current Running", "Total Running", "Fc", "Insurance", "State Permit", "Rto Permission", "Police Permission", "Condition", "Specification"];
+  "General Check Up On", "Current Running", "Total Running", "Fc", "Insurance", "State Permit", "Rto Permission", "Police Permission", "Condition", "Specification", "Vertical"];
 let server: Server;
 let base = "";
 const col = (h: string) => HEADERS.indexOf(h) + 2; // data starts in column B
@@ -85,7 +85,7 @@ test("complete, partial and legacy-bad records: exact values, real dates, blanks
   const partial = ws.getRow(6);
   assert.equal(partial.getCell(col("Vehicle No")).value, "TN58W3204");
   for (const h of ["Purchase Date", "Stepney Status", "Current Running", "Insurance", "Condition"]) assert.equal(partial.getCell(col(h)).value, null, `${h} blank on a partial record`);
-  assert.equal(VEHICLE_MIS_COLUMNS.length, 20);
+  assert.equal(VEHICLE_MIS_COLUMNS.length, 21); // the 20 reference columns plus Vertical
 });
 
 test("the Vehicle MIS export stays RSO-only and downloads as a valid .xlsx", async () => {

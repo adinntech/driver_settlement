@@ -121,7 +121,7 @@ export function PaymentEntryForm({ p, onCancel, onDone, inline = false }: { p: S
             {fe("paymentDate")}
           </div>
           <div className="pe-field pe-span">
-            <label htmlFor="pe-bank">Bank Name {!cash && <i aria-hidden>*</i>}</label>
+            <label htmlFor="pe-bank">Mode of Payment {!cash && <i aria-hidden>*</i>}</label>
             <span className="pe-ic">
               <Icon d={ICONS.bank} />
               <input id="pe-bank" className="dsf-in" maxLength={120} value={f.bankName} placeholder={cash ? "Not needed for cash" : "Paying bank, e.g. Axis Bank"} aria-invalid={!!errs.bankName} onChange={(e) => set("bankName", e.target.value)} />

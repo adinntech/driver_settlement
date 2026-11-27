@@ -1,10 +1,11 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { authenticate, requireRole } from "../middleware/auth.js";
 import {
-  approvedForExport, checkAdvanceEligibility, completeBulk, completeSettlement,getSettlement, listEligibleProjects, listSettlements, paymentsForExport, resubmitSettlement, reviewSettlement, settlementContext,
+  approvedForExport, checkAdvanceEligibility, completeBulk, completeSettlement, editMileage,getSettlement, listEligibleProjects, listSettlements, paymentsForExport, resubmitSettlement, reviewSettlement, settlementContext,
   settlementOptions, submitSettlement, viewBudget, viewDriver,
 } from "../services/settlement.service.js";
-import { accountsExport, approvedPaymentRows, driverListRows, driverSalaryPdf, driverSalaryRows, reportWorkbook, vehicleMisRows } from "../services/settlementReports.service.js";
+import { accountsExport, approvedPaymentRows, driverListRows, driverSalaryPdf, driverSalaryRows, reportWorkbook, settlementDetailWorkbook, vehicleMisRows } from "../services/settlementReports.service.js";
+import { paymentDetailsPdf, settlementSuspense, settlementSuspensePdf } from "../services/paymentDetailsPdf.service.js";
 import { listOnRoadVehicles } from "../services/onRoad.service.js";
 import { sendResponse } from "../utils/sendResponse.js";
 import { AppError } from "../utils/AppError.js";
@@ -24,7 +25,7 @@ const xlsx = (res: Response, name: string, buf: Buffer) => {
   res.setHeader("Cache-Control", "no-store");
   res.end(buf);
 };
-const reportQ = (req: Request) => ({ from: q(req.query.from), to: q(req.query.to), category: q(req.query.category), q: q(req.query.q) });
+const reportQ = (req: Request) => ({ projectType: q(req.query.projectType), from: q(req.query.from), to: q(req.query.to), category: q(req.query.category), q: q(req.query.q) });
 
 const router = Router();
 router.use(authenticate);
@@ -44,6 +45,13 @@ router.get("/on-road", ENTRY, wrap(async (req, res) => {
 router.get("/projects/:tvId", ENTRY, wrap(async (req, res) => void ok(res, "Project fetched", await settlementContext(String(req.params.tvId)))));
 router.get("/projects/:tvId/budget", ENTRY, wrap(async (req, res) => void ok(res, "Budget fetched", await viewBudget(String(req.params.tvId)))));
 router.get("/projects/:tvId/driver", ENTRY, wrap(async (req, res) => void ok(res, "Driver fetched", await viewDriver(String(req.params.tvId)))));
+router.get("/projects/:tvId/payments-pdf", ENTRY, wrap(async (req, res) => {
+  const r = await paymentDetailsPdf(String(req.params.tvId), req.user!.role);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${r.name}"`);
+  res.setHeader("Cache-Control", "no-store");
+  res.end(r.buffer);
+}));
 router.get("/projects/:tvId/advance-eligibility", ENTRY, wrap(async (req, res) => {
   ok(res, "Advance eligibility calculated", await checkAdvanceEligibility(String(req.params.tvId), req.query.workingDays));
 }));
@@ -73,7 +81,7 @@ router.get("/export/approved", requireRole("RSA"), wrap(async (req, res) => {
   xlsx(res, "approved-payments", await accountsExport(rows));
 }));
 router.get("/export/filtered", requireRole("RSA"), wrap(async (req, res) => {
-  const rows = await paymentsForExport({ category: q(req.query.category), status: q(req.query.status), q: q(req.query.q), from: q(req.query.from), to: q(req.query.to) }, req.user!.username);
+  const rows = await paymentsForExport({ projectType: q(req.query.projectType), category: q(req.query.category), status: q(req.query.status), q: q(req.query.q), from: q(req.query.from), to: q(req.query.to) }, req.user!.username);
   if (!rows.length) throw new AppError("There are no payments matching the current filters", 404);
   xlsx(res, "filtered-payments", await accountsExport(rows, "Payments"));
 }));
@@ -104,6 +112,23 @@ router.get("/:id/salary-pdf", requireRole("RSO", "RSA"), wrap(async (req, res) =
   res.setHeader("Content-Disposition", `attachment; filename="${r.name}"`);
   res.setHeader("Cache-Control", "no-store");
   res.end(r.buffer);
+}));
+router.get("/:id/detail-export", requireRole("RSO", "RSA"), wrap(async (req, res) => {
+  const r = await settlementDetailWorkbook(String(req.params.id));
+  xlsx(res, r.name, r.buffer);
+}));
+router.get("/:id/suspense", requireRole("RSO", "RSA"), wrap(async (req, res) => {
+  ok(res, "Suspense records fetched", await settlementSuspense(String(req.params.id)));
+}));
+router.get("/:id/suspense-pdf", requireRole("RSO", "RSA"), wrap(async (req, res) => {
+  const r = await settlementSuspensePdf(String(req.params.id));
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${r.name}"`);
+  res.setHeader("Cache-Control", "no-store");
+  res.end(r.buffer);
+}));
+router.post("/:id/mileage", requireRole("RSO"), wrap(async (req, res) => {
+  ok(res, "Mileage updated", await editMileage(String(req.params.id), req.body ?? {}, req.user!));
 }));
 router.post("/:id/resubmit", ENTRY, wrap(async (req, res) => {
   ok(res, "Payment resubmitted for approval", await resubmitSettlement(String(req.params.id), req.body ?? {}, req.user!.username, req.body?.comment, req.user!.role as "RBP" | "RSA"));

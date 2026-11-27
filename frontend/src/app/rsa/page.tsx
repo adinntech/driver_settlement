@@ -30,7 +30,7 @@ function History() {
   const [view, setView] = useState<RsaPaymentRow | null>(null);
   const dq = useDebounce(f.q); // no request per keystroke; a newer request always wins over an older one (useApi drops stale replies)
   const list = useApi<Page>(`/rsa/payments?${historyQuery({ ...f, q: dq }, page, limit)}`);
-  const summary = useApi<RsaSummary>("/rsa/payments/summary");
+  const summary = useApi<RsaSummary>(`/rsa/payments/summary?projectType=${f.paymentFor}`);
   const change = (next: HistoryFilterState) => { setF(next); setPage(1); }; // any filter change goes back to page 1
 
   return (

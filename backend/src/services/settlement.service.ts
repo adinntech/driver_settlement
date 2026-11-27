@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { asVertical } from "../utils/vertical.js";
 import mongoose from "mongoose";
 import type { RoleKey } from "../config/roles.js";
 import { rsaOptions } from "../config/rsaOptions.js";
@@ -10,10 +11,12 @@ import { ENTRY_PAYMENT_MODES, PAYMENT_MODE_LABEL, SettlementPayment, SettlementP
 import { TrackingProject } from "../models/TrackingProject.js";
 import { AppError } from "../utils/AppError.js";
 import { pendingDriverChange } from "./driverChangeDeduction.js";
+import { suspenseFor } from "./paymentDetailsPdf.service.js";
 import { financialYear } from "../utils/numbers.js";
 import { kmAllowanceOf } from "../utils/kmAllowance.js";
+import { parseAmountPaise } from "../utils/rsaPayment.js";
 import { maskTail, seal } from "../utils/secureField.js";
-import { daysBetween, dailyData, finalData, finalPeriod, FINAL_EXPENSE_CATEGORIES, DEDUCTION_LABELS, validateDailyInput, validateFinalInput } from "../utils/settlement.js";
+import { daysBetween, dailyData, finalData, finalPeriod, recalcMileage, FINAL_EXPENSE_CATEGORIES, DEDUCTION_LABELS, validateDailyInput, validateFinalInput } from "../utils/settlement.js";
 import { notifyRole, notifyUsername } from "./notification.service.js";
 import { checkAdvanceEligibility, listEligibleProjects, projectContext, viewBudget, viewDriver, type EligibleQuery } from "./rsa.service.js";
 
@@ -109,21 +112,21 @@ export async function settlementContext(tvId: string) {
   const perDay = (amt: unknown, unit: unknown, days: number) => (unit === "PER_CAMPAIGN" && days ? Math.round((Number(amt) / days) * 100) / 100 : Number(amt) || 0);
   const days = Number(bd.numberOfDays) || camp.totalDays || 0;
   const driverChange = await pendingDriverChange(ctx._raw.driver);
-  const [advances, dailyAdvances, existingFinal, rsaEntries]: any[] = await Promise.all([
+  const [advances, dailyAdvances, existingFinal, rsaEntries, suspense]: any[] = await Promise.all([
     DriverAdvance.find({ driver: ctx._raw.driver, submittedAt: { $gte: new Date(`${camp.fromDate ?? "1970-01-01"}T00:00:00+05:30`) } }).select("finalAdvanceAmount workingDays submittedAt submittedBy").sort({ submittedAt: 1 }).lean(),
-    SettlementPayment.find({ allotment: ctx._raw.allotment, driver: ctx._raw.driver, category: "DAILY", status: { $ne: "REJECTED" } }).select("paymentNumber status fromDate toDate amount submittedAt completion data.salaryAdvance data.dieselTotal data.foodAmount data.cashInHand data.dieselEntries").sort({ fromDate: 1 }).lean(),
+    SettlementPayment.find({ trackingVehicle: tvId, driver: ctx._raw.driver, category: "DAILY", status: { $ne: "REJECTED" } }).select("paymentNumber status fromDate toDate amount submittedAt completion data.salaryAdvance data.dieselTotal data.foodAmount data.cashInHand data.dieselEntries").sort({ fromDate: 1 }).lean(),
     SettlementPayment.findOne({ category: "FINAL", trackingVehicle: tvId, driver: ctx._raw.driver }).sort({ submittedAt: -1 }).select("paymentNumber status").lean(),
     RsaPayment.find({ trackingVehicle: tvId }).select("paymentNumber entryDateTime totalPayable cashInHand dieselEntries").sort({ entryDateTime: -1 }).limit(100).lean(),
+    suspenseFor(tvId, ctx._raw.driver, camp.fromDate),
   ]);
-  const paidDaily = dailyAdvances.filter((p: any) => p.status === "APPROVED" || p.status === "COMPLETED"); // only approved daily payments count as paid
-  const advanceTotal = advances.reduce((s: number, a: any) => s + (a.finalAdvanceAmount ?? 0), 0) + paidDaily.reduce((s: number, p: any) => s + (p.data?.salaryAdvance ?? 0), 0);
   return {
     trackingVehicle: ctx.trackingVehicle, trackupNumber: ctx.trackupNumber, pifNumber: ctx.pifNumber, clientName: ctx.clientName, projectType: ctx.projectType,
     vehicleNo: ctx.vehicle.vehicleNo, driverNumber: ctx.driver.driverNumber, driverName: ctx.driver.driverName, approvedBudgetAmount: ctx.approvedBudgetAmount, budgetVersion: ctx.budgetVersion,
     campaign: camp,
     bank: { accountName: driver?.accountName ?? null, bankName: driver?.bankName ?? null, ifscCode: driver?.ifscCode ?? null, accountMasked: maskTail(driver?.accountNumber) },
     existingFinal: existingFinal ? { paymentNumber: existingFinal.paymentNumber, status: existingFinal.status } : null,
-    // the suspense amount breakdown and the on-road report (existing payment records of this driver on this vehicle)
+    suspense: { rows: suspense.rows, total: suspense.total }, // every line behind prefill.suspenseAmount
+    // the driver advances and the on-road report (existing payment records of this driver on this vehicle)
     advances: advances.map((a: any) => ({ source: "Driver Advance", date: a.submittedAt, amount: a.finalAdvanceAmount ?? 0, note: `${a.workingDays} working days · ${a.submittedBy}` })),
     // previous payments of this project vehicle: daily settlements (any status but rejected) and the RSA payment entries
     previousPayments: [
@@ -147,7 +150,7 @@ export async function settlementContext(tvId: string) {
       estimatedBudget: budget?.total ?? 0, estimatedKm: Number(bd.totalKm) || (Number(bd.estimatedKmPerDay) || 0) * days,
       estimatedFuel: Number(bd.mileage) ? Math.round((((Number(bd.totalKm) || (Number(bd.estimatedKmPerDay) || 0) * days) / Number(bd.mileage)) * 100)) / 100 : 0,
       perDaySalary: perDay(bd.salaryAmount, bd.salaryUnit, days) || Number(driver?.salary) || 0, perDayFood: perDay(bd.foodAmount, bd.foodUnit, days),
-      driverChangeAmount: driverChange.amount, suspenseAmount: advanceTotal,
+      driverChangeAmount: driverChange.amount, suspenseAmount: suspense.total,
     },
   };
 }
@@ -218,7 +221,7 @@ export async function listSettlements(q: ListQuery, role: RoleKey) {
   const [items, total, counts]: any[] = await Promise.all([
     SettlementPayment.find(filter).sort({ [sortKey]: dir, _id: dir }).skip((page - 1) * limit).limit(limit).lean(),
     SettlementPayment.countDocuments(filter),
-    SettlementPayment.aggregate([{ $match: APPROVER_ONLY[role] ? { category: APPROVER_ONLY[role] } : {} }, { $group: { _id: { c: "$category", s: "$status" }, n: { $sum: 1 }, amount: { $sum: "$amount" } } }]),
+    SettlementPayment.aggregate([{ $match: { ...(APPROVER_ONLY[role] ? { category: APPROVER_ONLY[role] } : {}), ...(asVertical(q.projectType) ? { projectType: q.projectType } : {}) } }, { $group: { _id: { c: "$category", s: "$status" }, n: { $sum: 1 }, amount: { $sum: "$amount" } } }]),
   ]);
   const summary: Record<string, { count: number; amount: number }> = {};
   for (const c of counts) {
@@ -335,6 +338,16 @@ async function applyDriverChange(data: any, input: unknown, driverId: string, ex
   data.driverChangeEvents = due.events;
 }
 
+/**
+ * The Suspense Amount is the server's: the eligible Daily Payments (and advances) of this driver on this project vehicle, now.
+ * The figure the form was built on must equal it, so a settlement can neither leave suspense out nor be saved on stale records.
+ */
+async function applySuspense(data: any, trackingVehicle: string, driver: string, campaignFrom: string | null) {
+  const { total } = await suspenseFor(trackingVehicle, driver, campaignFrom);
+  if (Math.round(data.suspenseAmount * 100) !== Math.round(total * 100))
+    throw new AppError(`The Suspense Amount for this driver and vehicle is now ${total}; reload the form`, 409);
+}
+
 /** Finals of one driver are saved one at a time (on any project), so two cannot recover the same driver change. */
 const payLock = (category: PaymentCategory, tvId: string, driver: string) => (category === "FINAL" ? `FINAL:${driver}` : `DAILY:${tvId}:${driver}`);
 
@@ -362,6 +375,7 @@ export async function submitSettlement(category: PaymentCategory, tvId: string, 
       const dup: any = await SettlementPayment.findOne({ category: "FINAL", trackingVehicle: tvId, driver: refs.driver }).select("paymentNumber status").lean();
       if (dup) throw new AppError(`A final settlement (${dup.paymentNumber}, ${dup.status.toLowerCase()}) already exists for this driver on this vehicle${dup.status === "REJECTED" ? "; correct and resubmit it" : ""}`, 409);
       await applyDriverChange(built.data, input, refs.driver);
+      await applySuspense(built.data, tvId, refs.driver, camp.fromDate);
     }
     return inTxn(async (session) => {
       const [doc]: any[] = await SettlementPayment.create([{
@@ -407,7 +421,10 @@ export async function resubmitSettlement(id: string, input: unknown, username: s
   try {
     upd = await withLock(payLock(p.category, String(p.trackingVehicle), String(p.driver)), async () => {
     if (p.category === "DAILY") await assertNoDailyOverlap(String(p.trackingVehicle), String(p.driver), built.fromDate, built.toDate, id);
-    else await applyDriverChange(built.data, input, String(p.driver), id);
+    else {
+      await applyDriverChange(built.data, input, String(p.driver), id);
+      await applySuspense(built.data, String(p.trackingVehicle), String(p.driver), camp.fromDate);
+    }
     return inTxn(async (session) => {
       const u: any = await SettlementPayment.findOneAndUpdate(
         { _id: id, status: "REJECTED", version: p.version },
@@ -483,13 +500,39 @@ export async function ensureDseNumber(id: string): Promise<number> {
   return ((await SettlementPayment.findById(id).select("dseNumber").lean()) as any).dseNumber; // a parallel request assigned it first
 }
 
+/** RSO edits the mileage of a pending final settlement. The version moves on, so a decision taken on the old figures is refused. */
+export async function editMileage(id: string, input: { fixedMileage?: unknown; version?: unknown }, user: { username: string; role: RoleKey }) {
+  if (user.role !== "RSO") throw new AppError("Only RSO can edit the mileage of a final settlement", 403);
+  if (!validId(id)) throw new AppError("Invalid payment id", 400);
+  const p: any = await SettlementPayment.findById(id).lean();
+  if (!p) throw new AppError("Payment not found", 404);
+  if (p.category !== "FINAL") throw new AppError("Mileage applies to final settlements only", 409);
+  if (p.status !== "PENDING") throw new AppError(`This settlement is already ${p.status.toLowerCase()}; its mileage cannot be changed`, 409);
+  if (Number(input?.version) !== p.version) throw new AppError("This settlement was changed; refresh before editing", 409);
+  const raw = parseAmountPaise(input?.fixedMileage);
+  if (raw.error || !raw.paise) throw new AppError(`Mileage ${raw.error ?? "must be greater than zero"}`, 400);
+  const mileage = raw.paise / 100;
+  if (mileage === p.data.fuel.fixedMileage) throw new AppError("The mileage is unchanged", 400);
+  const data = recalcMileage(p.data, mileage);
+  if (data.netAmount < 0) throw new AppError("With this mileage the deductions and suspense are more than the gross amount", 400);
+  const upd: any = await SettlementPayment.findOneAndUpdate(
+    { _id: id, status: "PENDING", version: p.version },
+    { $set: { data, amount: data.netAmount, version: p.version + 1 } },
+    { returnDocument: "after" },
+  ).lean();
+  if (!upd) throw new AppError("This settlement was just changed by someone else; refresh and retry", 409);
+  const comment = `Mileage ${p.data.fuel.fixedMileage} → ${mileage} km/l · Mileage short ${p.data.deductions.mileageShort} → ${data.deductions.mileageShort} · Net ${p.data.netAmount} → ${data.netAmount}`;
+  await logEvent(upd, "MILEAGE_EDITED", user.username, user.role, { fromStatus: "PENDING", comment, snapshot: data });
+  return getSettlement(id);
+}
+
 // ------------------------------------------------------------------------------------------------ RSA: export + completion
 
 /**
  * The rows of an RSA payment export: the same filters as the Driver Payments table (listFilter), every page. Each exported
  * approved row is recorded (it has gone to accounts); rows in any other status are only read.
  */
-export async function paymentsForExport(q: Pick<ListQuery, "category" | "status" | "q" | "from" | "to">, username: string) {
+export async function paymentsForExport(q: Pick<ListQuery, "category" | "status" | "q" | "from" | "to" | "projectType">, username: string) {
   const rows: any[] = await SettlementPayment.find(listFilter({ ...q, scope: "all" }, "RSA")).sort({ category: 1, reviewedAt: 1 }).lean();
   const now = new Date();
   for (const r of rows.filter((x) => x.status === "APPROVED")) {
@@ -505,7 +548,7 @@ export const approvedForExport = (username: string) => paymentsForExport({ statu
 export interface CompletionInput { referenceNumber?: unknown; referenceDate?: unknown; paymentDate?: unknown; paymentMode?: unknown; bankName?: unknown; transactionDetails?: unknown; remarks?: unknown }
 
 /**
- * The payment Entry popup (RSA, on an approved payment): Payment Mode (Cash / Cheque / DD / ePayment), Payment Date, Bank Name,
+ * The payment Entry popup (RSA, on an approved payment): Payment Mode (Cash / Cheque / DD / ePayment), Payment Date, Mode of Payment (the paying bank, stored as bankName),
  * Reference Number (mandatory, never blank) and Reference Date. Bank is required except for Cash. Transaction details and remarks
  * remain optional extras. The approved amount and category are never taken from the input.
  */
@@ -530,7 +573,7 @@ export function validateCompletion(b: CompletionInput, approvedAt: Date | null, 
   const paymentMode = typeof b.paymentMode === "string" && (ENTRY_PAYMENT_MODES as readonly string[]).includes(b.paymentMode)
     ? b.paymentMode
     : (errors.push(`Payment mode is required (${ENTRY_PAYMENT_MODES.map((m) => PAYMENT_MODE_LABEL[m]).join(", ")})`), "");
-  const bankName = text(b.bankName, "Bank name", 120, paymentMode !== "CASH");
+  const bankName = text(b.bankName, "Mode of Payment", 120, paymentMode !== "CASH");
   const transactionDetails = text(b.transactionDetails, "Transaction details", 300, false);
   const remarks = text(b.remarks, "Remarks", 500, false);
   let referenceDate = "";

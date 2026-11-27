@@ -1850,8 +1850,9 @@ button.stat, button.ds-kpi { font: inherit; text-align: left; color: inherit; wi
 .be .table-wrap { max-height: none; }
 .table[data-section="bulk-entry"] { table-layout: fixed; width: 100%; min-width: 520px; }
 [data-section="bulk-entry"] .be-c-check { width: 44px; }
-[data-section="bulk-entry"] .be-c-no { width: 29%; }
-[data-section="bulk-entry"] .be-c-veh { width: 20%; }
+[data-section="bulk-entry"] .be-c-no { width: 25%; }
+[data-section="bulk-entry"] .be-c-veh { width: 18%; }
+[data-section="bulk-entry"] .be-c-vert { width: 96px; }
 [data-section="bulk-entry"] .be-c-amt { width: 130px; }
 .table[data-section="bulk-entry"] th, .table[data-section="bulk-entry"] td { padding: 10px 12px; max-width: none; vertical-align: middle; overflow-wrap: anywhere; }
 .table[data-section="bulk-entry"] th.ds-amt { text-align: right; }
@@ -1939,3 +1940,10 @@ button.stat, button.ds-kpi { font: inherit; text-align: left; color: inherit; wi
 /* Driver Payments: Export Filtered sits beside Export Approved, marked in Adinn red */
 .btn.btn-export-filtered { border-color: var(--red); color: var(--red); }
 .btn.btn-export-filtered:hover:not(:disabled) { background: var(--red-soft); }
+
+/* final settlement detail: highlighted expense claims and the RSO mileage edit */
+.table.ds-mini tbody tr.ds-hl td, .dsf-table tbody tr.ds-hl td { background: #fff2cc; }
+.ds-mileage { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ds-pencil { display: inline-flex; padding: 3px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--red); cursor: pointer; }
+.ds-mileage-edit { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ds-mileage-edit input { width: 90px; }

@@ -1,10 +1,10 @@
 "use client";
 
+import VerticalSelect from "@/components/ui/VerticalSelect";
 import Link from "next/link";
 import { useState } from "react";
 import AppShell from "@/components/AppShell";
 import BulkPaymentModal from "@/components/BulkPaymentModal";
-import Select from "@/components/ui/Select";
 import TableWrap from "@/components/ui/TableWrap";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/Ui";
 import { useApi } from "@/hooks/useApi";
@@ -65,11 +65,7 @@ export default function OnRoadVehicles({ role }: { role: "RBP" | "RSA" }) {
       </div>
       <div className="card filters">
         <input className="search-wide" placeholder="Search trackup no, PIF, client, vehicle no, driver" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); clear(); }} aria-label="Search on road vehicles" />
-        <Select value={type} onChange={(e) => { setType(e.target.value); setPage(1); clear(); }} aria-label="Project type">
-          <option value="">All project types</option>
-          <option value="ROADSHOW">Roadshow</option>
-          <option value="SIGNAGE">Signage</option>
-        </Select>
+        <VerticalSelect value={type} onChange={(v) => { setType(v); setPage(1); clear(); }} />
       </div>
       {list.loading && !list.data ? (
         <Skeleton rows={6} />
@@ -96,7 +92,7 @@ export default function OnRoadVehicles({ role }: { role: "RBP" | "RSA" }) {
                         onChange={() => setPicked(new Set(allPicked ? [] : rows.map((r) => r.trackingVehicle)))} />
                     </th>
                   )}
-                  <th>Trackup No</th><th>PIF No</th><th>Client</th><th>Type</th><th>Vehicle No</th><th>Driver</th><th>Campaign</th><th>Delivered</th><th>Daily Payments</th><th />
+                  <th>Trackup No</th><th>PIF No</th><th>Client</th><th>Vertical</th><th>Vehicle No</th><th>Driver</th><th>Campaign</th><th>Delivered</th><th>Daily Payments</th><th />
                 </tr>
               </thead>
               <tbody>

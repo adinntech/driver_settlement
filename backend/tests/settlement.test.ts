@@ -96,7 +96,7 @@ describe("calculations", () => {
     assert.equal(c.approvedP, (600 + 1000) * 100);
     assert.equal(c.rejectedP, 200 * 100);
     assert.equal(c.grossP, (earnings + 1600) * 100);
-    assert.equal(c.totalDeductionP, 850 * 100);
+    assert.equal(c.totalDeductionP, (850 + 2000) * 100); // suspense is part of Total Deduction
     assert.equal(c.netP, (earnings + 1600 - 850 - 2000) * 100);
   });
 
@@ -125,7 +125,7 @@ describe("calculations", () => {
     const now = new Date("2026-11-24T06:00:00Z");
     assert.deepEqual(validateCompletion({ referenceNumber: "UTR123", paymentDate: "2026-11-24", paymentMode: "EPAYMENT", bankName: "HDFC", transactionDetails: "UTR123 HDFC0001" }, new Date("2026-11-20T00:00:00Z"), now).errors, []);
     const e = validateCompletion({ referenceNumber: "", paymentDate: "2026-12-30", paymentMode: "BITCOIN", bankName: "" }, null, now).errors.join(" | ");
-    for (const m of [/reference number is required/, /cannot be in the future/, /Payment mode is required/, /Bank name is required/]) assert.match(e, m);
+    for (const m of [/reference number is required/, /cannot be in the future/, /Payment mode is required/, /Mode of Payment is required/]) assert.match(e, m);
     assert.match(validateCompletion({ referenceNumber: "R1", paymentDate: "2026-11-10", paymentMode: "CASH", bankName: "Cash" }, new Date("2026-11-20T00:00:00Z"), now).errors.join(), /before the approval date/);
   });
 
@@ -137,7 +137,7 @@ describe("calculations", () => {
     assert.match(validateCompletion({ ...ok, paymentMode: "NEFT" }, approved, now).errors.join(), /Payment mode is required \(Cash, Cheque, DD, ePayment\)/, "older modes are no longer offered");
     for (const r of [undefined, "", "    ", "\t \n"]) assert.match(validateCompletion({ ...ok, referenceNumber: r }, approved, now).errors.join(), /Payment reference number is required/, JSON.stringify(r));
     assert.match(validateCompletion({ ...ok, referenceNumber: "CHQ 12" }, approved, now).errors.join(), /letters, digits/);
-    assert.match(validateCompletion({ ...ok, bankName: " " }, approved, now).errors.join(), /Bank name is required/);
+    assert.match(validateCompletion({ ...ok, bankName: " " }, approved, now).errors.join(), /Mode of Payment is required/);
     assert.deepEqual(validateCompletion({ ...ok, paymentMode: "CASH", bankName: "" }, approved, now).errors, [], "no bank needed for cash");
     assert.match(validateCompletion({ ...ok, referenceDate: "2026-12-01" }, approved, now).errors.join(), /Reference date cannot be in the future/);
     assert.match(validateCompletion({ ...ok, referenceDate: "2026-13-01" }, approved, now).errors.join(), /Reference date must be a valid date/);
@@ -158,7 +158,11 @@ describe("workflow across RBP, RSOM, RSO and RSA", () => {
     assert.equal(r.status, 200);
     assert.ok(r.body.data.items.length >= 2, "the dev seed provides approved projects with drivers");
     const used = new Set((await SettlementPayment.distinct("trackingVehicle")).map(String)); // the dev seed's own settlement examples
-    [tvA, tvB] = r.body.data.items.map((x: any) => x.trackingVehicle).filter((id: string) => !used.has(id));
+    const free: string[] = [];
+    for (const id of r.body.data.items.map((x: any) => x.trackingVehicle).filter((v: string) => !used.has(v))) {
+      if (free.length < 2 && !(await api("RBP", "GET", `/settlements/projects/${id}`)).body.data.prefill.suspenseAmount) free.push(id);
+    }
+    [tvA, tvB] = free;
     assert.ok(tvA && tvB, "two project vehicles without seeded settlements");
     const c = await api("RBP", "GET", `/settlements/projects/${tvA}`);
     assert.equal(c.status, 200);
@@ -239,7 +243,7 @@ describe("workflow across RBP, RSOM, RSO and RSA", () => {
     const body = {
       jsNumber: pre.jsNumber, location: pre.location ?? "Pune", reportingDate: c.campaign.fromDate, estimatedKmPerDay: pre.estimatedKmPerDay, fixedMileage: pre.fixedMileage || 8,
       openingKm: "12000", closingKm: "12900", dieselCost: "94.20", ioclLitres: "120", ioclKms: "880", estimatedBudget: pre.estimatedBudget, estimatedKm: pre.estimatedKm, estimatedFuel: pre.estimatedFuel,
-      perDaySalary: "900", perDayFood: "250", haltDayPay: "300", travelPay: "1000", onRoadDays: "3", onRoadSundays: "0", haltDays: "1", suspenseAmount: "500",
+      perDaySalary: "900", perDayFood: "250", haltDayPay: "300", travelPay: "1000", onRoadDays: "3", onRoadSundays: "0", haltDays: "1", suspenseAmount: String(pre.suspenseAmount),
       expenses: [{ category: "TOLL", quantity: "2", cost: "180" }, { category: "OTHERS", description: "Parking", quantity: "1", cost: "100", approved: "60" }],
       deductions: { mileageShort: "200", vehicleDamage: "0", previousSalary: "0", other: "0" }, idempotencyKey: key(),
     };
@@ -247,7 +251,7 @@ describe("workflow across RBP, RSOM, RSO and RSA", () => {
     assert.equal(r.status, 201, JSON.stringify(r.body));
     finalId = r.body.data._id;
     assert.match(r.body.data.paymentNumber, /^DSE-/);
-    const expectedNet = 3 * 900 + 3 * 250 + 1000 + 360 + 60 - 200 - 500;
+    const expectedNet = 3 * 900 + 3 * 250 + 1000 + 360 + 60 - 200 - Number(pre.suspenseAmount);
     assert.equal(r.body.data.amount, expectedNet);
     assert.equal(r.body.data.data.netAmount, expectedNet);
     assert.equal(r.body.data.data.reportingDate, c.campaign.reportingDate ?? c.campaign.fromDate, "the project's date, whatever was sent");
@@ -319,7 +323,7 @@ describe("workflow across RBP, RSOM, RSO and RSA", () => {
     assert.deepEqual(numbers, new Set(approvedNow.map((p) => p.paymentNumber)), "exactly the approved entries");
     assert.ok(approvedNow.some((p) => p.category === "DAILY") && approvedNow.some((p) => p.category === "FINAL"));
     for (const role of ["RSOP", "RBP", "RSOM", "RSO"]) assert.equal((await api(role, "GET", "/settlements/export/approved")).status, 403, `${role} cannot export`);
-    assert.deepEqual(header, ["Payment No", "Category", "Status", "Trackup No", "PIF No", "JS No", "Client", "Project Type", "Vehicle No", "Driver Code", "Driver Name", "From", "To", "Amount (INR)", "Account Name", "Bank", "IFSC", "Account Number", "Submitted By", "Approved By", "Approved On"], "the accounts export keeps its columns");
+    assert.deepEqual(header, ["Payment No", "Category", "Status", "Trackup No", "PIF No", "JS No", "Client", "Vertical", "Vehicle No", "Driver Code", "Driver Name", "From", "To", "Amount (INR)", "Account Name", "Bank", "IFSC", "Account Number", "Submitted By", "Approved By", "Approved On"], "the accounts export keeps its columns");
 
     const today = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
     const bad = await api("RSA", "POST", `/settlements/${dailyId}/complete`, { referenceNumber: "", paymentDate: today, paymentMode: "EPAYMENT", bankName: "SBI" });
@@ -376,7 +380,7 @@ describe("workflow across RBP, RSOM, RSO and RSA", () => {
       assert.match(r.body.message, /Payment reference number is required/);
     }
     assert.match((await api("RSA", "POST", `/settlements/${daily}/complete`, entry("EP-1", { paymentMode: "" }))).body.message, /Payment mode is required/);
-    assert.match((await api("RSA", "POST", `/settlements/${daily}/complete`, entry("EP-1", { bankName: "" }))).body.message, /Bank name is required/);
+    assert.match((await api("RSA", "POST", `/settlements/${daily}/complete`, entry("EP-1", { bankName: "" }))).body.message, /Mode of Payment is required/);
     assert.match((await api("RSA", "POST", `/settlements/${daily}/complete`, entry("EP-1", { paymentDate: "" }))).body.message, /Payment date must be a valid date/);
     assert.equal(((await SettlementPayment.findById(daily).lean()) as any).status, "APPROVED", "refused entries leave the payment approved");
 

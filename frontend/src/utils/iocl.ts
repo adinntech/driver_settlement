@@ -8,15 +8,15 @@ export interface IoclSummary { imported: number; duplicate: number; failed: numb
 export interface IoclRow {
   _id: string; txnId: string; txnDate: string; txnTime: string; txnType: string; vehicleNo: string | null; product: string | null; quantity: number | null;
   amount: number | null; fileAmount: number | null; amountCorrected: boolean; odometer: string | null; location: string | null;
-  match: { status: MatchStatus; projectNo: string | null; clientName: string | null; driverName: string | null; driverCode: string | null };
+  match: { department?: string | null; status: MatchStatus; projectNo: string | null; clientName: string | null; driverName: string | null; driverCode: string | null };
 }
 export interface IoclPage {
   items: IoclRow[]; total: number; page: number; limit: number; products: string[];
-  vehicleTotals: { vehicleNo: string; count: number; quantity: number; amount: number; status: MatchStatus }[];
+  vehicleTotals: { vertical?: string | null; vehicleNo: string; count: number; quantity: number; amount: number; status: MatchStatus }[];
   summary: { sales: number; amount: number; unmatched: number };
 }
 
-export function ioclQuery(f: { from: string; to: string; vehicleNo: string; product: string }, page?: number): string {
+export function ioclQuery(f: { from: string; to: string; vehicleNo: string; product: string; projectType?: string }, page?: number): string {
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(f)) if (v.trim()) q.set(k, v.trim());
   if (page) q.set("page", String(page));

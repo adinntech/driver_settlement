@@ -89,7 +89,7 @@ export function PaymentHistoryTable({
           <TableWrap>
             <table className="table">
               <thead>
-                <tr><th>Date</th><th>Payment No</th><th>Amount</th><th>Mode</th><th>Bank Name</th><th>Cheque/DD No</th><th>Entered</th><th>By</th><th>Status</th><th /></tr>
+                <tr><th>Date</th><th>Payment No</th><th>Amount</th><th>Mode</th><th>Mode of Payment</th><th>Cheque/DD No</th><th>Entered</th><th>By</th><th>Status</th><th /></tr>
               </thead>
               <tbody>
                 {items.map((p) => {

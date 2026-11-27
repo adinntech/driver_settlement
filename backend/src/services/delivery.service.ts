@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { asVertical } from "../utils/vertical.js";
 import { Clearance, ClearanceEvent } from "../models/Clearance.js";
 import { DeliveryEvent, MAX_ADDITIONAL_PHOTOS, VehicleDelivery, type PhotoKind } from "../models/Delivery.js";
 import { VehicleAllotment } from "../models/VehicleAllotment.js";
@@ -27,9 +28,10 @@ const withUrl = (a: any) => (a ? { storage: a.storage, key: a.key, name: a.name,
 // ---------------------------------------------------------------- summary
 
 /** Real counts. Approved = every RSA-approved allocation (Yet to Deliver + Delivered), so those two are never counted twice. */
-export async function deliverySummary() {
+export async function deliverySummary(projectType?: string) {
   await syncClearances().catch((e) => console.error("Clearance sync failed", e));
   const g: any[] = await Clearance.aggregate([
+    { $match: asVertical(projectType) ? { projectType } : {} },
     { $group: { _id: { s: "$status", d: { $ifNull: ["$deliveryStatus", "YET_TO_DELIVER"] } }, n: { $sum: 1 } } },
   ]);
   const n = (s: string, d?: string) => g.filter((x) => x._id.s === s && (d === undefined || x._id.d === d)).reduce((a, x) => a + x.n, 0);

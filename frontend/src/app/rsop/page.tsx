@@ -1,7 +1,7 @@
 "use client";
 
+import VerticalSelect from "@/components/ui/VerticalSelect";
 import TableWrap from "@/components/ui/TableWrap";
-import Select from "@/components/ui/Select";
 import DateInput from "@/components/ui/DateInput";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -99,11 +99,7 @@ function Dashboard() {
             onChange={(e) => setQ(e.target.value)}
             aria-label="Search"
           />
-          <Select value={type} onChange={(e) => setType(e.target.value)} aria-label="Project type">
-            <option value="">All types</option>
-            <option value="ROADSHOW">Roadshow</option>
-            <option value="SIGNAGE">Signage</option>
-          </Select>
+          <VerticalSelect value={type} onChange={(v) => setType(v)} />
           <DateInput value={from} onChange={(e) => setFrom(e.target.value)} aria-label="Created from" />
           <DateInput value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} aria-label="Created to" />
           {(q || type || from || to) && (
@@ -134,7 +130,7 @@ function Dashboard() {
                 <tr>
                   <th><span className="sr-only">Expand</span></th>
                   <th>Project Code</th>
-                  <th>Type</th>
+                  <th>Vertical</th>
                   <th>Client / Billing</th>
                   <th>Campaign</th>
                   <th>Vehicles</th>

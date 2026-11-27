@@ -188,11 +188,11 @@ const mkDriver = (over: Partial<Driver> = {}): Driver => ({
 });
 
 test("listing shows only the essential columns: number, name, mobile, type, status, project, relevant date, View / Edit", () => {
-  assert.deepEqual([...DRIVER_LIST_COLUMNS], ["Driver No", "Driver Name", "Mobile No", "Driver Type", "Availability Status", "Project Name", "Available From / To", "Actions"]);
+  assert.deepEqual([...DRIVER_LIST_COLUMNS], ["Driver No", "Driver Name", "Vertical", "Mobile No", "Driver Type", "Availability Status", "Project Name", "Available From / To", "Actions"]);
   const html = renderToStaticMarkup(<DriverTable items={[mkDriver()]} />);
   for (const v of ["DR-4821", "Murugan K", "+91 9876543210", "Acting Driver", "In Use – Another Project", "Pepsi India Signage – ZZ-77", "25-Nov-2026 – 05-Dec-2026"]) assert.ok(html.includes(v), v);
   assert.ok(html.includes('href="/rbp/drivers/view?id=' + "a".repeat(24) + '"') && html.includes('href="/rbp/drivers/edit?id=' + "a".repeat(24) + '"'));
-  assert.equal((html.match(/<th[ >]/g) ?? []).length, 8);
+  assert.equal((html.match(/<th[ >]/g) ?? []).length, 9); // includes Vertical
   // everything else stays out of the table (it is on the View page)
   for (const hidden of ["SBIN0001234", "123456789012", "TN07 20110012345", "Anna Nagar", "LMV", "18,500", "Salary", "Licence"]) assert.ok(!html.includes(hidden), hidden);
 });

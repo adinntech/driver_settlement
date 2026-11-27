@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { asVertical } from "../utils/vertical.js";
 import { Vehicle, VehicleHistory, VEHICLE_TYPES, DOC_SECTIONS } from "../models/Vehicle.js";
 import {
   EXPIRING_DAYS, MAINTENANCE_DUE_DAYS, addDays, diffVehicle, docStatus, latestExpiry, todayYmd, validateVehicle,
@@ -294,20 +295,22 @@ export async function listVehicles(q: ListQuery) {
   return { items: items.map((v) => withReview(withStatus(v, now), flags)), total, page, limit };
 }
 
-export async function vehicleSummary(now = new Date()) {
+export async function vehicleSummary(now = new Date(), projectType?: string) {
+  const type = asVertical(projectType); // vehicles currently on a project of that vertical
+  const count = (filter: Record<string, unknown> = {}) => Vehicle.countDocuments(type ? { $and: [filter, { "availability.project.projectType": type }] } : filter);
   const today = todayYmd(now);
   const soon = addDays(today, EXPIRING_DAYS);
   const cutoff = addDays(today, -MAINTENANCE_DUE_DAYS);
   const [total, active, draft, maintenance, expiring, availableNow, inUse, withIssue] = await Promise.all([
-    Vehicle.countDocuments(),
-    Vehicle.countDocuments({ status: "ACTIVE" }),
-    Vehicle.countDocuments({ status: "DRAFT" }),
+    count(),
+    count({ status: "ACTIVE" }),
+    count({ status: "DRAFT" }),
     // maintenance recorded but last done more than MAINTENANCE_DUE_DAYS ago
-    Vehicle.countDocuments({ status: "ACTIVE", $or: MAINT.map((f) => ({ [f]: { $lt: cutoff, $type: "string" } })) }),
-    Vehicle.countDocuments({ status: "ACTIVE", $or: [{ insuranceExpiry: { $lte: soon, $type: "string" } }, { fcExpiry: { $lte: soon, $type: "string" } }] }),
-    Vehicle.countDocuments({ status: "ACTIVE", "availability.status": "AVAILABLE" }),
-    Vehicle.countDocuments({ status: "ACTIVE", "availability.status": "IN_USE" }),
-    Vehicle.countDocuments({ status: "ACTIVE", "availability.status": "ISSUE" }),
+    count({ status: "ACTIVE", $or: MAINT.map((f) => ({ [f]: { $lt: cutoff, $type: "string" } })) }),
+    count({ status: "ACTIVE", $or: [{ insuranceExpiry: { $lte: soon, $type: "string" } }, { fcExpiry: { $lte: soon, $type: "string" } }] }),
+    count({ status: "ACTIVE", "availability.status": "AVAILABLE" }),
+    count({ status: "ACTIVE", "availability.status": "IN_USE" }),
+    count({ status: "ACTIVE", "availability.status": "ISSUE" }),
   ]);
   return { total, active, draft, maintenanceDue: maintenance, expiringSoon: expiring, availableNow, inUse, withIssue, rules: { expiringDays: EXPIRING_DAYS, maintenanceDueDays: MAINTENANCE_DUE_DAYS } };
 }

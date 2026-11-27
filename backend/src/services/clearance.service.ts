@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { asVertical } from "../utils/vertical.js";
 import mongoose from "mongoose";
 import { Budget, BudgetVersion } from "../models/Budget.js";
 import { BudgetEvent } from "../models/Approval.js";
@@ -234,9 +235,9 @@ export async function listClearances(q: ClearanceQuery) {
   return { items: (items as any[]).map(row), total, page, limit };
 }
 
-export async function clearanceSummary() {
+export async function clearanceSummary(projectType?: string) {
   await safeSync();
-  const g: any[] = await Clearance.aggregate([{ $group: { _id: "$status", n: { $sum: 1 } } }]);
+  const g: any[] = await Clearance.aggregate([{ $match: asVertical(projectType) ? { projectType } : {} }, { $group: { _id: "$status", n: { $sum: 1 } } }]);
   const by = (s: string) => g.find((x) => x._id === s)?.n ?? 0;
   const yet = by("YET_TO_APPROVE"), approved = by("APPROVED"), rejected = by("REJECTED");
   return { total: yet + approved + rejected, yetToApprove: yet, approved, rejected };

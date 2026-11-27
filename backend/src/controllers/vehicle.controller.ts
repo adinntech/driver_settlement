@@ -28,8 +28,8 @@ export const list = wrap(async (req, res) => {
   res.status(200).json(sendResponse(true, "Vehicles fetched successfully", data));
 });
 
-export const summary = wrap(async (_req, res) => {
-  res.status(200).json(sendResponse(true, "Vehicle summary fetched successfully", await vehicleSummary()));
+export const summary = wrap(async (req, res) => {
+  res.status(200).json(sendResponse(true, "Vehicle summary fetched successfully", await vehicleSummary(new Date(), String(req.query.projectType ?? ""))));
 });
 
 export const filters = wrap(async (_req, res) => {

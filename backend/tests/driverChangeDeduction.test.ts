@@ -64,7 +64,7 @@ before(async () => {
   const projects = (await api("RBP", "GET", "/settlements/projects?limit=100")).body.data.items;
   for (const p of projects.filter((x: any) => !used.has(x.trackingVehicle))) {
     const allot: any = await mongoose.connection.db!.collection("vehicleallotments").findOne({ trackingVehicle: new mongoose.Types.ObjectId(p.trackingVehicle), status: "ACTIVE" });
-    if (allot?.driver && !(await pendingDriverChange(String(allot.driver))).amount) { tvB = p.trackingVehicle; B = String(allot.driver); break; }
+    if (allot?.driver && !(await pendingDriverChange(String(allot.driver))).amount && !(await context(p.trackingVehicle)).prefill.suspenseAmount) { tvB = p.trackingVehicle; B = String(allot.driver); break; }
   }
   assert.ok(tvB);
 });

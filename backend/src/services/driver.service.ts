@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { asVertical } from "../utils/vertical.js";
 import { Driver, DriverHistory, DRIVER_AVAILABILITY_STATUSES } from "../models/Driver.js";
 import { VehicleAllotment } from "../models/VehicleAllotment.js";
 import { validateDriver, type DriverData } from "../validators/driver.validator.js";
@@ -151,7 +152,7 @@ export async function getDriver(id: string) {
   return withUrl(d);
 }
 
-export interface DriverListQuery { q?: string; availabilityStatus?: string; page?: number; limit?: number }
+export interface DriverListQuery { projectType?: string; q?: string; availabilityStatus?: string; page?: number; limit?: number }
 
 /** One mass search (driver number, name, mobile, licence number, driver type, project name, trackup / PIF number) combined with the status filter. */
 export function driverFilter(q: DriverListQuery) {
@@ -159,6 +160,7 @@ export function driverFilter(q: DriverListQuery) {
   const search = searchFilter((q.q ?? "").trim());
   if (search) and.push(search);
   if (q.availabilityStatus && (DRIVER_AVAILABILITY_STATUSES as readonly string[]).includes(q.availabilityStatus)) and.push({ "availability.status": q.availabilityStatus });
+  if (asVertical(q.projectType)) and.push({ "availability.project.projectType": q.projectType }); // current assignment
   return and.length ? { $and: and } : {};
 }
 

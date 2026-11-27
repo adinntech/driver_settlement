@@ -1,5 +1,6 @@
 "use client";
 
+import VerticalSelect from "@/components/ui/VerticalSelect";
 import Select from "@/components/ui/Select";
 import Link from "next/link";
 import { useState } from "react";
@@ -24,10 +25,11 @@ export default function DriversPage() {
 function Drivers() {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
+  const [vertical, setVertical] = useState("");
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const dq = useDebounce(q); // no request per keystroke
-  const list = useApi<Page>(`/drivers?q=${encodeURIComponent(dq.trim())}&availabilityStatus=${encodeURIComponent(status)}&page=${page}&limit=${limit}`);
+  const list = useApi<Page>(`/drivers?q=${encodeURIComponent(dq.trim())}&availabilityStatus=${encodeURIComponent(status)}&page=${page}&limit=${limit}${vertical ? `&projectType=${vertical}` : ""}`);
   const pages = list.data ? Math.max(1, Math.ceil(list.data.total / limit)) : 1;
   const filtered = !!q.trim() || !!status;
 
@@ -45,6 +47,7 @@ function Drivers() {
       </div>
 
       <div className="card">
+        <div className="filters"><VerticalSelect value={vertical} onChange={(v) => { setVertical(v); setPage(1); }} /></div>
         <DriverFilters
           q={q} status={status}
           onQ={(v) => { setQ(v); setPage(1); }} onStatus={(v) => { setStatus(v); setPage(1); }}

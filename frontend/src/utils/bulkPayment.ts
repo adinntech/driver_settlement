@@ -5,7 +5,7 @@
 export const BULK_REASONS = ["Fuel", "Food", "Toll", "Travel", "Permit", "Service", "Others"] as const;
 
 export interface BulkForm { reason: string; amount: string; date: string; description: string }
-export interface BulkVehicle { trackingVehicle: string; pifNumber: string; trackupNumber: string; vehicleNo: string | null; driverName: string | null }
+export interface BulkVehicle { projectType?: string | null; trackingVehicle: string; pifNumber: string; trackupNumber: string; vehicleNo: string | null; driverName: string | null }
 /** What is typed for one vehicle in the popup table. */
 export interface BulkLine { reason: string; amount: string; description: string }
 export type BulkEntry = BulkVehicle & BulkLine;

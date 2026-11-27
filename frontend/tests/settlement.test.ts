@@ -33,7 +33,7 @@ test("final totals mirror the server calculation (paise)", () => {
   assert.equal(t.claimed, 180000);
   assert.equal(t.approved, 160000);
   assert.equal(t.rejected, 20000);
-  assert.equal(t.totalDeduction, 75000);
+  assert.equal(t.totalDeduction, 75000 + 100000); // includes the suspense, once
   assert.equal(t.net, earnings + 160000 - 75000 - 100000);
 });
 
@@ -111,7 +111,7 @@ test("Export Approved sends the table's filters, without sort or paging", () => 
 test("driver change deduction: prefilled in Previous Salary Deduction, a minimum, never listed separately", () => {
   const f = form();
   assert.equal("driverChangeTravel" in f.deductions, false);
-  assert.equal(finalTotals(f).totalDeduction, 75000);
+  assert.equal(finalTotals(f).totalDeduction, 175000);
   assert.match(validateFinalForm({ ...f, deductions: { ...f.deductions, previousSalary: "749" } }, 30).join(), /at least 750/);
   assert.deepEqual(validateFinalForm({ ...f, deductions: { ...f.deductions, previousSalary: "900" } }, 30), []);
   assert.equal((finalPayload(f, "key12345") as Record<string, unknown>).driverChangeAmount, "750");

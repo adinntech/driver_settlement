@@ -1,5 +1,6 @@
 "use client";
 
+import { verticalLabel } from "@/utils/vertical";
 import TableWrap from "@/components/ui/TableWrap";
 import Select from "@/components/ui/Select";
 import Link from "next/link";
@@ -9,7 +10,7 @@ import { DRIVER_AV_LABEL, DRIVER_AV_STATUSES, driverAvailabilityDates, driverPro
 import { DRIVER_TYPE_LABEL } from "@/utils/driverForm";
 
 /** Listing columns: only the essentials. Everything else is on the View page. */
-export const DRIVER_LIST_COLUMNS = ["Driver No", "Driver Name", "Mobile No", "Driver Type", "Availability Status", "Project Name", "Available From / To", "Actions"] as const;
+export const DRIVER_LIST_COLUMNS = ["Driver No", "Driver Name", "Vertical", "Mobile No", "Driver Type", "Availability Status", "Project Name", "Available From / To", "Actions"] as const;
 
 export function DriverTable({ items }: { items: Driver[] }) {
   return (
@@ -23,6 +24,7 @@ export function DriverTable({ items }: { items: Driver[] }) {
             <tr key={d._id}>
               <td><strong className="num">{d.driverNumber}</strong></td>
               <td>{d.driverName}</td>
+              <td>{verticalLabel(d.availability?.project?.projectType)}</td>
               <td>{d.mobileNumber}</td>
               <td>{DRIVER_TYPE_LABEL[d.driverType]}</td>
               <td><DriverAvBadge status={d.availability?.status} /></td>

@@ -62,7 +62,10 @@ before(async () => {
     tok[role] = ((await r.json()) as any).data.token;
   }
   const used = new Set((await SettlementPayment.distinct("trackingVehicle")).map(String));
-  tv = (await listed("&kind=final")).find((x) => !used.has(x))!;
+  for (const x of (await listed("&kind=final")).filter((v) => !used.has(v))) {
+    tv = x;
+    if (!(await context()).prefill.suspenseAmount) break;
+  }
   assert.ok(tv);
 });
 after(async () => {

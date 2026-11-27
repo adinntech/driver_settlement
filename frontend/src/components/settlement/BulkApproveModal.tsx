@@ -1,5 +1,6 @@
 "use client";
 
+import { verticalLabel } from "@/utils/vertical";
 import { useRef, useState } from "react";
 import TableWrap from "@/components/ui/TableWrap";
 import { Modal } from "@/components/ui/Ui";
@@ -50,12 +51,13 @@ export default function BulkApproveModal({ rows, onClose }: { rows: SettlementRo
           <TableWrap>
             <table className="table" data-section="bulk-approve">
               <thead>
-                <tr><th>Payment No</th><th>Project</th><th>Vehicle</th><th>Driver</th><th className="ds-amt">Amount</th></tr>
+                <tr><th>Payment No</th><th>Vertical</th><th>Project</th><th>Vehicle</th><th>Driver</th><th className="ds-amt">Amount</th></tr>
               </thead>
               <tbody>
                 {rows.map((p) => (
                   <tr key={p._id}>
                     <td className="num">{p.paymentNumber}</td>
+                    <td>{verticalLabel(p.projectType)}</td>
                     <td><div>{p.clientName ?? "-"}</div><small className="muted">{[p.trackupNumber, p.pifNumber].filter(Boolean).join(" · ")}</small></td>
                     <td>{p.vehicleNo ?? "-"}</td>
                     <td>{p.driverName ?? "-"}</td>

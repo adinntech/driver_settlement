@@ -26,7 +26,7 @@ test("status filter: exactly the six options in order, and RSA keeps its own fil
   assert.deepEqual(RBP_STATUS_OPTIONS.map((o) => o.label), ["All", "Yet to Deliver", "Yet to Approve", "Rejected by RSA", "Approved by RSA", "Delivered"]);
   assert.deepEqual(RBP_STATUS_OPTIONS.map((o) => o.value), ["", "YET_TO_DELIVER", "YET_TO_APPROVE", "REJECTED", "APPROVED", "DELIVERED"]);
   const rbp = renderToStaticMarkup(<ClearanceFiltersBar mode="RBP" f={emptyClearanceFilters()} onChange={noop} onClear={noop} searchHint="Search" />);
-  for (const t of ["Yet to Deliver", "Rejected by RSA", "Approved by RSA", "Delivered", "Mass search", "Project type filter", "Allocation date from", "Clear Filters"]) assert.match(rbp, new RegExp(t));
+  for (const t of ["Yet to Deliver", "Rejected by RSA", "Approved by RSA", "Delivered", "Mass search", "All Verticals", "Allocation date from", "Clear Filters"]) assert.match(rbp, new RegExp(t));
   const rsa = renderToStaticMarkup(<ClearanceFiltersBar f={emptyClearanceFilters()} onChange={noop} onClear={noop} searchHint="Search" />);
   assert.ok(!rsa.includes("Yet to Deliver"));
 });

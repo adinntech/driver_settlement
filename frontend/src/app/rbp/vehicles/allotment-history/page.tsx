@@ -1,5 +1,6 @@
 "use client";
 
+import VerticalSelect from "@/components/ui/VerticalSelect";
 import TableWrap from "@/components/ui/TableWrap";
 import Select from "@/components/ui/Select";
 import DateInput from "@/components/ui/DateInput";
@@ -63,11 +64,7 @@ function History() {
           <input placeholder="Client name" value={f.clientName} onChange={(e) => set("clientName", e.target.value)} aria-label="Client name" />
           <input placeholder="Trackup number" value={f.trackupNumber} onChange={(e) => set("trackupNumber", e.target.value)} aria-label="Trackup number" />
           <input placeholder="PIF number" value={f.pifNumber} onChange={(e) => set("pifNumber", e.target.value)} aria-label="PIF number" />
-          <Select value={f.projectType} onChange={(e) => set("projectType", e.target.value)} aria-label="Project type">
-            <option value="">Project type</option>
-            <option value="ROADSHOW">Roadshow</option>
-            <option value="SIGNAGE">Signage</option>
-          </Select>
+          <VerticalSelect value={f.projectType} onChange={(v) => set("projectType", v)} />
           <Select value={f.status} onChange={(e) => set("status", e.target.value)} aria-label="Allotment status">
             <option value="">Allotment status</option>
             <option value="ACTIVE">Active</option>
@@ -91,7 +88,7 @@ function History() {
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Vehicle No</th><th>Previous Vehicle</th><th>Client / Billing</th><th>Project</th><th>Type</th><th>Trackup No</th><th>PIF No</th><th>Bill No</th>
+                    <th>Vehicle No</th><th>Previous Vehicle</th><th>Client / Billing</th><th>Project</th><th>Vertical</th><th>Trackup No</th><th>PIF No</th><th>Bill No</th>
                     <th>Allotted</th><th>Expected Release</th><th>Next Available</th><th>Changed On</th><th>Change Reason</th><th>Status</th><th>Allotted By</th><th />
                   </tr>
                 </thead>

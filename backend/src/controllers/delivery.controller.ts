@@ -9,8 +9,8 @@ const wrap =
 
 const id = (req: Request) => String(req.params.id);
 
-export const summary = wrap(async (_req, res) => {
-  res.status(200).json(sendResponse(true, "Vehicle delivery summary fetched successfully", await deliverySummary()));
+export const summary = wrap(async (req, res) => {
+  res.status(200).json(sendResponse(true, "Vehicle delivery summary fetched successfully", await deliverySummary(String(req.query.projectType ?? ""))));
 });
 
 export const detail = wrap(async (req, res) => {

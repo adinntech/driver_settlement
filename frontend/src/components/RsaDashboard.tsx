@@ -1,5 +1,6 @@
 "use client";
 
+import VerticalSelect from "@/components/ui/VerticalSelect";
 import TableWrap from "@/components/ui/TableWrap";
 import Select from "@/components/ui/Select";
 import DateInput from "@/components/ui/DateInput";
@@ -8,7 +9,7 @@ import { formatDate, formatDateTime, formatInr } from "@/utils/format";
 import { PAYMENT_FOR_LABEL, PAYMENT_STATUS_LABEL, dash, type RsaProjectRow } from "@/utils/rsa";
 
 export const RSA_COLUMNS = [
-  "Trackup No (JS)", "PIF No", "Type", "Client / Billing Name", "Vehicle No", "Driver No", "Driver Name", "Campaign From", "Campaign To",
+  "Trackup No (JS)", "PIF No", "Vertical", "Client / Billing Name", "Vehicle No", "Driver No", "Driver Name", "Campaign From", "Campaign To",
   "Approved Budget", "Payment Status", "Last Payment", "",
 ] as const;
 
@@ -34,9 +35,7 @@ export function RsaFilters({ f, onChange, onClear }: { f: RsaFilterState; onChan
   return (
     <div className="filters-vehicle rsa-filters">
       <input className="search-wide" placeholder="Search trackup no, client / billing name, vehicle no, driver name" value={f.q} aria-label="Mass search" onChange={(e) => set("q", e.target.value)} />
-      <Select value={f.projectType} aria-label="Project type filter" onChange={(e) => set("projectType", e.target.value)}>
-        <option value="">All types</option><option value="ROADSHOW">Roadshow</option><option value="SIGNAGE">Signage</option>
-      </Select>
+      <VerticalSelect value={f.projectType} onChange={(v) => set("projectType", v)} />
       <Select value={f.paymentStatus} aria-label="Payment status filter" onChange={(e) => set("paymentStatus", e.target.value)}>
         <option value="">All payment status</option><option value="PENDING">{PAYMENT_STATUS_LABEL.PENDING}</option><option value="ENTERED">{PAYMENT_STATUS_LABEL.ENTERED}</option>
       </Select>

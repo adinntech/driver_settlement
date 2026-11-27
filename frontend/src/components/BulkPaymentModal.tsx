@@ -1,5 +1,6 @@
 "use client";
 
+import { verticalLabel } from "@/utils/vertical";
 import { useRef, useState } from "react";
 import DateInput, { todayIst } from "@/components/ui/DateInput";
 import Select from "@/components/ui/Select";
@@ -65,12 +66,13 @@ export default function BulkPaymentModal({ vehicles, onClose }: { vehicles: Bulk
           <TableWrap>
             <table className="table" data-section="bulk-payment">
               <thead>
-                <tr><th>Trackup No</th><th>PIF No</th><th>Vehicle No</th><th>Driver</th><th>Payment Reason</th><th>Amount (₹)</th></tr>
+                <tr><th>Trackup No</th><th>Vertical</th><th>PIF No</th><th>Vehicle No</th><th>Driver</th><th>Payment Reason</th><th>Amount (₹)</th></tr>
               </thead>
               <tbody>
                 {entries.map((e) => (
                   <tr key={e.trackingVehicle}>
                     <td className="num">{e.trackupNumber}</td>
+                    <td>{verticalLabel(e.projectType)}</td>
                     <td className="num">{e.pifNumber}</td>
                     <td className="num">{e.vehicleNo ?? "—"}</td>
                     <td>{e.driverName ?? "—"}</td>

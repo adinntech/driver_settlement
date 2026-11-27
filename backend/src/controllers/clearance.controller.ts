@@ -19,8 +19,8 @@ export const list = wrap(async (req, res) => {
   res.status(200).json(sendResponse(true, "Vehicle and driver clearances fetched successfully", data));
 });
 
-export const summary = wrap(async (_req, res) => {
-  res.status(200).json(sendResponse(true, "Clearance summary fetched successfully", await clearanceSummary()));
+export const summary = wrap(async (req, res) => {
+  res.status(200).json(sendResponse(true, "Clearance summary fetched successfully", await clearanceSummary(String(req.query.projectType ?? ""))));
 });
 
 export const detail = wrap(async (req, res) => {

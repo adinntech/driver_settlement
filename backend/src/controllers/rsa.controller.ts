@@ -44,8 +44,8 @@ export const history = wrap(async (req, res) => {
   res.status(200).json(sendResponse(true, "Payment history fetched successfully", data));
 });
 
-export const summary = wrap(async (_req, res) => {
-  res.status(200).json(sendResponse(true, "Payment summary fetched successfully", await paymentSummary()));
+export const summary = wrap(async (req, res) => {
+  res.status(200).json(sendResponse(true, "Payment summary fetched successfully", await paymentSummary(String(req.query.projectType ?? ""))));
 });
 
 export const payment = wrap(async (req, res) => {

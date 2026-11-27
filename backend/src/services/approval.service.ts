@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { asVertical } from "../utils/vertical.js";
 import { Budget, BudgetVersion } from "../models/Budget.js";
 import { BudgetEvent } from "../models/Approval.js";
 import { recordEvent, statusOf } from "./budgetEvents.js";
@@ -237,9 +238,11 @@ export async function listApprovals(q: ListQuery) {
   return { items: rows.slice((page - 1) * limit, page * limit), total: rows.length, page, limit };
 }
 
-export async function approvalStats() {
+export async function approvalStats(projectType?: string) {
+  const type = asVertical(projectType);
+  const only = type ? { project: { $in: await TrackingProject.find({ projectType: type }).distinct("_id") } } : {};
   const [pending, approved, rejected] = await Promise.all(
-    ["PENDING", "APPROVED", "REJECTED"].map((s) => Budget.countDocuments({ approvalStatus: s })),
+    ["PENDING", "APPROVED", "REJECTED"].map((s) => Budget.countDocuments({ approvalStatus: s, ...only })),
   );
   return { total: pending + approved + rejected, pending, approved, rejected };
 }

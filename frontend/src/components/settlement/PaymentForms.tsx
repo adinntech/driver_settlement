@@ -1,5 +1,7 @@
 "use client";
 
+import VerticalSelect from "@/components/ui/VerticalSelect";
+import { verticalLabel } from "@/utils/vertical";
 import TableWrap from "@/components/ui/TableWrap";
 import Select from "@/components/ui/Select";
 import DateInput from "@/components/ui/DateInput";
@@ -10,7 +12,8 @@ import { EmptyState, ErrorState, Modal, Skeleton } from "@/components/ui/Ui";
 import { useToast } from "@/context/ToastContext";
 import { useApi } from "@/hooks/useApi";
 import { useDebounce } from "@/hooks/useDebounce";
-import { request } from "@/services/api";
+import { downloadFile, request } from "@/services/api";
+import SuspenseTable from "@/components/settlement/SuspenseTable";
 import { useAuth } from "@/context/AuthContext";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { formatDate, formatDateTime, formatInr } from "@/utils/format";
@@ -18,7 +21,7 @@ import { earlierOf, keepInRange, laterOf } from "@/utils/dates";
 import { amountPaise, money, newSubmissionKey, rowId, sanitizeAmount, type RsaProjectRow } from "@/utils/rsa";
 import { allowanceText, kmText, kmUsage } from "@/utils/kmAllowance";
 import {
-  DEDUCTION_KEYS, campaignDays, travelPayPaise, onRoadBase, paymentsBase, finalFormFrom, finalPayload, finalTotals, validateFinalForm, type FinalForm, type FinalNumberKey, type SettlementContext, type SettlementDetail, type SettlementOptions,
+  DEDUCTION_KEYS, campaignDays, isHighlightedExpense, travelPayPaise, onRoadBase, paymentsBase, finalFormFrom, finalPayload, finalTotals, validateFinalForm, type FinalForm, type FinalNumberKey, type SettlementContext, type SettlementDetail, type SettlementOptions,
 } from "@/utils/settlement";
 
 const d = (v: unknown) => (v === null || v === undefined || v === "" ? "-" : String(v));
@@ -29,12 +32,14 @@ export function ProjectPicker({ kind }: { kind: "daily" | "final" }) {
   const base = paymentsBase(useAuth().user?.role);
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
+  const [vertical, setVertical] = useState("");
   const dq = useDebounce(q);
-  const list = useApi<{ items: RsaProjectRow[]; total: number; page: number; limit: number }>(`/settlements/projects?q=${encodeURIComponent(dq)}&page=${page}&limit=10${kind === "final" ? "&kind=final" : ""}`);
+  const list = useApi<{ items: RsaProjectRow[]; total: number; page: number; limit: number }>(`/settlements/projects?q=${encodeURIComponent(dq)}&page=${page}&limit=10${kind === "final" ? "&kind=final" : ""}${vertical ? `&projectType=${vertical}` : ""}`);
   const pages = list.data ? Math.max(1, Math.ceil(list.data.total / 10)) : 1;
   return (
     <div className="card ds-card">
       <div className="ds-toolbar">
+        <VerticalSelect value={vertical} onChange={(v) => { setVertical(v); setPage(1); }} />
         <input className="ds-search" placeholder="Search trackup / PIF no, client, vehicle, driver" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} aria-label="Search projects" />
       </div>
       {list.loading ? <Skeleton rows={5} /> : list.error ? <ErrorState message={list.error} onRetry={list.reload} /> : !list.data?.items.length ? (
@@ -43,13 +48,13 @@ export function ProjectPicker({ kind }: { kind: "daily" | "final" }) {
         <>
           <TableWrap>
             <table className="table ds-table">
-              <thead><tr><th>Trackup No</th><th>Client</th><th>Type</th><th>Vehicle</th><th>Driver</th><th>Campaign</th><th>Approved Budget</th><th /></tr></thead>
+              <thead><tr><th>Trackup No</th><th>Client</th><th>Vertical</th><th>Vehicle</th><th>Driver</th><th>Campaign</th><th>Approved Budget</th><th /></tr></thead>
               <tbody>
                 {list.data.items.map((p) => (
                   <tr key={p.trackingVehicle}>
                     <td><strong className="num">{p.trackupNumber}</strong><br /><small className="muted">{p.pifNumber}</small></td>
                     <td>{p.clientName}</td>
-                    <td>{p.projectType === "ROADSHOW" ? "RoadShow" : "Signage"}</td>
+                    <td>{verticalLabel(p.projectType)}</td>
                     <td>{d(p.vehicleNo)}</td>
                     <td>{d(p.driverName)}<br /><small className="muted">{d(p.driverNumber)}</small></td>
                     <td className="ds-nowrap">{formatDate(p.campaignFromDate)}<br /><small className="muted">to {formatDate(p.campaignToDate)}</small></td>
@@ -387,7 +392,7 @@ function DailyInner({ ctx, existing, expenseOptions }: { ctx: SettlementContext;
           </div>
           <div className="vp-hist">
             <table>
-              <thead><tr><th>Date</th><th className="ds-amt">Amount</th><th>Mode</th><th>Bank Name</th></tr></thead>
+              <thead><tr><th>Date</th><th className="ds-amt">Amount</th><th>Mode</th><th>Mode of Payment</th></tr></thead>
               <tbody>
                 {history.length === 0 && <tr><td colSpan={4} className="dsf-empty">No previous payments for this vehicle</td></tr>}
                 {history.map((h) => (
@@ -511,6 +516,7 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
   const earn = (label: string) => t.earnings.find((e) => e.label === label)?.amount ?? 0;
   const dirty = !busy && (JSON.stringify(f) !== initialForm || !!comment.trim() || !!draft.cost.trim());
   const confirmLeave = useUnsavedChanges(dirty);
+  const suspense = ctx.suspense ?? { rows: [], total: 0 };
   const perDayTotal = pv(f.n.perDaySalary) + pv(f.n.perDayFood);
 
   return (
@@ -550,7 +556,7 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
             <div className="fsf-field"><span className="fsf-label">Vehicle No</span><span className="fsf-value">{ctx.vehicleNo}</span></div>
             <div className="fsf-field"><span className="fsf-label">Total Days</span><span className="fsf-value">{d(periodChanged ? days?.calendar : ctx.campaign.totalDays)}</span></div>
             <div className="fsf-field fsf-span2"><span className="fsf-label">Driver Name</span><span className="fsf-value">{ctx.driverNumber}/{ctx.driverName}</span></div>
-            <div className="fsf-field"><span className="fsf-label">Suspense Amt</span><span className="fsf-with-btn">{num("suspenseAmount")}<button type="button" className="dsf-btn dsf-btn-amber" title="View advances" onClick={() => setPanel("suspense")}>v</button></span></div>
+            <div className="fsf-field"><span className="fsf-label">Suspense Amt</span><span className="fsf-with-btn"><input className="dsf-in dsf-ro num-input" aria-label="Suspense Amount" readOnly tabIndex={-1} value={money(pv(f.n.suspenseAmount))} title="Calculated from daily payments with a Reference No. / UTR" /><button type="button" className="dsf-btn dsf-btn-amber" title="View advances" aria-label="View suspense records" onClick={() => setPanel("suspense")}><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" /></svg></button></span></div>
           </div>
         </section>
         <section className="fsf-card fsf-bank">
@@ -636,7 +642,7 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
                 {f.expenses.map((x, i) => {
                   const r = t.rows[i];
                   return (
-                    <tr key={x.id}>
+                    <tr key={x.id} className={isHighlightedExpense({ category: x.category, label: opts.finalExpenseCategories.find((c) => c.key === x.category)?.label, description: x.description }) ? "ds-hl" : undefined}>
                       <td>{opts.finalExpenseCategories.find((c) => c.key === x.category)?.label ?? x.category}</td>
                       <td>{x.description || "-"}</td>
                       <td className="ds-amt">{x.quantity}</td>
@@ -674,6 +680,7 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
           </div>
         </section>
         <section className="fsf-card fsf-summary" aria-label="Settlement summary">
+          <div className="fsf-total"><span>Suspense Amount</span>{ro(money(pv(f.n.suspenseAmount)))}</div>
           <div className="fsf-total"><span>Total Deduction Amount</span>{ro(money(t.totalDeduction))}</div>
           <div className="fsf-total fsf-net"><span>Net Amount</span>{ro(money(t.net), t.net < 0 ? "dsf-neg" : undefined)}</div>
         </section>
@@ -699,13 +706,12 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
         </Modal>
       )}
       {panel === "suspense" && (
-        <Modal title="Suspense Amount (advances paid)" onClose={() => setPanel(null)}>
-          <table className="table ds-mini"><thead><tr><th>Source</th><th>Date</th><th>Details</th><th className="ds-amt">Amount</th></tr></thead>
-            <tbody>
-              {(ctx.advances ?? []).map((a, i) => <tr key={`a${i}`}><td>{a.source}</td><td>{formatDateTime(a.date)}</td><td>{a.note}</td><td className="ds-amt">{formatInr(a.amount)}</td></tr>)}
-              {(ctx.dailyPayments ?? []).filter((p) => p.salaryAdvance > 0 && (p.status === "APPROVED" || p.status === "COMPLETED")).map((p) => <tr key={p.paymentNumber}><td>Daily payment salary advance</td><td>{formatDate(p.fromDate)}</td><td>{p.paymentNumber}</td><td className="ds-amt">{formatInr(p.salaryAdvance)}</td></tr>)}
-            </tbody>
-          </table>
+        <Modal title="Suspense Amount (daily payments with Reference No. / UTR)" onClose={() => setPanel(null)} wide>
+          <SuspenseTable records={suspense} />
+          <div className="actions-row">
+            <button type="button" className="btn btn-outline btn-sm" title="Payment Details of these records"
+              onClick={() => downloadFile(`/settlements/projects/${ctx.trackingVehicle}/payments-pdf`, "payment-details.pdf").catch((e: Error) => toast(e.message, "error"))}>Download PDF</button>
+          </div>
           <p className="muted ds-note">Prefilled suspense: {formatInr(Number(ctx.prefill.suspenseAmount) || 0)}. Entered: {money(pv(f.n.suspenseAmount))}.</p>
         </Modal>
       )}
@@ -714,7 +720,7 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
           <dl className="ds-kv">
             {t.earnings.filter((e) => e.amount).map((e) => <Row key={e.label} k={e.label} v={money(e.amount)} />)}
             <Row k="Approved expense claims" v={money(t.approved)} /><Row k="Gross" v={<b>{money(t.gross)}</b>} />
-            <Row k="Total Deduction" v={money(t.totalDeduction)} /><Row k="Suspense Amount" v={money(pv(f.n.suspenseAmount))} /><Row k="Net Amount (closing balance)" v={<b>{money(t.net)}</b>} />
+            <Row k="Suspense Amount" v={money(pv(f.n.suspenseAmount))} /><Row k="Total Deduction (incl. Suspense)" v={money(t.totalDeduction)} /><Row k="Net Amount (closing balance)" v={<b>{money(t.net)}</b>} />
           </dl>
         </Modal>
       )}
