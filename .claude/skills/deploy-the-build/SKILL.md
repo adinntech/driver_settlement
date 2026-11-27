@@ -1,77 +1,56 @@
 ---
 name: deploy-the-build
-description: Build the Driver Settlement frontend (Next.js) and/or backend (Node/TypeScript) from the latest origin/main with the live-URL settings, copy only the build output into the main_build branch (frontend-build/, backend-build/), commit and push main_build so Jenkins deploys it automatically. Use when the user says deploy, deploy the build, build and push, or ship frontend/backend.
+description: Deploy Driver Settlement by merging origin/main into the main_build branch and pushing it, so Jenkins tests, builds and deploys on the server. Use when the user says deploy, deploy the build, push to main_build, or ship frontend/backend.
 ---
 
 # deploy-the-build
 
-Repo: `G:\sk\git-files\driver_settlement` (GitHub `adinntech/driver_settlement`).
-Live URL: `https://adinntech.in/driver-settlement` (server 168.144.123.41).
+Repo: GitHub `adinntech/driver_settlement` (work from the current checkout).
+Live URL: `https://adinntech.in/driver-settlement`
 
 ## How the deployment works
-`main` holds source code. `main_build` holds ONLY build output and Docker files. A push to `main_build` triggers the Jenkins jobs `driver settlement frontend` / `driver settlement backend` through the GitHub webhook. Each job deploys its own container only when `frontend-build/` or `backend-build/` changed.
+`main_build` holds **source code** (same as `main`, plus any CI commits). Nothing is built locally and no build output is committed.
 
-`main_build` layout (never put source code here):
-- `frontend-build/`: `.next`, `public`, `package.json`, `package-lock.json`, `next.config.ts`, `README.txt`
-- `backend-build/`: `dist`, `assets`, `package.json`, `package-lock.json`
-- `deploy/*.Dockerfile`, `docker-compose.prod.yml`, `ci/`, `.env.example`
+A push to `main_build` triggers the single Jenkins job `driver-settlement` (`ci/Jenkinsfile`). For each affected service the server runs `deploy/Dockerfile`: **tests (frontend and backend, with a throwaway MongoDB) -> build -> deploy -> health check**. A failing test or build leaves the running container as it is.
 
-## Arguments
-`frontend`, `backend` or `both` (default `both`). If the user names only one side, build only that side.
+Which services deploy depends on the paths changed since the last successful run: `backend/` -> backend, `frontend/` -> frontend, `deploy/`, `docker-compose.prod.yml` or `.dockerignore` -> both. Backend goes first; if it fails, frontend is not deployed. One Google Chat message reports each run.
+
+If `ci/` or `deploy/` on `origin/main_build` no longer match this description, stop and tell the user before pushing.
+
+## Which side
+Merging `main` brings all of its changes, and Jenkins picks the services from the changed paths. There is no frontend-only or backend-only deploy: if the user asks for one side and `main` has changes for both, say so and ask.
 
 ## Hard rules
-- NEVER push to `main`. Only push `main_build`.
-- NEVER touch the user's working folder, branch or untracked files (`backend/.env`, `backend/public`, etc.). Work only in temporary git worktrees under the system temp directory and remove them at the end.
-- NEVER commit source code, `node_modules`, `.env` files or secrets to `main_build`.
-- NEVER SSH into the server, restart containers, or edit Jenkins from this skill. Jenkins does the deploy.
-- Do not use `git push --force`.
-- On Git Bash (Windows) prefix commands that carry `/driver-settlement` with `MSYS_NO_PATHCONV=1`, otherwise the path becomes `C:/Program Files/Git/...`.
+- This skill pushes only `main_build`. It never commits to or pushes `main`; if the work to deploy is not on `origin/main`, say so (push `main` only when the user asks).
+- Never touch the user's working folder, branch or untracked files. Work in a temporary worktree and remove it at the end.
+- Never commit build output, `node_modules`, `.env` files or secrets.
+- Never SSH into the server, restart containers or edit Jenkins. Jenkins does the deploy.
+- Never `git push --force`.
 
 ## Steps
 
-1. **Fetch and pick sources.**
+1. **Fetch and show what will ship.**
    ```
-   cd /g/sk/git-files/driver_settlement && git fetch origin
-   MAIN_SHA=$(git rev-parse --short origin/main)
+   git fetch origin
+   git log --oneline origin/main_build..origin/main
+   git diff --stat origin/main_build...origin/main | tail -15
    ```
-   Create two worktrees: `git worktree add --detach /tmp/ds-src origin/main` and `git worktree add --detach /tmp/ds-out origin/main_build`.
-   Tell the user which `origin/main` commit is being built.
+   No commits: say "nothing to deploy" and stop. Otherwise tell the user the commits and services that will deploy.
 
-2. **Check the live-URL support exists in main** (frontend only):
-   `grep -q basePath /tmp/ds-src/frontend/next.config.ts`. If missing, STOP, remove worktrees, and tell the user: the basePath code changes (`next.config.ts`, `AuthContext.tsx`, `login/page.tsx`, `AppShell.tsx`, `utils/config.ts`) must be committed to `main` first. Backend can still be built.
+2. **Check locally** (the server runs the tests again, so this only catches failures early): if not already done in this session for this code, run `npm test` in `backend/` (needs local MongoDB) and `frontend/`. Report failures and ask before pushing.
 
-3. **Build backend** (if requested):
+3. **Merge in a temporary worktree** (a new, not yet existing folder in the scratchpad or system temp directory):
    ```
-   cd /tmp/ds-src/backend && npm ci && npm run build
+   git worktree add --detach <tmp>/ds-out origin/main_build
+   cd <tmp>/ds-out && git merge --no-ff origin/main -m "Merge branch 'main' into main_build"
    ```
-   Must produce `dist/server.js`. On any error STOP and show the error.
+   End the message with the Co-Authored-By line from the session's attribution reminder, if one is present. On a merge conflict, stop and show the conflicting files.
 
-4. **Build frontend** (if requested):
-   ```
-   cd /tmp/ds-src/frontend && npm ci
-   MSYS_NO_PATHCONV=1 NEXT_PUBLIC_BASE_PATH=/driver-settlement NEXT_PUBLIC_API_BASE_URL=https://adinntech.in/driver-settlement/api npx next build
-   ```
-   Must finish without error and create `.next/BUILD_ID`.
+4. **Push** (this triggers the deployment): `git push origin HEAD:refs/heads/main_build`. If rejected as non-fast-forward, fetch, recreate the worktree from the new tip and redo steps 3-4.
 
-5. **Replace build output in `/tmp/ds-out`** (the `main_build` worktree). Delete the old contents of the folder being replaced first, so removed files do not linger. Keep `frontend-build/README.txt`.
-   - Backend: `rm -rf backend-build/dist backend-build/assets`, then copy `dist`, `assets`, `package.json`, `package-lock.json` from `/tmp/ds-src/backend` into `backend-build/`.
-   - Frontend: `rm -rf frontend-build/.next frontend-build/public`, then copy `.next` (exclude `cache`, `trace-build`, `diagnostics`), `public`, `package.json`, `package-lock.json`, `next.config.ts` into `frontend-build/`. Example: `(cd /tmp/ds-src/frontend/.next && tar cf - --exclude=./cache --exclude=./trace-build --exclude=./diagnostics .) | (cd /tmp/ds-out/frontend-build/.next && tar xf -)`.
+5. **Clean up:** `git worktree remove --force <tmp>/ds-out`, then `git worktree prune`.
 
-6. **Commit.** From `/tmp/ds-out`: `git add -A -f frontend-build backend-build` (`-f` is required because `.next` and `dist` may be ignored). If `git diff --cached --quiet` shows nothing changed, say "no build changes, nothing to deploy" and clean up.
-   Otherwise show `git diff --cached --stat | tail -5`, then commit on the detached HEAD:
-   ```
-   git -c core.autocrlf=false commit -m "Build: <frontend|backend|both> from main@$MAIN_SHA"
-   ```
-   End the message with the Co-Authored-By line given in the session's attribution reminder, if one is present.
+6. **Report** (in Tanglish if the user writes Tanglish): commits shipped, the `main_build` commit pushed, services expected to deploy, and that the result is **not confirmed** until the `driver-settlement` job at `https://adinntech.in/dev-ops/` is green. Tests and build take several minutes. Afterwards, `https://adinntech.in/driver-settlement/login` and `.../driver-settlement/api/health` should return 200; these alone do not prove the new version is running.
 
-7. **Push** (this is what triggers deployment):
-   `git push origin HEAD:refs/heads/main_build`. If rejected as non-fast-forward, run `git fetch`, re-create the `main_build` worktree from the new tip and redo steps 5-7. Never force.
-
-8. **Clean up** worktrees: `git worktree remove --force /tmp/ds-src` and `/tmp/ds-out` (from the repo folder), then `git worktree prune`.
-
-9. **Report to the user** (reply in Tanglish if the user writes Tanglish): main commit built, sides built, `main_build` commit pushed, and the Jenkins jobs to watch at `https://adinntech.in/dev-ops/`. After about 1-2 minutes optionally verify (read-only):
-   `curl -s -o /dev/null -w "%{http_code}" https://adinntech.in/driver-settlement/login` and `.../driver-settlement/api/health` should both return 200. If a check fails, say so with the status code and point to the Jenkins console log; rollback images are `driver-settlement-<frontend|backend>:rollback` on the server (the user decides whether to roll back).
-
-## Notes
-- Jenkins deploy scripts live on the server in `/opt/deploy/deploy-driver-settlement.sh`; the server `.env` is separate and untouched by this flow.
-- Existing server containers, crons and DB backups are never touched by this skill.
+## If the run fails
+Point the user to the Jenkins console log (stage Test / Build / Deploy). Rerunning the job is safe. A failed health check after deploy leaves a `driver-settlement-<frontend|backend>:rollback` image on the server; the user decides whether to roll back.
