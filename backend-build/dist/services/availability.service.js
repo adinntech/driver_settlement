@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { asVertical } from "../utils/vertical.js";
 import { TrackingProject } from "../models/TrackingProject.js";
 import { TrackingVehicle } from "../models/TrackingVehicle.js";
 import { Vehicle, VehicleHistory } from "../models/Vehicle.js";
@@ -199,7 +200,7 @@ async function toChoices(budgets) {
  * Draft / pending / rejected budgets, and approved budgets with a newer unapproved version, never appear.
  * Searches trackup, PIF, client / billing name, job sheet and project type (roadshow / signage).
  */
-export async function searchApprovedProjects(q, page = 1, limit = 10) {
+export async function searchApprovedProjects(q, page = 1, limit = 10, projectType) {
     const lim = Math.min(Math.max(limit, 1), 50);
     const pg = Math.max(page, 1);
     const term = q.trim();
@@ -213,6 +214,8 @@ export async function searchApprovedProjects(q, page = 1, limit = 10) {
         ]);
         filter.$or = [{ vehicle: { $in: tvIds } }, { project: { $in: pIds } }];
     }
+    if (asVertical(projectType))
+        filter.$and = [{ project: { $in: await TrackingProject.find({ projectType }).distinct("_id") } }];
     const [rows, total] = await Promise.all([
         Budget.find(filter).sort({ updatedAt: -1, _id: -1 }).skip((pg - 1) * lim).limit(lim).lean(),
         Budget.countDocuments(filter),

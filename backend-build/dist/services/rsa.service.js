@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { asVertical } from "../utils/vertical.js";
 import mongoose from "mongoose";
 import { Budget, BudgetVersion } from "../models/Budget.js";
 import { BudgetEvent } from "../models/Approval.js";
@@ -254,10 +255,12 @@ export async function listAllPayments(q) {
     return { items: items.map(paymentView), total, page, limit };
 }
 /** Real database totals for the summary cards (amounts summed in paise so currency never drifts). */
-export async function paymentSummary() {
+export async function paymentSummary(projectType) {
+    const type = asVertical(projectType);
+    const only = type ? { paymentFor: type } : {};
     const [agg, last, users] = await Promise.all([
-        RsaPayment.aggregate([{ $group: { _id: "$paymentFor", count: { $sum: 1 }, paise: { $sum: { $round: [{ $multiply: ["$totalPayable", 100] }, 0] } } } }]),
-        RsaPayment.findOne().sort({ entryDateTime: -1 }).select("entryDateTime").lean(),
+        RsaPayment.aggregate([{ $match: only }, { $group: { _id: "$paymentFor", count: { $sum: 1 }, paise: { $sum: { $round: [{ $multiply: ["$totalPayable", 100] }, 0] } } } }]),
+        RsaPayment.findOne(only).sort({ entryDateTime: -1 }).select("entryDateTime").lean(),
         RsaPayment.distinct("createdBy"),
     ]);
     const by = (k) => agg.find((x) => x._id === k) ?? { count: 0, paise: 0 };

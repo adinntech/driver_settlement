@@ -8,7 +8,8 @@ import { PAYMENT_MODE_LABEL, SettlementPayment } from "../models/SettlementPayme
 import { Vehicle } from "../models/Vehicle.js";
 import { AppError } from "../utils/AppError.js";
 import { maskTail, unseal } from "../utils/secureField.js";
-import { savedDeductionLines } from "../utils/settlement.js";
+import { asVertical, verticalLabel } from "../utils/vertical.js";
+import { isHighlightedExpense, savedDeductionLines } from "../utils/settlement.js";
 import { CATEGORY_LABEL, ensureDseNumber } from "./settlement.service.js";
 /** Reports (RSO), the RSA accounts export and the individual driver salary PDF. All read the saved records only. */
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
@@ -22,12 +23,14 @@ const payRef = (p) => {
 };
 const REF_COLS = [
     { header: "Ref. No.", key: "referenceNumber", width: 20 }, { header: "Ref. Date", key: "referenceDate" }, { header: "Pay. Date", key: "paymentDate" },
-    { header: "Payment Mode", key: "paymentMode", width: 14 }, { header: "Paid From Bank", key: "paymentBank", width: 20 },
+    { header: "Payment Mode", key: "paymentMode", width: 14 }, { header: "Mode of Payment", key: "paymentBank", width: 20 },
 ];
 export async function approvedPaymentRows(q, statuses = ["APPROVED", "COMPLETED"]) {
     const filter = { status: { $in: statuses } };
     if (q.category === "DAILY" || q.category === "FINAL")
         filter.category = q.category;
+    if (asVertical(q.projectType))
+        filter.projectType = q.projectType;
     if (q.from && YMD.test(q.from))
         filter.toDate = { $gte: q.from };
     if (q.to && YMD.test(q.to))
@@ -35,7 +38,7 @@ export async function approvedPaymentRows(q, statuses = ["APPROVED", "COMPLETED"
     const rows = await SettlementPayment.find(filter).sort({ reviewedAt: -1 }).limit(5000).lean();
     return rows.map((p) => ({
         _id: String(p._id), paymentNumber: p.paymentNumber, category: CATEGORY_LABEL[p.category], status: p.status, trackupNumber: p.trackupNumber, pifNumber: p.pifNumber ?? "", jsNumber: p.jsNumber ?? "",
-        clientName: p.clientName ?? "", projectType: p.projectType, vehicleNo: p.vehicleNo ?? "", driverNumber: p.driverNumber ?? "", driverName: p.driverName ?? "", fromDate: p.fromDate, toDate: p.toDate,
+        clientName: p.clientName ?? "", projectType: verticalLabel(p.projectType), vehicleNo: p.vehicleNo ?? "", driverNumber: p.driverNumber ?? "", driverName: p.driverName ?? "", fromDate: p.fromDate, toDate: p.toDate,
         amount: p.amount, accountName: p.bank?.accountName ?? "", bankName: p.bank?.bankName ?? "", ifscCode: p.bank?.ifscCode ?? "", accountNumber: p.bank?.accountMasked ?? "",
         submittedBy: p.submittedBy, approvedBy: p.reviewedBy ?? "", approvedAt: p.reviewedAt ?? null,
         ...payRef(p),
@@ -43,6 +46,8 @@ export async function approvedPaymentRows(q, statuses = ["APPROVED", "COMPLETED"
 }
 export async function driverListRows(q) {
     const filter = {};
+    if (asVertical(q.projectType))
+        filter["availability.project.projectType"] = q.projectType; // current assignment
     if (q.q?.trim()) {
         const rx = new RegExp(q.q.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
         filter.$or = [{ driverNumber: rx }, { driverName: rx }, { mobileNumber: rx }];
@@ -54,7 +59,7 @@ export async function driverListRows(q) {
     const byDriver = new Map(finals.map((f) => [String(f._id), f]));
     return drivers.map((d) => ({
         _id: String(d._id), driverNumber: d.driverNumber, driverName: d.driverName, driverType: d.driverType ?? "", mobileNumber: d.mobileNumber ?? "", status: d.status ?? "",
-        availability: d.availability?.status ?? "", perDaySalary: d.salary ?? 0, bankName: d.bankName ?? "", ifscCode: d.ifscCode ?? "", accountNumber: maskTail(d.accountNumber) ?? "",
+        availability: d.availability?.status ?? "", projectType: verticalLabel(d.availability?.project?.projectType), perDaySalary: d.salary ?? 0, bankName: d.bankName ?? "", ifscCode: d.ifscCode ?? "", accountNumber: maskTail(d.accountNumber) ?? "",
         settlements: byDriver.get(String(d._id))?.n ?? 0, settledAmount: Math.round((byDriver.get(String(d._id))?.net ?? 0) * 100) / 100,
     }));
 }
@@ -79,6 +84,7 @@ export const VEHICLE_MIS_COLUMNS = [
     { key: "policePermission", header: "Police Permission", kind: "date", width: 12.5 },
     { key: "condition", header: "Condition", kind: "text", width: 14 },
     { key: "specification", header: "Specification", kind: "text", width: 22 },
+    { key: "projectType", header: "Vertical", kind: "text", width: 11 },
 ];
 const validYmd = (v) => (typeof v === "string" && YMD.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && Number(v.slice(0, 4)) >= 1950 ? v : "");
 const latestRenewal = (list) => validYmd((Array.isArray(list) ? list : []).reduce((m, e) => (validYmd(e?.nextRenewalDate) > m ? validYmd(e?.nextRenewalDate) : m), ""));
@@ -90,13 +96,15 @@ export async function vehicleMisRows(q) {
         const rx = new RegExp(q.q.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
         filter.$or = [{ vehicleNo: rx }, { make: rx }, { model: rx }, { type: rx }];
     }
+    if (asVertical(q.projectType))
+        filter["availability.project.projectType"] = q.projectType; // current assignment
     const list = await Vehicle.find(filter).sort({ vehicleNo: 1 }).limit(10000).lean();
     return list.map((v) => ({
         _id: String(v._id), vehicleNo: txt(v.vehicleNo), make: txt(v.make), model: txt(v.model), yom: num(v.yearOfManufacture), purchaseDate: validYmd(v.purchaseDate),
         type: txt(v.type), stepneyStatus: txt(v.stepneyStatus), batteryStatus: txt(v.batteryStatus), oilTopUpOn: validYmd(v.oilTopUpOn), greasePackingOn: validYmd(v.greasePackingOn),
         generalCheckUpOn: validYmd(v.generalCheckUpOn), currentRunning: num(v.currentRunning), totalRunning: num(v.totalRunning), fc: latestRenewal(v.fc), insurance: latestRenewal(v.insurance),
         statePermit: latestRenewal(v.permit), rtoPermission: latestRenewal(v.rtoPermission), policePermission: latestRenewal(v.policePermission), condition: txt(v.condition),
-        specification: txt(v.specification), status: v.status,
+        specification: txt(v.specification), status: v.status, projectType: verticalLabel(v.availability?.project?.projectType),
     }));
 }
 /** Workbook laid out like the reference VehicleMISReport.xls: narrow spacer column A, merged bold title, spacer row,
@@ -154,6 +162,8 @@ export async function vehicleMisWorkbook(rows) {
 const kmCell = (v) => (typeof v === "number" && Number.isFinite(v) ? v : "");
 export async function driverSalaryRows(q) {
     const filter = { category: "FINAL", status: { $in: ["APPROVED", "COMPLETED"] } };
+    if (asVertical(q.projectType))
+        filter.projectType = q.projectType;
     if (q.from && YMD.test(q.from))
         filter.toDate = { $gte: q.from };
     if (q.to && YMD.test(q.to))
@@ -161,11 +171,11 @@ export async function driverSalaryRows(q) {
     const rows = await SettlementPayment.find(filter).sort({ reviewedAt: -1 }).limit(5000).lean();
     return rows.map((p) => ({
         _id: String(p._id), paymentNumber: p.paymentNumber, status: p.status, driverNumber: p.driverNumber, driverName: p.driverName, vehicleNo: p.vehicleNo, trackupNumber: p.trackupNumber, pifNumber: p.pifNumber ?? "", jsNumber: p.jsNumber ?? "",
-        clientName: p.clientName ?? "", fromDate: p.fromDate, toDate: p.toDate, onRoadDays: p.data?.days?.onRoadDays ?? 0, onRoadSundays: p.data?.days?.onRoadSundays ?? 0, haltDays: p.data?.days?.haltDays ?? 0,
+        clientName: p.clientName ?? "", projectType: verticalLabel(p.projectType), fromDate: p.fromDate, toDate: p.toDate, onRoadDays: p.data?.days?.onRoadDays ?? 0, onRoadSundays: p.data?.days?.onRoadSundays ?? 0, haltDays: p.data?.days?.haltDays ?? 0,
         // KM allowance (blank for signage and for settlements saved before it was recorded); actual KM is always the Result KM
         regularKmPerDay: kmCell(p.data?.km?.kmPerDay), extraKmPerDay: kmCell(p.data?.km ? p.data.km.extraKmAllotted : null), allowedKmPerDay: kmCell(p.data?.km?.allowedKmPerDay),
         totalAllowedKm: kmCell(p.data?.km?.totalAllowedKm), actualKm: kmCell(p.data?.km?.actualKm ?? p.data?.fuel?.resultKm), excessKm: kmCell(p.data?.km?.excessKm),
-        earnings: p.data?.earningsTotal ?? 0, approvedExpenses: p.data?.approvedTotal ?? 0, gross: p.data?.gross ?? 0, totalDeduction: p.data?.totalDeduction ?? 0, suspenseAmount: p.data?.suspenseAmount ?? 0,
+        earnings: p.data?.earningsTotal ?? 0, approvedExpenses: p.data?.approvedTotal ?? 0, gross: p.data?.gross ?? 0, totalDeduction: p.data?.totalDeduction ?? 0, suspenseAmount: p.data?.suspenseAmount ?? 0, suspenseInDeduction: p.data?.totalDeductionIncludesSuspense ? "Yes" : "No",
         netAmount: p.amount, approvedBy: p.reviewedBy ?? "", approvedAt: p.reviewedAt ?? null, ...payRef(p),
     }));
 }
@@ -194,7 +204,7 @@ async function workbook(title, cols, rows) {
 }
 export const PAYMENT_COLS = [
     { header: "Payment No", key: "paymentNumber", width: 20 }, { header: "Category", key: "category", width: 24 }, { header: "Status", key: "status" }, { header: "Trackup No", key: "trackupNumber", width: 16 }, { header: "PIF No", key: "pifNumber", width: 14 },
-    { header: "JS No", key: "jsNumber" }, { header: "Client", key: "clientName", width: 24 }, { header: "Project Type", key: "projectType" }, { header: "Vehicle No", key: "vehicleNo", width: 14 },
+    { header: "JS No", key: "jsNumber" }, { header: "Client", key: "clientName", width: 24 }, { header: "Vertical", key: "projectType" }, { header: "Vehicle No", key: "vehicleNo", width: 14 },
     { header: "Driver Code", key: "driverNumber" }, { header: "Driver Name", key: "driverName", width: 22 }, { header: "From", key: "fromDate" }, { header: "To", key: "toDate" },
     { header: "Amount (INR)", key: "amount", money: true, width: 16 }, { header: "Account Name", key: "accountName", width: 22 }, { header: "Bank", key: "bankName", width: 22 }, { header: "IFSC", key: "ifscCode" },
     { header: "Account Number", key: "accountNumber", width: 20 }, { header: "Submitted By", key: "submittedBy" }, { header: "Approved By", key: "approvedBy" }, { header: "Approved On", key: "approvedAt", date: true, width: 18 },
@@ -203,7 +213,7 @@ export const PAYMENT_COLS = [
 export async function accountsExport(rows, sheet = "Approved Payments") {
     const shaped = rows.map((p) => ({
         paymentNumber: p.paymentNumber, category: CATEGORY_LABEL[p.category], status: p.status, trackupNumber: p.trackupNumber, pifNumber: p.pifNumber ?? "", jsNumber: p.jsNumber ?? "", clientName: p.clientName ?? "",
-        projectType: p.projectType, vehicleNo: p.vehicleNo ?? "", driverNumber: p.driverNumber ?? "", driverName: p.driverName ?? "", fromDate: p.fromDate, toDate: p.toDate, amount: p.amount,
+        projectType: verticalLabel(p.projectType), vehicleNo: p.vehicleNo ?? "", driverNumber: p.driverNumber ?? "", driverName: p.driverName ?? "", fromDate: p.fromDate, toDate: p.toDate, amount: p.amount,
         accountName: p.bank?.accountName ?? "", bankName: p.bank?.bankName ?? "", ifscCode: p.bank?.ifscCode ?? "", accountNumber: (p.status === "APPROVED" ? unseal(p.bank?.account) : null) ?? p.bank?.accountMasked ?? "", // full number only on payable rows
         submittedBy: p.submittedBy, approvedBy: p.reviewedBy ?? "", approvedAt: p.reviewedAt,
     }));
@@ -219,18 +229,18 @@ export async function reportWorkbook(kind, q) {
     if (kind === "driver-list")
         return { name: "driver-list-report", buffer: await workbook("Drivers", [
                 { header: "Driver Code", key: "driverNumber" }, { header: "Driver Name", key: "driverName", width: 22 }, { header: "Type", key: "driverType", width: 18 }, { header: "Mobile", key: "mobileNumber", width: 16 },
-                { header: "Status", key: "status" }, { header: "Availability", key: "availability", width: 16 }, { header: "Per Day Salary", key: "perDaySalary", money: true }, { header: "Bank", key: "bankName", width: 22 },
+                { header: "Status", key: "status" }, { header: "Availability", key: "availability", width: 16 }, { header: "Vertical", key: "projectType" }, { header: "Per Day Salary", key: "perDaySalary", money: true }, { header: "Bank", key: "bankName", width: 22 },
                 { header: "IFSC", key: "ifscCode" }, { header: "Account (masked)", key: "accountNumber", width: 20 }, { header: "Settlements", key: "settlements" }, { header: "Settled Amount", key: "settledAmount", money: true },
             ], await driverListRows(q)) };
     if (kind === "driver-salary")
         return { name: "driver-salary-report", buffer: await workbook("Driver Salary", [
                 { header: "DSE No", key: "paymentNumber", width: 20 }, { header: "Status", key: "status" }, { header: "Driver Code", key: "driverNumber" }, { header: "Driver", key: "driverName", width: 22 },
                 { header: "Vehicle No", key: "vehicleNo", width: 14 }, { header: "Trackup No", key: "trackupNumber", width: 16 }, { header: "PIF No", key: "pifNumber", width: 14 }, { header: "JS No", key: "jsNumber" }, { header: "Client", key: "clientName", width: 24 },
-                { header: "From", key: "fromDate" }, { header: "To", key: "toDate" }, { header: "On Road Days", key: "onRoadDays" }, { header: "On Road Sundays", key: "onRoadSundays" }, { header: "Halt Days", key: "haltDays" },
+                { header: "Vertical", key: "projectType" }, { header: "From", key: "fromDate" }, { header: "To", key: "toDate" }, { header: "On Road Days", key: "onRoadDays" }, { header: "On Road Sundays", key: "onRoadSundays" }, { header: "Halt Days", key: "haltDays" },
                 { header: "Regular KM/Day", key: "regularKmPerDay" }, { header: "Extra KM/Day", key: "extraKmPerDay" }, { header: "Allowed KM/Day", key: "allowedKmPerDay" },
                 { header: "Total Allowed KM", key: "totalAllowedKm" }, { header: "Actual KM", key: "actualKm" }, { header: "Excess KM", key: "excessKm" },
                 { header: "Earnings", key: "earnings", money: true }, { header: "Approved Expenses", key: "approvedExpenses", money: true }, { header: "Gross", key: "gross", money: true },
-                { header: "Total Deduction", key: "totalDeduction", money: true }, { header: "Suspense", key: "suspenseAmount", money: true }, { header: "Net Amount", key: "netAmount", money: true },
+                { header: "Total Deduction", key: "totalDeduction", money: true }, { header: "Suspense", key: "suspenseAmount", money: true }, { header: "Suspense in Total Deduction", key: "suspenseInDeduction" }, { header: "Net Amount", key: "netAmount", money: true },
                 { header: "Approved By", key: "approvedBy" }, { header: "Approved On", key: "approvedAt", date: true, width: 18 }, ...REF_COLS,
             ], await driverSalaryRows(q)) };
     throw new AppError("Unknown report", 404);
@@ -343,11 +353,14 @@ export async function driverSalaryPdf(id) {
         ...d.earnings.filter((e) => e.amount > 0).map((e) => [e.key === "salary" ? "On Road Days" : e.label, "", plain(e.rate), plain(e.quantity), num2(e.amount)]),
         ...d.expenses.map((e) => [e.label, e.description ?? "", plain(e.cost), plain(e.quantity), num2(e.approved)]),
     ];
-    for (const r of rows) {
+    const highlight = [...d.earnings.filter((e) => e.amount > 0), ...d.expenses].map(isHighlightedExpense); // same order as `rows`
+    for (const [n, r] of rows.entries()) {
         if (y > 742) {
             doc.addPage();
             y = 50;
         }
+        if (highlight[n])
+            doc.save().rect(L, y, R - L, RH).fill("#FFF2CC").restore();
         doc.rect(L, y, R - L, RH).lineWidth(0.5).strokeColor("#000").stroke();
         for (let i = 1; i < cols.length - 1; i++)
             doc.moveTo(cols[i], y).lineTo(cols[i], y + RH).stroke();
@@ -378,7 +391,7 @@ export async function driverSalaryPdf(id) {
         txt(num2(value), LBL_R, y, { w: VAL_R - LBL_R, align: "right" });
         y += step;
     }
-    txt("Total Deduction :", 233, y, { bold: true });
+    txt(d.totalDeductionIncludesSuspense ? "Total Deduction (incl. Suspense) :" : "Total Deduction :", 233, y, { bold: true });
     txt(num2(d.totalDeduction), LBL_R, y, { bold: true, w: VAL_R - LBL_R, align: "right" });
     y += step;
     txt("SUSPENSE AMOUNT :", 300, y, { bold: true, w: LBL_R - 300 - 8, align: "right" });
@@ -404,4 +417,38 @@ export async function driverSalaryPdf(id) {
     doc.end();
     const safe = `${p.driverNumber ?? "driver"}-DSE-${dseNo}`.replace(/[^A-Za-z0-9-]+/g, "_");
     return { name: `driver-salary-${safe}.pdf`, buffer: await done };
+}
+/** One final settlement's earnings and expense claims, as in its detail popup, with the same rows highlighted. */
+export async function settlementDetailWorkbook(id) {
+    if (!validId(id))
+        throw new AppError("Invalid payment id", 400);
+    const p = await SettlementPayment.findById(id).lean();
+    if (!p || p.category !== "FINAL")
+        throw new AppError("Final settlement not found", 404);
+    const d = p.data;
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Earnings & Expenses");
+    ws.columns = [28, 28, 14, 18, 16, 16].map((width) => ({ width }));
+    const bold = (row) => { row.font = { bold: true }; return row; };
+    bold(ws.addRow([p.paymentNumber, p.driverName ?? "", p.vehicleNo ?? "", p.clientName ?? "", "Vertical", verticalLabel(p.projectType)]));
+    ws.addRow([]);
+    bold(ws.addRow(["Description", "Others", "Cost", "Qty / Days / Hrs", "Claimed", "Approved"]));
+    const money = (row) => [3, 5, 6].forEach((c) => (row.getCell(c).numFmt = "#,##0.00"));
+    const add = (values, highlighted) => {
+        const row = ws.addRow(values);
+        money(row);
+        if (highlighted)
+            for (let c = 1; c <= 6; c++)
+                row.getCell(c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF2CC" } };
+    };
+    for (const e of d.earnings.filter((x) => x.amount > 0))
+        add([e.label, "", e.rate, e.quantity, e.amount, e.amount], isHighlightedExpense(e));
+    for (const e of d.expenses)
+        add([e.label, e.description ?? "", e.cost, e.quantity, e.claimed, e.approved], isHighlightedExpense(e));
+    ws.addRow([]);
+    for (const [label, value] of [["Gross", d.gross], ["Suspense", d.suspenseAmount], [d.totalDeductionIncludesSuspense ? "Total Deduction (incl. Suspense)" : "Total Deduction", d.totalDeduction], ["Net Amount", d.netAmount]]) {
+        const row = bold(ws.addRow([label, "", "", "", "", value]));
+        row.getCell(6).numFmt = "#,##0.00";
+    }
+    return { name: `settlement-${String(p.paymentNumber).replace(/[^A-Za-z0-9-]/g, "-")}`, buffer: Buffer.from(await wb.xlsx.writeBuffer()) };
 }

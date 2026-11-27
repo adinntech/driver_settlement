@@ -1,3 +1,0 @@
-module.exports=[61330,a=>{"use strict";var b=a.i(87924),c=a.i(15149),d=a.i(37125);a.s(["default",0,function(){return(0,b.jsxs)(c.f,{role:"RSO",children:[(0,b.jsx)("div",{className:"page-head",children:(0,b.jsxs)("div",{children:[(0,b.jsx)("h1",{children:"Final Settlement Approvals"}),(0,b.jsx)("p",{className:"muted",children:"Approve final driver salary & expense settlements. Open an approved settlement to download the driver's salary PDF."})]})}),(0,b.jsx)(d.f,{mode:"queue",defaultCategory:"FINAL"})]})}])}];
-
-//# sourceMappingURL=src_app_rso_page_tsx_1u0iwba3j-5_4._.js.map

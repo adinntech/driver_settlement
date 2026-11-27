@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { asVertical } from "../utils/vertical.js";
 import { Driver, DriverHistory, DRIVER_AVAILABILITY_STATUSES } from "../models/Driver.js";
 import { VehicleAllotment } from "../models/VehicleAllotment.js";
 import { validateDriver } from "../validators/driver.validator.js";
@@ -164,6 +165,8 @@ export function driverFilter(q) {
         and.push(search);
     if (q.availabilityStatus && DRIVER_AVAILABILITY_STATUSES.includes(q.availabilityStatus))
         and.push({ "availability.status": q.availabilityStatus });
+    if (asVertical(q.projectType))
+        and.push({ "availability.project.projectType": q.projectType }); // current assignment
     return and.length ? { $and: and } : {};
 }
 function searchFilter(raw) {

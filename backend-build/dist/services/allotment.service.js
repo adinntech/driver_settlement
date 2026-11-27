@@ -95,8 +95,8 @@ export async function searchAvailableVehicles(q, limit = 10, now = new Date()) {
     return items.map((v) => ({ _id: String(v._id), vehicleNo: v.vehicleNo, make: v.make ?? null, model: v.model ?? null, type: v.type ?? null }));
 }
 /** Approved projects (one row per project vehicle = its own PIF) with their current allotment, if any. */
-export async function listAllotmentProjects(q, page = 1, limit = 10) {
-    const base = await searchApprovedProjects(q, page, limit);
+export async function listAllotmentProjects(q, page = 1, limit = 10, projectType) {
+    const base = await searchApprovedProjects(q, page, limit, projectType);
     const items = base.items;
     if (!items.length)
         return base;

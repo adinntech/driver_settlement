@@ -2,8 +2,8 @@ import { deliverVehicle, deliveryDetail, deliverySummary, uploadDeliveryPhoto } 
 import { sendResponse } from "../utils/sendResponse.js";
 const wrap = (fn) => (req, res, next) => fn(req, res).catch(next);
 const id = (req) => String(req.params.id);
-export const summary = wrap(async (_req, res) => {
-    res.status(200).json(sendResponse(true, "Vehicle delivery summary fetched successfully", await deliverySummary()));
+export const summary = wrap(async (req, res) => {
+    res.status(200).json(sendResponse(true, "Vehicle delivery summary fetched successfully", await deliverySummary(String(req.query.projectType ?? ""))));
 });
 export const detail = wrap(async (req, res) => {
     res.status(200).json(sendResponse(true, "Vehicle delivery details fetched successfully", await deliveryDetail(id(req))));

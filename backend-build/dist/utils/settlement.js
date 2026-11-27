@@ -199,7 +199,8 @@ export function validateFinalInput(input, ctx) {
  *                          + travel pay
  *   Claimed (per row)    = quantity x cost;   rejected = claimed - approved
  *   Gross                = earnings + approved expenses
- *   Net Amount           = Gross - Total Deduction - Suspense Amount
+ *   Total Deduction      = the entered deductions + Suspense Amount (counted here once, nowhere else)
+ *   Net Amount           = Gross - Total Deduction
  */
 export function calculateFinal(d) {
     const n = d.n;
@@ -222,8 +223,8 @@ export function calculateFinal(d) {
     const claimedP = expenses.reduce((s, e) => s + e.claimedP, 0);
     const approvedP = expenses.reduce((s, e) => s + e.approved, 0);
     const grossP = earningsP + approvedP;
-    const totalDeductionP = DEDUCTION_KEYS.reduce((s, k) => s + d.deductions[k], 0);
-    const netP = grossP - totalDeductionP - n.suspenseAmount;
+    const totalDeductionP = DEDUCTION_KEYS.reduce((s, k) => s + d.deductions[k], 0) + n.suspenseAmount;
+    const netP = grossP - totalDeductionP;
     return { resultKm, expectedLitres, variationLitres, mileageShortSuggestedP, earnings, earningsP, expenses, claimedP, approvedP, rejectedP: claimedP - approvedP, grossP, totalDeductionP, netP };
 }
 /**
@@ -248,5 +249,34 @@ export function finalData(d, campaign) {
         otherDeductionRemark: d.otherDeductionRemark,
         earningsTotal: rupees(c.earningsP), claimedTotal: rupees(c.claimedP), approvedTotal: rupees(c.approvedP), rejectedTotal: rupees(c.rejectedP),
         gross: rupees(c.grossP), totalDeduction: rupees(c.totalDeductionP), suspenseAmount: h("suspenseAmount"), netAmount: rupees(c.netP),
+        totalDeductionIncludesSuspense: true, // settlements saved before this stored Total Deduction without it; they are left as saved
     };
 }
+/**
+ * RSO corrects the Fixed Mileage of a saved final settlement. Only what follows from it changes: expected litres, variation, the
+ * mileage-short suggestion AND deduction (set to the suggestion), estimated fuel, total deduction and net. Earnings, gross, every
+ * other deduction and suspense stay exactly as saved.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function recalcMileage(data, mileage) {
+    const f = data.fuel;
+    const expectedLitres = r2(f.resultKm / mileage);
+    const variationLitres = r2(f.ioclLitres - expectedLitres);
+    const short = Math.max(0, Math.round(variationLitres * f.dieselCost * 100)); // paise
+    const diff = short - Math.round((data.deductions.mileageShort ?? 0) * 100);
+    const estimatedKm = Number(data.estimate?.estimatedKm) || 0;
+    return {
+        ...data,
+        fuel: { ...f, fixedMileage: mileage, expectedLitres, variationLitres, mileageShortSuggested: rupees(short) },
+        estimate: { ...data.estimate, estimatedFuel: estimatedKm ? r2(estimatedKm / mileage) : data.estimate?.estimatedFuel ?? 0 },
+        deductions: { ...data.deductions, mileageShort: rupees(short) },
+        totalDeduction: rupees(Math.round(data.totalDeduction * 100) + diff),
+        netAmount: rupees(Math.round(data.netAmount * 100) - diff),
+    };
+}
+/**
+ * Review highlight of Final Settlement rows: EVERY earning and expense row except Food and Fuel (Diesel / Petrol, and the IOCL
+ * card lines). Decided by the row's category / key, or its name for categories added later, so new ones are highlighted by default.
+ * Same rule on screen, in Excel and in the salary statement PDF.
+ */
+export const isHighlightedExpense = (e) => !/^(FOOD|FOOD_ALLOWANCE|FUEL|DIESEL|PETROL)$/i.test(e.category ?? e.key ?? "") && !/\b(food|fuel|diesel|petrol)\b/i.test(e.label ?? "") && !/iocl/i.test(e.description ?? "");

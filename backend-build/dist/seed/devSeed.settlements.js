@@ -49,7 +49,7 @@ export async function seedSettlements(add) {
             const had = await SettlementPayment.exists({ idempotencyKey: key });
             if (!had && ctx.existingFinal)
                 continue; // a final settlement for this driver was already entered by hand: never add a second one
-            const p = ctx.prefill;
+            const p = (await settlementContext(row.trackingVehicle)).prefill; // re-read: the suspense includes the daily payments just paid
             const total = Math.max(3, Number(ctx.campaign.totalDays) || 10);
             const onRoad = Math.max(1, Math.min(total - 2, 12));
             const mileage = Number(p.fixedMileage) || 8;
@@ -60,7 +60,7 @@ export async function seedSettlements(add) {
                 ioclLitres: String(Math.round((km / mileage) * 1.04 * 100) / 100), ioclKms: String(km - 20), estimatedBudget: String(p.estimatedBudget || 0), estimatedKm: String(p.estimatedKm || km),
                 estimatedFuel: String(p.estimatedFuel || Math.round((km / mileage) * 100) / 100), perDaySalary: String(p.perDaySalary || 800), perDayFood: String(p.perDayFood || 250),
                 travelPay: "1200", onRoadDays: String(onRoad), onRoadSundays: total - onRoad >= 2 ? "1" : "0",
-                suspenseAmount: String(Math.min(Number(p.suspenseAmount) || 0, 2000)),
+                suspenseAmount: String(Number(p.suspenseAmount) || 0),
                 expenses: [
                     { category: "TOLL", description: "Mumbai-Pune expressway", quantity: "4", cost: "320" },
                     { category: "PERMIT", description: "State entry permit", quantity: "1", cost: "1500" },

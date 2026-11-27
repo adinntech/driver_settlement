@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { asVertical } from "../utils/vertical.js";
 import ExcelJS from "exceljs";
 import { Driver } from "../models/Driver.js";
 import { IoclTransaction } from "../models/IoclTransaction.js";
@@ -111,8 +112,10 @@ const isSale = (r) => r.txnType.toLowerCase() === "sale";
 const paise = (n) => Math.round((n ?? 0) * 100);
 export async function listIocl(q) {
     const filter = filterOf(q);
-    const rows = await read(filter);
-    const match = await matcher(rows);
+    const found = await read(filter);
+    const match = await matcher(found);
+    // vertical comes from the matched project, so unmatched lines appear under All Verticals only
+    const rows = asVertical(q.projectType) ? found.filter((r) => match(r).department === q.projectType) : found;
     const all = rows.map((r) => ({
         _id: String(r._id), txnId: r.txnId, txnDate: r.txnDate, txnTime: r.txnTime, txnType: r.txnType, vehicleNo: r.vehicleNo ?? null, product: r.product ?? null,
         rsp: r.rsp ?? null, quantity: r.quantity ?? null, amount: r.amount ?? null, fileAmount: r.fileAmount ?? null, amountCorrected: !!r.amountCorrected,
@@ -122,7 +125,7 @@ export async function listIocl(q) {
     const totals = new Map();
     for (const r of all.filter(isSale)) {
         const key = r.vehicleNo ?? "";
-        const t = totals.get(key) ?? { vehicleNo: key, count: 0, quantityH: 0, amountP: 0, status: r.match.status };
+        const t = totals.get(key) ?? { vehicleNo: key, count: 0, quantityH: 0, amountP: 0, status: r.match.status, vertical: r.match.department };
         t.count++;
         t.quantityH += paise(r.quantity);
         t.amountP += paise(r.amount);
@@ -148,10 +151,11 @@ const AMOUNT_COLUMN = 11;
 export async function exportIocl(q) {
     if (!q.from || !q.to)
         throw new AppError("Choose the From and To dates to export", 400);
-    const rows = (await read(filterOf(q))).filter(isSale);
+    const sales = (await read(filterOf(q))).filter(isSale);
+    const match = await matcher(sales);
+    const rows = asVertical(q.projectType) ? sales.filter((r) => match(r).department === q.projectType) : sales;
     if (!rows.length)
         throw new AppError("There are no fuel transactions for these filters", 404);
-    const match = await matcher(rows);
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("Sheet1");
     ws.columns = WIDTHS.map((width) => ({ width }));

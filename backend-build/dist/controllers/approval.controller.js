@@ -13,8 +13,8 @@ export const list = wrap(async (req, res) => {
     });
     res.status(200).json(sendResponse(true, "Budgets fetched successfully", data));
 });
-export const stats = wrap(async (_req, res) => {
-    res.status(200).json(sendResponse(true, "Approval summary fetched successfully", await approvalStats()));
+export const stats = wrap(async (req, res) => {
+    res.status(200).json(sendResponse(true, "Approval summary fetched successfully", await approvalStats(String(req.query.projectType ?? ""))));
 });
 export const detail = wrap(async (req, res) => {
     res.status(200).json(sendResponse(true, "Budget review fetched successfully", await reviewDetail(String(req.params.id), req.query.order === "desc")));

@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { asVertical } from "../utils/vertical.js";
 import { Budget, BudgetVersion } from "../models/Budget.js";
 import { BudgetEvent } from "../models/Approval.js";
 import { recordEvent, statusOf } from "./budgetEvents.js";
@@ -214,8 +215,10 @@ export async function listApprovals(q) {
     const page = Math.max(q.page ?? 1, 1);
     return { items: rows.slice((page - 1) * limit, page * limit), total: rows.length, page, limit };
 }
-export async function approvalStats() {
-    const [pending, approved, rejected] = await Promise.all(["PENDING", "APPROVED", "REJECTED"].map((s) => Budget.countDocuments({ approvalStatus: s })));
+export async function approvalStats(projectType) {
+    const type = asVertical(projectType);
+    const only = type ? { project: { $in: await TrackingProject.find({ projectType: type }).distinct("_id") } } : {};
+    const [pending, approved, rejected] = await Promise.all(["PENDING", "APPROVED", "REJECTED"].map((s) => Budget.countDocuments({ approvalStatus: s, ...only })));
     return { total: pending + approved + rejected, pending, approved, rejected };
 }
 /** Oldest first by default (existing contract); `desc` returns the latest action first. */

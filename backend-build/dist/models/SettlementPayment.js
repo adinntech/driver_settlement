@@ -9,7 +9,7 @@ import mongoose, { Schema } from "mongoose";
  */
 export const PAYMENT_CATEGORIES = ["DAILY", "FINAL"];
 export const SETTLEMENT_STATUSES = ["PENDING", "APPROVED", "REJECTED", "COMPLETED"];
-export const SETTLEMENT_ACTIONS = ["SUBMITTED", "RESUBMITTED", "APPROVED", "REJECTED", "EXPORTED", "COMPLETED"];
+export const SETTLEMENT_ACTIONS = ["SUBMITTED", "RESUBMITTED", "APPROVED", "REJECTED", "EXPORTED", "COMPLETED", "MILEAGE_EDITED"];
 /** Modes RSA chooses in the payment Entry popup. */
 export const ENTRY_PAYMENT_MODES = ["CASH", "CHEQUE", "DD", "EPAYMENT"];
 export const PAYMENT_MODE_LABEL = { CASH: "Cash", CHEQUE: "Cheque", DD: "DD", EPAYMENT: "ePayment", NEFT: "NEFT", RTGS: "RTGS", IMPS: "IMPS", UPI: "UPI" };

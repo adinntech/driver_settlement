@@ -4,7 +4,7 @@ const wrap = (fn) => (req, res, next) => fn(req, res).catch(next);
 const q = (v) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
 const n = (v) => (typeof v === "string" && /^\d+$/.test(v) ? Number(v) : undefined);
 export const list = wrap(async (req, res) => {
-    const data = await listDrivers({ q: q(req.query.q), availabilityStatus: q(req.query.availabilityStatus), page: n(req.query.page), limit: n(req.query.limit) });
+    const data = await listDrivers({ q: q(req.query.q), projectType: typeof req.query.projectType === "string" ? req.query.projectType : undefined, availabilityStatus: q(req.query.availabilityStatus), page: n(req.query.page), limit: n(req.query.limit) });
     res.status(200).json(sendResponse(true, "Drivers fetched successfully", data));
 });
 export const one = wrap(async (req, res) => {

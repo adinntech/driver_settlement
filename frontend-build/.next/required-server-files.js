@@ -105,7 +105,7 @@ self.__SERVER_FILES_MANIFEST={
         "transform": "lodash/{{member}}"
       }
     },
-    "outputFileTracingRoot": "C:\\Users\\Admin\\AppData\\Local\\Temp\\ds-src\\frontend",
+    "outputFileTracingRoot": "C:\\Users\\mjezi\\AppData\\Local\\Temp\\ds-src\\frontend",
     "enablePrerenderSourceMaps": true,
     "cacheComponents": true,
     "cacheLife": {
@@ -181,7 +181,7 @@ self.__SERVER_FILES_MANIFEST={
       "proxyPrefetch": "flexible",
       "optimisticClientCache": true,
       "manualClientBasePath": false,
-      "cpus": 11,
+      "cpus": 19,
       "memoryBasedWorkersCount": false,
       "imgOptConcurrency": null,
       "imgOptOperationCache": null,
@@ -337,9 +337,9 @@ self.__SERVER_FILES_MANIFEST={
     "configFileName": "next.config.ts",
     "partialPrefetching": true,
     "reactCompiler": true,
-    "repoRoot": "C:\\Users\\Admin\\AppData\\Local\\Temp\\ds-src\\frontend",
+    "repoRoot": "C:\\Users\\mjezi\\AppData\\Local\\Temp\\ds-src\\frontend",
     "turbopack": {
-      "root": "C:\\Users\\Admin\\AppData\\Local\\Temp\\ds-src\\frontend"
+      "root": "C:\\Users\\mjezi\\AppData\\Local\\Temp\\ds-src\\frontend"
     },
     "distDirRoot": ".next",
     "_originalRedirects": [
@@ -350,7 +350,7 @@ self.__SERVER_FILES_MANIFEST={
       }
     ]
   },
-  "appDir": "C:\\Users\\Admin\\AppData\\Local\\Temp\\ds-src\\frontend",
+  "appDir": "C:\\Users\\mjezi\\AppData\\Local\\Temp\\ds-src\\frontend",
   "relativeAppDir": "",
   "files": [
     ".next\\package.json",
