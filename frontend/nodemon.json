@@ -1,6 +1,0 @@
-{
-  "watch": ["next.config.ts", ".env.local"],
-  "ext": "ts,local",
-  "exec": "next dev -p 3000",
-  "delay": 300
-}

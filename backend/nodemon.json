@@ -1,7 +1,0 @@
-{
-  "watch": ["src", ".env"],
-  "ext": "ts,json",
-  "ignore": ["dist", "tests"],
-  "exec": "tsx src/server.ts",
-  "delay": 300
-}
