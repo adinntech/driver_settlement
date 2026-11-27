@@ -1,90 +1,106 @@
-// Job: "driver-settlement" (one job for both services). Triggered by a push to main_build.
-// Flow: developer builds locally from main, copies the build into frontend-build/ and/or backend-build/ on main_build, pushes.
-// Jenkins deploys only the containers whose files changed since the last successful run (no source build, no loop).
+// Job: "driver-settlement" (Scripted Pipeline, one job for both services). Triggered by a push to main_build.
+// Deploys only the containers whose build, deploy/ or compose file changed since the last successful run.
 // Every deployed service reports to Google Chat (Secret text credential "google-chat-webhook"); reporting can never change the result.
-pipeline {
-  agent any
-  options { disableConcurrentBuilds(); timestamps() }
-  triggers { githubPush() }
-  environment {
-    DEPLOY_HOST = 'jenkins-deploy@172.17.0.1'
-    SERVER = '168.144.123.41'
-  }
-  stages {
-    stage('Checkout main_build') {
-      steps {
-        script { env.FAILED_STAGE = 'Checkout main_build' }
-        sh 'rm -f deploy-*.log gchat-payload.json'
-        script {
-          def scm = checkout([$class: 'GitSCM', branches: [[name: '*/main_build']],
+// Trigger and concurrency are NOT set here: configure them on the job. This script changes no job property.
+
+timestamps {
+  node {
+    withEnv(['DEPLOY_HOST=jenkins-deploy@172.17.0.1']) {
+      def failedStage = 'Checkout main_build'
+      def checkedOut = false
+      def selected = []
+      def deployedOk = []
+      def failure = ''
+      try {
+        def base = 'HEAD~1'
+        stage('Checkout main_build') {
+          sh 'rm -f deploy-*.log gchat-payload.json'
+          def scmVars = checkout([$class: 'GitSCM', branches: [[name: '*/main_build']],
             userRemoteConfigs: [[url: 'https://github.com/adinntech/driver_settlement.git', credentialsId: 'github-driver-settlement']]])
-          env.BASE_COMMIT = scm.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: 'HEAD~1'
-          env.CHECKED_OUT = 'yes'
+          base = scmVars.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: 'HEAD~1'
+          checkedOut = true
         }
-      }
-    }
-    stage('Changed paths') {
-      steps {
-        script {
-          env.FAILED_STAGE = 'Changed paths'
-          // empty diff ("Build Now" on an already deployed commit) or an unknown base: deploy both
-          def diff = sh(returnStdout: true, script: 'git diff --name-only "$BASE_COMMIT" HEAD || true').trim()
-          def changed = { String dir -> (diff == '' || diff.split('\n').any { it.startsWith(dir) || it.startsWith('deploy/') || it == 'docker-compose.prod.yml' }) ? 'yes' : 'no' }
-          env.RUN_BACKEND = changed('backend-build/')
-          env.RUN_FRONTEND = changed('frontend-build/')
+        stage('Changed paths') {
+          failedStage = 'Changed paths'
+          // a failing diff fails the build; an empty diff deploys nothing
+          def diff = ''
+          withEnv(["BASE_COMMIT=${base}"]) {
+            diff = sh(returnStdout: true, script: 'git diff --name-only "$BASE_COMMIT" HEAD || git diff --name-only HEAD~1 HEAD').trim()
+          }
+          def files = diff.split('\n')
+          def shared = files.any { it.startsWith('deploy/') || it == 'docker-compose.prod.yml' }
+          if (shared || files.any { it.startsWith('backend-build/') }) selected << 'backend'
+          if (shared || files.any { it.startsWith('frontend-build/') }) selected << 'frontend'
         }
-      }
-    }
-    stage('Deploy backend') {
-      when { environment name: 'RUN_BACKEND', value: 'yes' }
-      steps {
-        // a backend failure still fails the build, but does not stop the frontend deploy
-        catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
-          script { deploy('backend'); env.OK_BACKEND = 'yes' }
+        for (svc in selected) {
+          // a failure still fails the build, but does not stop the other service
+          catchError(buildResult: 'FAILURE', stageResult: 'FAILURE', catchInterruptions: false) {
+            stage("Deploy ${svc}") {
+              sshagent(credentials: ['jenkins-deploy-ssh']) {
+                // the output is also kept for the notification
+                withEnv(["SVC=${svc}"]) {
+                  sh '''#!/usr/bin/env bash
+set -o pipefail
+ssh -o BatchMode=yes -o StrictHostKeyChecking=yes $DEPLOY_HOST sudo -n /opt/deploy/deploy-driver-settlement.sh "$SVC" 2>&1 | tee "deploy-$SVC.log"
+'''
+                }
+              }
+              deployedOk << svc
+            }
+          }
         }
-      }
-    }
-    stage('Deploy frontend') {
-      when { environment name: 'RUN_FRONTEND', value: 'yes' }
-      steps {
-        catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
-          script { deploy('frontend'); env.OK_FRONTEND = 'yes' }
-        }
-      }
-    }
-  }
-  post {
-    cleanup {
-      script {
+        if (!selected) echo 'No frontend or backend changes: deployment skipped'
+      } catch (Throwable e) {
+        // Scripted Pipeline has not set the result yet at this point, so record it here; the error is rethrown unchanged
+        failure = e instanceof InterruptedException ? 'ABORTED' : 'FAILURE'
+        throw e
+      } finally {
         try {
-          def result = currentBuild.currentResult
-          def ran = []
-          if (env.RUN_BACKEND == 'yes') ran << 'backend'
-          if (env.RUN_FRONTEND == 'yes') ran << 'frontend'
+          def result = failure ?: currentBuild.currentResult
           // nothing selected: one message (skipped, or the failure that happened before any deploy)
-          for (svc in (ran ?: ['none'])) {
-            notifyChat(svc, result)
+          for (svc in (selected ?: ['none'])) {
+            def status = deployedOk.contains(svc) ? 'SUCCESS' : (svc == 'none' && result == 'SUCCESS') ? 'SKIPPED' : result
+            // without a completed checkout the workspace still holds an earlier build: read nothing from it
+            def logFile = "deploy-${svc}.log"
+            def log = (checkedOut && fileExists(logFile)) ? readFile(logFile) : ''
+            def gitLine = { String args -> sh(returnStdout: true, script: "git log -1 --format='%h — %s (%an)' ${args} 2>/dev/null || true").trim() }
+            def commit = checkedOut ? gitLine('HEAD') : ''
+            def head = checkedOut ? sh(returnStdout: true, script: 'git rev-parse HEAD 2>/dev/null || true').trim() : ''
+            // what the server really moved to; shown only when it is not the commit that triggered this run
+            def serverHead = updatedTo(log)
+            def deployed = ''
+            if (serverHead && head && !head.startsWith(serverHead)) {
+              deployed = gitLine(serverHead) ?: serverHead
+            }
+            def now = sh(returnStdout: true, script: "TZ='IST-05:30' date '+%d %b %Y, %H:%M:%S IST'").trim()
+            // a refused or failing lookup must not cost the whole message
+            def causes = ''
+            try {
+              causes = currentBuild.getBuildCauses().collect { it.shortDescription }.join(', ')
+            } catch (Throwable err) {
+              echo 'Trigger description unavailable'
+            }
+            def text = chatMessage(serviceInfo(svc) + [
+              status: status, build: env.BUILD_NUMBER, commit: commit, deployed: deployed, now: now, server: '168.144.123.41',
+              log: log, stage: svc == 'none' ? failedStage : "Deploy ${svc}",
+              causes: causes ?: 'unknown', duration: currentBuild.durationString.replace(' and counting', ''), console: env.BUILD_URL ? "${env.BUILD_URL}console" : '',
+            ])
+            writeFile(file: 'gchat-payload.json', text: groovy.json.JsonOutput.toJson([text: text]), encoding: 'UTF-8')
+            withCredentials([string(credentialsId: 'google-chat-webhook', variable: 'GCHAT_WEBHOOK')]) {
+              // single-quoted: the webhook is expanded by the shell only; curl output is discarded so it can never be logged
+              sh '''set +x
+curl -fsS --max-time 20 -X POST -H 'Content-Type: application/json; charset=UTF-8' --data-binary @gchat-payload.json "$GCHAT_WEBHOOK" >/dev/null 2>&1 || echo 'Google Chat notification could not be sent (build result unchanged)'
+'''
+            }
           }
         } catch (Throwable err) {
-          // Errors too (e.g. a missing plugin step); currentBuild.result is never assigned here
           echo 'Google Chat notification skipped (build result unchanged)'
+          // console only: names a missing plugin or a signature awaiting Script Approval
+          try { echo "Reason: ${err.message}" } catch (Throwable ignored) { echo 'Reason unavailable' }
         } finally {
           try { sh 'rm -f deploy-*.log gchat-payload.json' } catch (Throwable err) { echo 'could not remove notification files' }
         }
       }
-    }
-  }
-}
-
-def deploy(String svc) {
-  env.FAILED_STAGE = "Deploy ${svc}"
-  sshagent(credentials: ['jenkins-deploy-ssh']) {
-    // the output is also kept for the notification, and a failure still fails the stage
-    withEnv(["SVC=${svc}"]) {
-      sh '''#!/usr/bin/env bash
-set -o pipefail
-ssh -o BatchMode=yes -o StrictHostKeyChecking=yes $DEPLOY_HOST sudo -n /opt/deploy/deploy-driver-settlement.sh "$SVC" 2>&1 | tee "deploy-$SVC.log"
-'''
     }
   }
 }
@@ -104,44 +120,11 @@ def serviceInfo(String svc) {
     url: 'https://adinntech.in/driver-settlement/']
 }
 
-def notifyChat(String svc, String result) {
-  def status = result
-  if (svc == 'none' && result == 'SUCCESS') status = 'SKIPPED'
-  if (svc == 'backend' && env.OK_BACKEND == 'yes') status = 'SUCCESS'
-  if (svc == 'frontend' && env.OK_FRONTEND == 'yes') status = 'SUCCESS'
-  // without a completed checkout the workspace still holds an earlier build: read nothing from it
-  def checkedOut = env.CHECKED_OUT == 'yes'
-  def logFile = "deploy-${svc}.log"
-  def log = (checkedOut && fileExists(logFile)) ? readFile(logFile) : ''
-  def git = { String args -> sh(returnStdout: true, script: "git log -1 --format='%h — %s (%an)' ${args} 2>/dev/null || true").trim() }
-  def commit = checkedOut ? git('HEAD') : ''
-  def head = checkedOut ? sh(returnStdout: true, script: 'git rev-parse HEAD 2>/dev/null || true').trim() : ''
-  // what the server really moved to; shown only when it is not the commit that triggered this run
-  def serverHead = updatedTo(log)
-  def deployed = ''
-  if (serverHead && head && !head.startsWith(serverHead)) {
-    deployed = git(serverHead) ?: serverHead
-  }
-  def now = sh(returnStdout: true, script: "TZ='IST-05:30' date '+%d %b %Y, %H:%M:%S IST'").trim()
-  def causes = currentBuild.getBuildCauses().collect { it.shortDescription }.join(', ')
-  def text = chatMessage(serviceInfo(svc) + [
-    status: status, build: env.BUILD_NUMBER, commit: commit, deployed: deployed, now: now, server: env.SERVER,
-    log: log, stage: svc == 'none' ? (env.FAILED_STAGE ?: 'unknown') : "Deploy ${svc}",
-    causes: causes ?: 'unknown', duration: currentBuild.durationString.replace(' and counting', ''), console: "${env.BUILD_URL}console",
-  ])
-  writeFile(file: 'gchat-payload.json', text: groovy.json.JsonOutput.toJson([text: text]), encoding: 'UTF-8')
-  withCredentials([string(credentialsId: 'google-chat-webhook', variable: 'GCHAT_WEBHOOK')]) {
-    // single-quoted: the webhook is expanded by the shell only; curl output is discarded so it can never be logged
-    sh '''set +x
-curl -fsS --max-time 20 -X POST -H 'Content-Type: application/json; charset=UTF-8' --data-binary @gchat-payload.json "$GCHAT_WEBHOOK" >/dev/null 2>&1 || echo 'Google Chat notification could not be sent (build result unchanged)'
-'''
-  }
-}
-
 /** Masks recognisable secret values; used as is for commit subjects and build causes. */
 @NonCPS
 String maskValues(String s) {
   s.replaceAll(/\u001B\[[0-9;]*[A-Za-z]/, '')
+    .replaceAll('<', '‹').replaceAll('>', '›')
     .replaceAll(/(?i)mongodb(\+srv)?:\/\/\S+/, '[database url]')
     .replaceAll(/(?i)https:\/\/chat\.googleapis\.com\S*/, '[webhook]')
     .replaceAll(/(?i)\b([a-z][a-z0-9+.-]*):\/\/[^\s\/@]+@/, '$1://[credentials]@')
@@ -228,6 +211,6 @@ String chatMessage(Map m) {
     out << "Error: ${ran ? '\n' + errorDetails(m.log) : 'no deployment output; see the console'}"
   }
   out << "Triggered: ${maskValues(m.causes)} · Duration ${m.duration}"
-  out << "<${m.console}|Open console>"
+  out << (m.console ? "<${m.console}|Open console>" : 'Console: Jenkins URL is not configured')
   return out.join('\n')
 }
