@@ -5,7 +5,7 @@ set -Eeuo pipefail
 SVC="${1:-}"
 [[ "$SVC" == frontend || "$SVC" == backend ]] || { echo "usage: $0 frontend|backend"; exit 2; }
 DIR=/opt/driver-settlement
-BRANCH="${DS_BRANCH:-main}"   # first manual deploy: DS_BRANCH=main_build
+BRANCH="${DS_BRANCH:-main_build}"  # frontend deploys prebuilt frontend-build/ from main_build
 case $SVC in
   frontend) PORT=3016; URL=http://127.0.0.1:3016/driver-settlement/login ;;
   backend)  PORT=3017; URL=http://127.0.0.1:3017/api/health ;;

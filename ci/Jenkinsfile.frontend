@@ -1,14 +1,15 @@
-// Job: "driver settlement frontend". Trigger ONLY on branch main (never main_build, so no loop).
-// Placeholders to confirm: github-driver-settlement (GitHub push credential) and the SSH mechanism used by existing jobs.
+// Job: "driver settlement frontend". Triggered by a push to main_build.
+// Flow: developer builds locally from main, copies the build into frontend-build/ on main_build, pushes.
+// Jenkins then deploys ONLY the frontend container from the prebuilt files (no source build, no loop).
 pipeline {
   agent any
   options { disableConcurrentBuilds(); timestamps() }
   triggers { githubPush() }
   environment { DEPLOY_HOST = 'jenkins-deploy@172.17.0.1' }
   stages {
-    stage('Checkout main') {
+    stage('Checkout main_build') {
       steps {
-        checkout([$class: 'GitSCM', branches: [[name: '*/main']],
+        checkout([$class: 'GitSCM', branches: [[name: '*/main_build']],
           userRemoteConfigs: [[url: 'https://github.com/adinntech/driver_settlement.git', credentialsId: 'github-driver-settlement']]])
       }
     }
@@ -16,16 +17,7 @@ pipeline {
       steps {
         script {
           def diff = sh(returnStdout: true, script: 'git diff --name-only HEAD~1 HEAD || true').trim()
-          env.RUN = (diff == '' || diff.split('\n').any { it.startsWith('frontend/') }) ? 'yes' : 'no'
-        }
-      }
-    }
-    stage('Sync main_build') {
-      when { environment name: 'RUN', value: 'yes' }
-      steps {
-        withCredentials([usernamePassword(credentialsId: 'github-driver-settlement', usernameVariable: 'GU', passwordVariable: 'GP')]) {
-          // Source snapshot of main only; .next and node_modules are gitignored and never committed.
-          sh 'git push "https://${GU}:${GP}@github.com/adinntech/driver_settlement.git" HEAD:refs/heads/main_build --force'
+          env.RUN = (diff == '' || diff.split('\n').any { it.startsWith('frontend-build/') || it.startsWith('deploy/') || it == 'docker-compose.prod.yml' }) ? 'yes' : 'no'
         }
       }
     }
