@@ -13,7 +13,7 @@ import StatCard from "@/components/ui/StatCard";
 import { useDebounce } from "@/hooks/useDebounce";
 import type { Project, Stats, Vehicle } from "@/types/domain";
 import { formatDate, formatDateTime, labelize } from "@/utils/format";
-import { sumVehicleTypes, vehicleTypesText } from "@/utils/vehicleTypes";
+import { vehicleTypesText } from "@/utils/vehicleTypes";
 import { groupByProjectCode, type ProjectGroup } from "@/utils/projectCode";
 
 export default function RsopDashboard() {
@@ -180,7 +180,7 @@ function GroupRows({ g, open, onToggle, onView }: { g: ProjectGroup; open: boole
         <td><span className={`type type-${g.projectType.toLowerCase()}`}>{g.projectType === "ROADSHOW" ? "Roadshow" : "Signage"}</span></td>
         <td>{g.clientName}</td>
         <td className="ds-nowrap">{formatDate(g.startDate)}<br /><small className="muted">to {formatDate(g.endDate)}</small></td>
-        <td><strong>{g.vehicleCount}</strong><br /><small className="muted">{vehicleTypesText(sumVehicleTypes(g.requests.map((r) => r.details.vehicleTypes)))}</small>{g.requests.length > 1 && <><br /><small className="muted">{g.requests.length} requests</small></>}</td>
+        <td><strong>{g.vehicleCount}</strong>{g.requests.length > 1 && <><br /><small className="muted">{g.requests.length} requests</small></>}</td>
         <td>{formatDateTime(g.lastCreatedAt)}</td>
         <td><small className="muted">{g.budgetsCreated} / {g.vehicleCount} created</small></td>
       </tr>
