@@ -6,7 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useApi } from "@/hooks/useApi";
 import { useBackendStatus } from "@/hooks/useBackendStatus";
 import { homeFor } from "@/utils/budgetDescribe";
-import { API_BASE_URL } from "@/utils/config";
+import { API_BASE_URL, BASE_PATH } from "@/utils/config";
 import type { RoleKey, RolesMap } from "@/types/domain";
 
 /** Workspace labels shown on the role picker (the server's role list still decides which roles exist and their usernames). */
@@ -126,7 +126,7 @@ export default function LoginPage() {
         <div className="lx-brand-top">
           {/* white artwork with the original red accents, transparent background, original aspect ratio */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="lx-logo" src="/adinn-logo-white.png" alt="Adinn Advertising Services Ltd." width={1300} height={514} />
+          <img className="lx-logo" src={`${BASE_PATH}/adinn-logo-white.png`} alt="Adinn Advertising Services Ltd." width={1300} height={514} />
 
         </div>
 

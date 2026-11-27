@@ -1,0 +1,36 @@
+// Job: "driver settlement frontend". Trigger ONLY on branch main (never main_build, so no loop).
+// Placeholders to confirm: GIT_CRED_ID (GitHub push credential) and the SSH mechanism used by existing jobs.
+pipeline {
+  agent any
+  options { disableConcurrentBuilds(); timestamps() }
+  environment { DEPLOY_HOST = 'root@168.144.123.41' }
+  stages {
+    stage('Checkout main') {
+      steps {
+        checkout([$class: 'GitSCM', branches: [[name: '*/main']],
+          userRemoteConfigs: [[url: 'https://github.com/adinntech/driver_settlement.git', credentialsId: 'GIT_CRED_ID']]])
+      }
+    }
+    stage('Changed paths') {
+      steps {
+        script {
+          def diff = sh(returnStdout: true, script: 'git diff --name-only HEAD~1 HEAD || true').trim()
+          env.RUN = (diff == '' || diff.split('\n').any { it.startsWith('frontend/') }) ? 'yes' : 'no'
+        }
+      }
+    }
+    stage('Sync main_build') {
+      when { environment name: 'RUN', value: 'yes' }
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'GIT_CRED_ID', usernameVariable: 'GU', passwordVariable: 'GP')]) {
+          // Source snapshot of main only; .next and node_modules are gitignored and never committed.
+          sh 'git push "https://${GU}:${GP}@github.com/adinntech/driver_settlement.git" HEAD:refs/heads/main_build --force'
+        }
+      }
+    }
+    stage('Deploy frontend only') {
+      when { environment name: 'RUN', value: 'yes' }
+      steps { sh 'ssh -o BatchMode=yes $DEPLOY_HOST /opt/deploy/deploy-driver-settlement.sh frontend' }
+    }
+  }
+}

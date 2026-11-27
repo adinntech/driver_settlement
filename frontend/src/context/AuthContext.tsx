@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { clearSessionState } from "@/hooks/useSessionState";
 import { request, TOKEN_KEY, tokenStore } from "@/services/api";
+import { BASE_PATH } from "@/utils/config";
 import type { AuthUser, RoleKey } from "@/types/domain";
 
 interface AuthState {
@@ -53,17 +54,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     tokenStore.clear();
     clearSessionState();
     setUser(null);
-    window.location.replace("/login");
+    window.location.replace(`${BASE_PATH}/login`);
   }, []);
 
   useEffect(() => {
     // Back / Forward restoring a signed-in page from the browser's back-forward cache after sign-out: reload as signed out.
     const onShow = (e: PageTransitionEvent) => {
-      if (e.persisted && !tokenStore.get() && window.location.pathname !== "/login") window.location.replace("/login");
+      if (e.persisted && !tokenStore.get() && window.location.pathname !== `${BASE_PATH}/login`) window.location.replace(`${BASE_PATH}/login`);
     };
     // Signed out in another tab of the same browser: end this tab's session too.
     const onStorage = (e: StorageEvent) => {
-      if (e.key === TOKEN_KEY && !e.newValue && window.location.pathname !== "/login") window.location.replace("/login");
+      if (e.key === TOKEN_KEY && !e.newValue && window.location.pathname !== `${BASE_PATH}/login`) window.location.replace(`${BASE_PATH}/login`);
     };
     window.addEventListener("pageshow", onShow);
     window.addEventListener("storage", onStorage);

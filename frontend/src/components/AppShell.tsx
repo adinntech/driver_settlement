@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { BASE_PATH } from "@/utils/config";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "@/context/AuthContext";
@@ -74,7 +75,7 @@ export default function AppShell({ role, children }: { role: RoleKey; children: 
       <aside className={`sidebar${open ? " open" : ""}`}>
         <div className="brand">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/adinn-logo.png" alt="Adinn Advertising Services" className="brand-logo" />
+          <img src={`${BASE_PATH}/adinn-logo.png`} alt="Adinn Advertising Services" className="brand-logo" />
           <div>
             <strong>Driver Settlement</strong>
             <small>{role} workspace</small>
