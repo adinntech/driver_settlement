@@ -27,6 +27,7 @@ services:
       context: ./frontend
       args:
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:?set in .env}
+        NEXT_PUBLIC_BASE_PATH: ${NEXT_PUBLIC_BASE_PATH:-}
     image: driver-settlement-frontend:latest
     container_name: driver-settlement-frontend
     restart: unless-stopped
@@ -34,7 +35,7 @@ services:
       - "127.0.0.1:3016:3000"
     networks: [driver-settlement-network]
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000' + (process.env.NEXT_PUBLIC_BASE_PATH||'') + '/login').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3

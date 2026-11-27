@@ -7,7 +7,7 @@ SVC="${1:-}"
 DIR=/opt/driver-settlement
 BRANCH="${DS_BRANCH:-main}"   # first manual deploy: DS_BRANCH=main_build
 case $SVC in
-  frontend) PORT=3016; URL=http://127.0.0.1:3016/ ;;
+  frontend) PORT=3016; URL=http://127.0.0.1:3016/driver-settlement/login ;;
   backend)  PORT=3017; URL=http://127.0.0.1:3017/api/health ;;
 esac
 export COMPOSE_IGNORE_ORPHANS=1
