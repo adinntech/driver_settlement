@@ -30,6 +30,7 @@ interface Review {
     changes: { field: string; from: unknown; to: unknown }[];
     rejection: NonNullable<Budget["rejection"]>;
     resubmissionComment: string | null;
+    revision: null | { reason: string; by: string; at: string; version: number };
   };
 }
 
@@ -147,6 +148,13 @@ function Body({ data, reload }: { data: Review; reload: () => void }) {
             Previously rejected{comparison.rejection.reason ? `: ${comparison.rejection.reason}` : ""}
             {comparison.resubmissionComment && <> · <strong>RBP comment:</strong> {comparison.resubmissionComment}</>}
           </p>
+          {comparison.revision && (
+            <p>
+              <strong>Reason for revision:</strong> {comparison.revision.reason}
+              <br />
+              <span className="muted">Edited by {comparison.revision.by} on {formatDateTime(comparison.revision.at)} (V{comparison.revision.version})</span>
+            </p>
+          )}
           <table className="table">
             <thead><tr><th>Field</th><th>Rejected version</th><th>Resubmitted version</th><th>RSOM comment</th></tr></thead>
             <tbody>

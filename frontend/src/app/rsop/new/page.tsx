@@ -38,6 +38,9 @@ export default function NewTrackingPage() {
 
 function Wizard() {
   const [type, setType] = useState<ProjectType | null>(null);
+  // Unmounting the form drops all of its state (fields, vehicle types, step, requestId). The router keeps this page alive across
+  // navigation, so a finished form must be discarded explicitly.
+  const reset = () => setType(null);
   return (
     <>
       <div className="page-head">
@@ -56,7 +59,7 @@ function Wizard() {
       </div>
       {type && (
         <div key={type} className="fade-in">
-          {type === "ROADSHOW" ? <RoadshowForm /> : <SignageForm />}
+          {type === "ROADSHOW" ? <RoadshowForm onReset={reset} /> : <SignageForm onReset={reset} />}
         </div>
       )}
     </>
@@ -165,7 +168,7 @@ function useVehicleTypes(countText: string | undefined) {
   return { countProps, summary, modal, error: valid ? vehicleTypesError(selection, count) : null, list: toVehicleTypes(selection) };
 }
 
-function useSubmit(projectType: ProjectType) {
+function useSubmit(projectType: ProjectType, onReset: () => void) {
   const router = useRouter();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
@@ -187,7 +190,7 @@ function useSubmit(projectType: ProjectType) {
     }
   }
   const done = created && (
-    <Modal title="Tracking numbers created" wide onClose={() => router.push("/rsop")}>
+    <Modal title="Tracking numbers created" wide onClose={onReset}>
       <p className="muted">
         {created.clientName} — {created.vehicles.length} vehicle(s). Copy any number below; you can view them anytime from the dashboard.
       </p>
@@ -221,7 +224,7 @@ function useSubmit(projectType: ProjectType) {
         </tbody>
       </table>
       <div className="actions-row">
-        <button className="btn btn-primary" onClick={() => router.push("/rsop")}>
+        <button className="btn btn-primary" onClick={() => { onReset(); router.push("/rsop"); }}>
           Go to dashboard
         </button>
       </div>
@@ -232,7 +235,7 @@ function useSubmit(projectType: ProjectType) {
 
 const clean = (f: Form) => Object.fromEntries(Object.entries(f).filter(([, v]) => v !== ""));
 
-function RoadshowForm() {
+function RoadshowForm({ onReset }: { onReset: () => void }) {
   const { f, set, bind, errors, setErrors } = useFormState({
     sundayHalt: "NO", paSystem: "NO", mike: "NO", tv: "NO", promoter: "NO", leaflet: "NO", extraKmAllowed: "NO",
     photos: "REQUIRED", startDate: todayIst(),
@@ -267,7 +270,7 @@ function RoadshowForm() {
   };
   const [step, setStep] = useState(0);
   const [confirm, setConfirm] = useState(false);
-  const { submit, busy, done } = useSubmit("ROADSHOW");
+  const { submit, busy, done } = useSubmit("ROADSHOW", onReset);
   const types = useVehicleTypes(f.numberOfVans);
 
   const days = useMemo(
@@ -466,13 +469,13 @@ function RoadshowForm() {
   );
 }
 
-function SignageForm() {
+function SignageForm({ onReset }: { onReset: () => void }) {
   const today = todayIst();
   const { f, bind, set, errors, setErrors } = useFormState({ date: today, fromDate: today });
   const minStart = earliestStartYmd(today);
   const [confirm, setConfirm] = useState(false);
   const [manualDays, setManualDays] = useState(false);
-  const { submit, busy, done } = useSubmit("SIGNAGE");
+  const { submit, busy, done } = useSubmit("SIGNAGE", onReset);
   const types = useVehicleTypes(f.numberOfVehicles);
 
   const auto = f.fromDate && f.toDate ? countDays(f.fromDate, f.toDate, false) : 0;

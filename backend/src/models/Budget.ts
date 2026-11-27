@@ -34,6 +34,8 @@ const versionSchema = new Schema(
     total: { type: Number, required: true },
     changes: { type: [Schema.Types.Mixed], default: [] },
     updatedBy: { type: String, required: true },
+    /** Why RBP edited a rejected budget (only on versions saved while it was rejected). */
+    revisionReason: String,
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );

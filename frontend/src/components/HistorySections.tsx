@@ -186,6 +186,15 @@ function EventBody({ e }: { e: BudgetEvent }) {
           </dd>
         </div>
       )}
+      {typeof d.revisionReason === "string" && (
+        <div className="wide">
+          <dt>Reason for revision</dt>
+          <dd>
+            {d.revisionReason}
+            {typeof d.revisedBy === "string" && <> (edited by {d.revisedBy} on {when(String(d.revisedAt))})</>}
+          </dd>
+        </div>
+      )}
       {typeof d.comment === "string" && d.comment && <div className="wide"><dt>RBP comment</dt><dd>{d.comment}</dd></div>}
       {changes.length > 0 && (
         <div className="wide">

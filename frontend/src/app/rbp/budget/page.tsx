@@ -8,7 +8,7 @@ import { Suspense, createContext, useCallback, useContext, useMemo, useRef, useS
 import AppShell from "@/components/AppShell";
 import CopyButton from "@/components/ui/CopyButton";
 import { DecimalInput, IntInput } from "@/components/ui/Inputs";
-import { ConfirmDialog, ErrorState, Skeleton } from "@/components/ui/Ui";
+import { ConfirmDialog, ErrorState, Modal, Skeleton } from "@/components/ui/Ui";
 import { useToast } from "@/context/ToastContext";
 import { useApi } from "@/hooks/useApi";
 import { ApiError, request } from "@/services/api";
@@ -42,6 +42,8 @@ function BudgetView() {
   const vehicle = useSearchParams().get("vehicle");
   const res = useApi<{ context: BudgetContext; budget: Budget | null; activity: Activity | null }>(vehicle ? `/budgets/vehicle/${vehicle}` : null);
   const [editing, setEditing] = useState(false);
+  const [askReason, setAskReason] = useState(false);
+  const [revisionReason, setRevisionReason] = useState("");
 
   if (!vehicle) return <ErrorState message="No vehicle selected." />;
   if (res.loading) return <Skeleton rows={8} />;
@@ -59,8 +61,8 @@ function BudgetView() {
           </p>
         </div>
         {budget && !editing && canEdit(budget.approvalStatus) && (
-          <button className="btn btn-primary" onClick={() => setEditing(true)}>
-            Edit Budget
+          <button className="btn btn-primary" onClick={() => (statusOf(budget.approvalStatus) === "REJECTED" ? setAskReason(true) : setEditing(true))}>
+            {statusOf(budget.approvalStatus) === "REJECTED" ? "Edit & Resubmit" : "Edit Budget"}
           </button>
         )}
       </div>
@@ -98,11 +100,12 @@ function BudgetView() {
         </dl>
       </div>
 
-      {!budget || editing ? (
+      {!budget || (editing && canEdit(budget.approvalStatus)) ? (
         <BudgetForm
           vehicleId={vehicle}
           context={c}
           budget={budget}
+          revisionReason={revisionReason}
           rejected={rejectedMap(budget)}
           onCancel={budget ? () => setEditing(false) : undefined}
           onSaved={() => {
@@ -117,7 +120,37 @@ function BudgetView() {
           <HistorySection key={`${budget.currentVersion}-${budget.approvalStatus ?? ""}`} budget={budget} />
         </>
       )}
+      {askReason && (
+        <RevisionReasonModal
+          version={budget!.currentVersion}
+          onClose={() => setAskReason(false)}
+          onConfirm={(reason) => {
+            setRevisionReason(reason);
+            setAskReason(false);
+            setEditing(true);
+          }}
+        />
+      )}
     </>
+  );
+}
+
+/** Mandatory before a rejected budget can be edited; the reason is saved with the new version and shown to RSOM. */
+function RevisionReasonModal({ version, onClose, onConfirm }: { version: number; onClose: () => void; onConfirm: (reason: string) => void }) {
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState("");
+  return (
+    <Modal title={`Edit rejected budget · V${version}`} onClose={onClose}>
+      {error && <div className="alert" role="alert">{error}</div>}
+      <label className="field">
+        <span>Reason for revision *</span>
+        <textarea rows={3} maxLength={1000} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="What are you correcting?" />
+      </label>
+      <div className="actions-row">
+        <button className="btn btn-outline" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary" onClick={() => (reason.trim() ? onConfirm(reason.trim()) : setError("Enter the reason for revision"))}>Continue to Edit</button>
+      </div>
+    </Modal>
   );
 }
 
@@ -191,8 +224,9 @@ function UnitSelect({ value, onChange, fixed }: { value: Unit; onChange?: (u: Un
 const Out = ({ value }: { value: number }) => <input className="num-input out" readOnly value={value.toFixed(2)} aria-label="Calculated value" />;
 
 function BudgetForm({
-  vehicleId, context, budget, rejected, onSaved, onCancel,
+  vehicleId, context, budget, revisionReason, rejected, onSaved, onCancel,
 }: {
+  revisionReason: string;
   rejected: Map<string, string>;
   vehicleId: string;
   context: BudgetContext;
@@ -269,7 +303,7 @@ function BudgetForm({
     if (saving.current) return;
     saving.current = true;
     setBusy(true);
-    const body = toPayload(f);
+    const body = { ...toPayload(f), ...(resubmit ? { revisionReason } : {}) };
     let id = budget?._id ?? "";
     let saved = false;
     const fail = (msg: string) => {
