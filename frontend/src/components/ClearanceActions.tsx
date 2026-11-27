@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import Select from "@/components/ui/Select";
 import { useState } from "react";
 import { Modal } from "@/components/ui/Ui";
@@ -140,7 +141,7 @@ export function RbpActions({ d, onDone }: { d: ClearanceDetail; onDone: () => vo
       {!d.allocationActive && <div className="cl-flag bad" role="alert">No active vehicle and driver allocation exists; allot a vehicle and driver before resubmitting.</div>}
       {error && <div className="alert" role="alert">{error}</div>}
       <div className="actions-row">
-        <a className="btn btn-outline" href="/rbp/vehicles/allotment">Change Driver / Vehicle</a>
+        <Link className="btn btn-outline" href="/rbp/vehicles/allotment">Change Driver / Vehicle</Link>
         <button className="btn btn-primary" disabled={!d.canResubmit} onClick={() => setConfirm(true)}>Resubmit for RSA Approval</button>
       </div>
       {confirm && (
