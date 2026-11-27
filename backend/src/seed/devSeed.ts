@@ -219,7 +219,7 @@ export async function ensureBudget(plan: BudgetPlan, tv: any, project: any, a: A
   }
   if (plan.v2) {
     if ((await fresh()).currentVersion < 2) {
-      await updateBudget(id, budgetInput({ ...plan.v1, ...plan.v2 }, project), a.RBP.username);
+      await updateBudget(id, { ...budgetInput({ ...plan.v1, ...plan.v2 }, project), revisionReason: plan.resubmitComment || "Corrected the rejected fields" }, a.RBP.username);
       t.add("budgetRevisions", true);
     }
     if (!(await has("RESUBMITTED", 2))) { await submitBudget(id, a.RBP.username, plan.resubmitComment); t.add("budgetSubmissions", true); }

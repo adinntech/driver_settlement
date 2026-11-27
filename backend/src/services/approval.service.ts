@@ -70,6 +70,7 @@ export async function submitBudget(budgetId: string, username: string, comment: 
 
   const version = updated.currentVersion;
   let changes: unknown = null;
+  const revision = resubmission ? await latestRevision(budgetId, budget.rejection?.version, version) : null;
   if (resubmission && budget.rejection?.version) {
     const prev: any = await BudgetVersion.findOne({ budget: budgetId, version: budget.rejection.version }).lean();
     const cur: any = await BudgetVersion.findOne({ budget: budgetId, version }).lean();
@@ -77,6 +78,7 @@ export async function submitBudget(budgetId: string, username: string, comment: 
   }
   await recordEvent(budgetId, version, resubmission ? "RESUBMITTED" : "SUBMITTED", username, "RBP", {
     comment: note || null, total: updated.total, ...(changes ? { changesSinceRejected: changes, rejectedVersion: budget.rejection.version } : {}),
+    ...(revision ? { revisionReason: revision.reason, revisedBy: revision.by, revisedAt: revision.at } : {}),
   });
 
   await notifyRole("RSOM", {
@@ -90,6 +92,14 @@ export async function submitBudget(budgetId: string, username: string, comment: 
     dedupeKey: `${resubmission ? "RESUB" : "SUB"}:${budgetId}:${version}`,
   });
   return updated;
+}
+
+/** The newest edit reason given after the rejected version, with who edited and when. */
+async function latestRevision(budgetId: string, after: number | undefined, upTo: number) {
+  if (!after) return null;
+  const v: any = await BudgetVersion.findOne({ budget: budgetId, version: { $gt: after, $lte: upTo }, revisionReason: { $exists: true } })
+    .sort({ version: -1 }).lean();
+  return v ? { reason: v.revisionReason as string, by: v.updatedBy as string, at: v.createdAt as Date, version: v.version as number } : null;
 }
 
 function comparable(prevData: any, nextData: any) {
@@ -270,6 +280,7 @@ export async function reviewDetail(budgetId: string, desc = false) {
       comparison = {
         fromVersion: prev.version, toVersion: cur.version, changes: comparable(prev.data, cur.data),
         rejection: budget.rejection, resubmissionComment: budget.resubmissionComment ?? null,
+        revision: await latestRevision(budgetId, prev.version, cur.version),
       };
   }
   const activity = await buildActivity(budget);

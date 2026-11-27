@@ -224,7 +224,7 @@ test("RSOM can reject without a reason: stored as null, RBP still sees the flagg
   const n = (await call("/notifications", "GET", undefined, t.rbp)).body.data.items.find((x: any) => x.meta?.budgetId === b._id && x.type === "BUDGET_REJECTED");
   assert.ok(n && !/Reason:/.test(n.message), "no empty Reason: in the notification");
   // RBP revises and resubmits as before
-  assert.equal((await call(`/budgets/${b._id}`, "PUT", { ...budgetBody, tolls: [{ location: "Salem", rate: 150 }] }, t.rbp)).status, 200);
+  assert.equal((await call(`/budgets/${b._id}`, "PUT", { ...budgetBody, tolls: [{ location: "Salem", rate: 150 }], revisionReason: "Toll corrected" }, t.rbp)).status, 200);
   assert.equal((await call(`/budgets/${b._id}/submit`, "POST", { comment: "Fixed toll" }, t.rbp)).status, 200);
   // RSOP / RBP can never reject (RSOM only)
   assert.equal((await call(`/approvals/${b._id}/reject`, "POST", { version: 2, fields }, t.rbp)).status, 403);
@@ -282,7 +282,7 @@ test("full reject -> correct -> resubmit -> approve cycle with history, notifica
 
   // RBP corrects only some fields -> V2; non-rejected fields preserved
   const fixed = { ...budgetBody, haltFood: 250, tolls: [{ location: "Salem", rate: 90 }] };
-  const e = await call(`/budgets/${b._id}`, "PUT", fixed, t.rbp);
+  const e = await call(`/budgets/${b._id}`, "PUT", { ...fixed, revisionReason: "Amounts corrected" }, t.rbp);
   assert.equal(e.status, 200);
   assert.equal(e.body.data.currentVersion, 2);
   assert.equal(e.body.data.approvalStatus, "REJECTED"); // still rejected until resubmitted
@@ -331,6 +331,48 @@ test("full reject -> correct -> resubmit -> approve cycle with history, notifica
   // history rows cannot be rewritten
   await assert.rejects(BudgetEvent.updateOne({ budget: b._id }, { username: "x" }));
   await assert.rejects(BudgetEvent.deleteMany({ budget: b._id }));
+});
+
+test("revision: reason is mandatory, V1 and its rejection are kept, RSOM sees one row with who/when, V3 works too", async () => {
+  const { t, b } = await newBudget("Revision Co");
+  const reject = (version: number) =>
+    call(`/approvals/${b._id}/reject`, "POST", { version, fields: [{ field: "haltFood", comment: "Too high" }] }, t.rsom);
+  const edit = (haltFood: number, revisionReason?: string) => call(`/budgets/${b._id}`, "PUT", { ...budgetBody, haltFood, revisionReason }, t.rbp);
+  const detail = async () => (await call(`/approvals/${b._id}`, "GET", undefined, t.rsom)).body.data;
+  await call(`/budgets/${b._id}/submit`, "POST", {}, t.rbp);
+  for (const version of [2, 3]) {
+    assert.equal((await reject(version - 1)).status, 200);
+    assert.equal((await edit(version)).status, 400);
+    assert.equal((await edit(version, "   ")).status, 400);
+    assert.equal((await edit(version, `Fix ${version}`)).body.data.currentVersion, version);
+    assert.equal((await call(`/budgets/${b._id}/submit`, "POST", {}, t.rbp)).status, 200);
+    const d = await detail();
+    assert.equal(d.comparison.revision.reason, `Fix ${version}`);
+    assert.equal(d.comparison.revision.by, "RBP");
+    assert.ok(d.comparison.revision.at);
+    const rows = (await call("/approvals?client=Revision", "GET", undefined, t.rsom)).body.data.items;
+    assert.deepEqual(rows.map((r: any) => [r.version, r.status]), [[version, "PENDING"]]);
+  }
+  const d = await detail();
+  assert.deepEqual(d.versions.map((v: any) => v.version), [1, 2, 3]);
+  assert.equal(d.versions[0].data.haltFood, budgetBody.haltFood);
+  assert.deepEqual(d.events.filter((e: any) => e.action === "REJECTED").map((e: any) => e.version), [1, 2]);
+  assert.equal((await call(`/approvals/${b._id}/approve`, "POST", { version: 3 }, t.rsom)).status, 200);
+});
+
+test("approved budget is locked: edit and resubmit are refused, also concurrently, and nothing changes", async () => {
+  const { t, b } = await newBudget("Locked Co");
+  await call(`/budgets/${b._id}/submit`, "POST", {}, t.rbp);
+  const edit = (haltFood: number) => call(`/budgets/${b._id}`, "PUT", { ...budgetBody, haltFood, revisionReason: "Late change" }, t.rbp);
+  const submit = () => call(`/budgets/${b._id}/submit`, "POST", {}, t.rbp);
+  const [approved, ...racing] = await Promise.all([
+    call(`/approvals/${b._id}/approve`, "POST", { version: 1 }, t.rsom), edit(1), submit(), edit(2),
+  ]);
+  assert.equal(approved.status, 200);
+  for (const r of [...racing, await edit(3), await submit()]) assert.equal(r.status, 409);
+  const saved: any = await Budget.findById(b._id).lean();
+  assert.deepEqual([saved.approvalStatus, saved.currentVersion, saved.approvedVersion], ["APPROVED", 1, 1]);
+  assert.equal(await BudgetVersion.countDocuments({ budget: b._id }), 1);
 });
 
 test("notifications: own only, mark read, read-all, unread filter, no duplicates", async () => {
@@ -385,7 +427,7 @@ async function fullCycle(client: string) {
   await sleep();
   await call(`/budgets/${b._id}/submit`, "POST", {}, t.rbp); await sleep();
   await call(`/approvals/${b._id}/reject`, "POST", { version: 1, reason: "fix", fields: [{ field: "haltFood", comment: "wrong" }] }, t.rsom); await sleep();
-  await call(`/budgets/${b._id}`, "PUT", { ...budgetBody, haltFood: 250 }, t.rbp); await sleep();
+  await call(`/budgets/${b._id}`, "PUT", { ...budgetBody, haltFood: 250, revisionReason: "fix" }, t.rbp); await sleep();
   await call(`/budgets/${b._id}/submit`, "POST", { comment: "fixed" }, t.rbp); await sleep();
   await call(`/approvals/${b._id}/approve`, "POST", { version: 2 }, t.rsom);
   return { t, b, vehicle };
@@ -449,7 +491,7 @@ test("activity timestamps: edit / submit / resubmit / approve / reject each trac
   assert.equal(rej.currentStatus, "REJECTED");
 
   await new Promise((r) => setTimeout(r, 15));
-  await call(`/budgets/${b._id}`, "PUT", { ...budgetBody, haltFood: 2 }, t.rbp);
+  await call(`/budgets/${b._id}`, "PUT", { ...budgetBody, haltFood: 2, revisionReason: "again" }, t.rbp);
   await call(`/budgets/${b._id}/submit`, "POST", {}, t.rbp);
   const re = (await call(`/approvals/${b._id}`, "GET", undefined, t.rsom)).body.data.activity;
   assert.equal(re.lastResubmitted.version, 3);

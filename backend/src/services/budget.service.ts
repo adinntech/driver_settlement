@@ -127,6 +127,10 @@ export async function updateBudget(budgetId: string, input: unknown, username: s
   const st = statusOf(existing);
   if (st === "PENDING") throw new AppError("This budget is waiting for approval and cannot be edited", 409);
   if (st === "APPROVED") throw new AppError("An approved budget cannot be edited", 409);
+  const raw = (input as { revisionReason?: unknown } | null)?.revisionReason;
+  const revisionReason = st === "REJECTED" && typeof raw === "string" ? raw.trim() : "";
+  if (st === "REJECTED" && !revisionReason) throw new AppError("Enter the reason for editing this rejected budget", 400);
+  if (revisionReason.length > 1000) throw new AppError("Revision reason is too long", 400);
   const { context } = await contextFor(String(existing.vehicle));
   const v = validateBudget(input, {
     campaignFrom: context.campaignFrom,
@@ -143,7 +147,8 @@ export async function updateBudget(budgetId: string, input: unknown, username: s
   const nextVersion = existing.currentVersion + 1;
   // Optimistic lock: only one concurrent editor can move from version N to N+1.
   const updated = await Budget.findOneAndUpdate(
-    { _id: budgetId, currentVersion: existing.currentVersion, approvalStatus: { $nin: ["PENDING", "APPROVED"] } },
+    // The status must still be the one checked above, so an edit can never slip past a submit / approve / reject made meanwhile.
+    { _id: budgetId, currentVersion: existing.currentVersion, approvalStatus: st === "DRAFT" ? { $in: [null, "DRAFT"] } : st },
     { data: toStored(v.data), total, currentVersion: nextVersion, updatedBy: username },
     { new: true },
   );
@@ -155,8 +160,11 @@ export async function updateBudget(budgetId: string, input: unknown, username: s
     total,
     changes,
     updatedBy: username,
+    ...(revisionReason ? { revisionReason } : {}),
   });
-  await recordEvent(budgetId, nextVersion, "UPDATED", username, "RBP", { total, changedFields: changes.map((c) => c.field) });
+  await recordEvent(budgetId, nextVersion, "UPDATED", username, "RBP", {
+    total, changedFields: changes.map((c) => c.field), ...(revisionReason ? { revisionReason } : {}),
+  });
   return updated.toObject();
 }
 
