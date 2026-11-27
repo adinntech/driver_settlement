@@ -25,7 +25,6 @@ const clearanceSchema = new Schema(
     trackupNumber: { type: String, required: true },
     pifNumber: { type: String, required: true },
     billNumber: String,
-    displayNumber: String,
     clientName: String,
     projectType: String,
     projectName: String,

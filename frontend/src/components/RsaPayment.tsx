@@ -28,7 +28,9 @@ export function ProjectHeader({ ctx }: { ctx: RsaContext }) {
     <div className="rsa-head" data-section="project-header">
       <div className="rsa-head-lines">
         <div><span>JobSheet No:</span> <strong>{ctx.trackupNumber}</strong></div>
+        <div><span>PIF No:</span> <strong>{ctx.pifNumber}</strong></div>
         <div><span>Vehicle No:</span> <strong>{ctx.vehicle.vehicleNo}</strong></div>
+        {ctx.requestedVehicleType && <div><span>Vehicle Type:</span> <strong>{ctx.requestedVehicleType}</strong></div>}
         <div><span>Client Name:</span> <strong>{ctx.clientName}</strong></div>
         <div><span>Driver:</span> <strong>{ctx.driver.driverNumber} · {ctx.driver.driverName}</strong></div>
         <div><span>Project Type:</span> <strong>{PAYMENT_FOR_LABEL[ctx.projectType]}</strong></div>
@@ -541,7 +543,7 @@ export default function RsaPaymentScreen({ tvId, onClose, onSaved }: { tvId: str
       {confirm && (
         <Modal title="Confirm Payment" onClose={() => setConfirm(false)}>
           <dl className="kv allot-proj" data-step="summary">
-            <KV k="Trackup Number" v={c.trackupNumber} /><KV k="Vehicle" v={c.vehicle.vehicleNo} /><KV k="Driver" v={`${c.driver.driverNumber} · ${c.driver.driverName}`} />
+            <KV k="Trackup Number" v={c.trackupNumber} /><KV k="PIF Number" v={c.pifNumber} /><KV k="Vehicle" v={c.vehicle.vehicleNo} /><KV k="Driver" v={`${c.driver.driverNumber} · ${c.driver.driverName}`} />
             <KV k="Payment For" v={PAYMENT_FOR_LABEL[c.paymentFor]} /><KV k="Cash In Hand" v={form.cashInHand ? "Yes" : "No"} />
             <KV k="Fuel Cost" v={money(t.diesel)} /><KV k="Food Allowance" v={money(amountPaise(form.foodAmount) ?? 0)} /><KV k="Salary Advance" v={money(amountPaise(form.salaryAdvance) ?? 0)} />
             <KV k="Expenses (net)" v={money(t.expenseNet)} /><KV k="Total Payable" v={<strong>{money(t.total)}</strong>} />

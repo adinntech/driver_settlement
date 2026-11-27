@@ -4,7 +4,7 @@ import { earlierOf, keepInRange, laterOf, todayIst } from "../src/utils/dates";
 import { addToll, computeValues, draftFromData, editedTolls, emptyDraft, toPayload, updateToll, validateDraft, type Draft } from "../src/utils/budgetForm";
 import { applyPlaza, canAutoFill, plazaLabel, rateOrigin, sourceLine, type TollSearchResult } from "../src/utils/tolls";
 import { formatEntry } from "../src/utils/historyFormat";
-import { validatePaymentEntry, validateFinalForm, finalFormFrom } from "../src/utils/settlement";
+import { validatePaymentEntry, finalPayload, validateFinalForm, finalFormFrom } from "../src/utils/settlement";
 
 test("dates: dependent date kept inside the new range, cleared (never moved) outside it", () => {
   assert.equal(keepInRange("2026-12-05", "2026-12-01", "2026-12-10"), "2026-12-05");
@@ -113,9 +113,8 @@ test("payments: payment date not in the future nor before approval; reference da
   assert.deepEqual(validatePaymentEntry({ ...f, referenceDate: "2026-01-10" }, "2026-11-25"), {}); // older cheque date is legitimate
 });
 
-test("final settlement reporting date: within the campaign", () => {
-  const form = { ...finalFormFrom(null), reportingDate: "2026-11-30" };
-  const camp = { fromDate: "2026-12-01", toDate: "2026-12-10" };
-  assert.ok(validateFinalForm(form, 10, camp).includes("Reporting Date must be within the campaign start and end dates"));
-  assert.ok(!validateFinalForm({ ...form, reportingDate: "2026-12-01" }, 10, camp).includes("Reporting Date must be within the campaign start and end dates"));
+test("final settlement reporting date is read-only: never validated or sent", () => {
+  const form = { ...finalFormFrom(null), reportingDate: "2026-11-30", campaignFrom: "2026-12-01", campaignTo: "2026-12-10" };
+  assert.ok(!validateFinalForm(form, 10).join().includes("Reporting Date"));
+  assert.equal("reportingDate" in finalPayload(form, "key"), false);
 });

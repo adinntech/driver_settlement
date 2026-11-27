@@ -1,6 +1,6 @@
 import { amountPaise } from "./rsa";
 import { countDays } from "./format";
-import { inYmdRange, isYmd } from "./dates";
+import { isYmd } from "./dates";
 import type { KmAllowance } from "./kmAllowance";
 
 // ---------------------------------------------------------------- API types
@@ -70,6 +70,13 @@ export const ACTION_LABEL: Record<string, string> = { SUBMITTED: "Submitted", RE
 export interface QueueFilters { category: "" | PaymentCategory; status: string; q: string; from: string; to: string; sort: string; dir: "asc" | "desc" }
 export const emptyQueueFilters = (category: "" | PaymentCategory = "", status = ""): QueueFilters => ({ category, status, q: "", from: "", to: "", sort: "submittedAt", dir: "desc" });
 
+/** The table's filters (not its sort or page) for Export Approved, so the file and the list are narrowed the same way. */
+export function exportQuery(f: QueueFilters): string {
+  const p = new URLSearchParams(queueQuery(f, 1, 1));
+  for (const k of ["sort", "dir", "page", "limit"]) p.delete(k);
+  return p.toString();
+}
+
 export function queueQuery(f: QueueFilters, page: number, limit: number): string {
   const p = new URLSearchParams();
   if (f.category) p.set("category", f.category);
@@ -105,15 +112,17 @@ export function actionsFor(role: string, p: Pick<SettlementRow, "status" | "appr
 // ---------------------------------------------------------------- final settlement form (mirrors backend/src/utils/settlement.ts)
 export const FINAL_NUMBER_FIELDS = [
   "estimatedKmPerDay", "fixedMileage", "openingKm", "closingKm", "dieselCost", "ioclLitres", "ioclKms", "estimatedBudget", "estimatedKm", "estimatedFuel",
-  "perDaySalary", "perDayFood", "haltDayPay", "travelPay", "overtimeRate", "onRoadDays", "onRoadSundays", "haltDays", "overtimeHours", "suspenseAmount",
+  "perDaySalary", "perDayFood", "travelPay", "travelKm", "travelRate", "onRoadDays", "onRoadSundays", "suspenseAmount",
 ] as const;
 export type FinalNumberKey = (typeof FINAL_NUMBER_FIELDS)[number];
-export const DEDUCTION_KEYS = ["mileageShort", "driverChangeTravel", "vehicleDamage", "previousSalary", "other"] as const;
+export const DEDUCTION_KEYS = ["mileageShort", "vehicleDamage", "previousSalary", "other"] as const;
 export type DeductionKey = (typeof DEDUCTION_KEYS)[number];
 
 export interface FinalExpenseRow { id: string; category: string; description: string; quantity: string; cost: string; approved: string }
 export interface FinalForm {
   jsNumber: string; location: string; reportingDate: string; travelDetails: string;
+  campaignFrom: string; campaignTo: string;
+  driverChangeAmount: string; // owed from Change Driver: the minimum of Previous Salary Deduction ("" when nothing)
   n: Record<FinalNumberKey, string>;
   expenses: FinalExpenseRow[];
   deductions: Record<DeductionKey, string>;
@@ -122,36 +131,42 @@ export interface FinalForm {
 
 const str = (v: unknown) => (v === null || v === undefined || v === 0 ? "" : String(v));
 export function finalFormFrom(ctx: SettlementContext | null, saved?: Record<string, unknown> | null): FinalForm {
+  const due = Number(ctx?.prefill.driverChangeAmount) || 0;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = saved as any;
   const n = Object.fromEntries(FINAL_NUMBER_FIELDS.map((k) => [k, ""])) as Record<FinalNumberKey, string>;
   if (s) {
+    // what was added by hand stays; the driver-change part is replaced by what is owed now
+    const manual = Math.round(((Number(s.deductions?.previousSalary) || 0) - (Number(s.driverChangeAmount) || 0)) * 100) / 100;
     Object.assign(n, {
       estimatedKmPerDay: str(s.estimatedKmPerDay), fixedMileage: str(s.fuel?.fixedMileage), openingKm: str(s.fuel?.openingKm), closingKm: str(s.fuel?.closingKm), dieselCost: str(s.fuel?.dieselCost),
       ioclLitres: str(s.fuel?.ioclLitres), ioclKms: str(s.fuel?.ioclKms), estimatedBudget: str(s.estimate?.estimatedBudget), estimatedKm: str(s.estimate?.estimatedKm), estimatedFuel: str(s.estimate?.estimatedFuel),
-      perDaySalary: str(s.rates?.perDaySalary), perDayFood: str(s.rates?.perDayFood), haltDayPay: str(s.rates?.haltDayPay), travelPay: str(s.rates?.travelPay), overtimeRate: str(s.rates?.overtimeRate),
-      onRoadDays: str(s.days?.onRoadDays), onRoadSundays: str(s.days?.onRoadSundays), haltDays: str(s.days?.haltDays), overtimeHours: str(s.days?.overtimeHours), suspenseAmount: str(s.suspenseAmount),
+      perDaySalary: str(s.rates?.perDaySalary), perDayFood: str(s.rates?.perDayFood), travelPay: str(s.rates?.travelPay), travelKm: str(s.rates?.travelKm), travelRate: str(s.rates?.travelRate),
+      onRoadDays: str(s.days?.onRoadDays), onRoadSundays: str(s.days?.onRoadSundays), suspenseAmount: str(s.suspenseAmount),
     });
     return {
       jsNumber: s.jsNumber ?? "", location: s.location ?? "", reportingDate: s.reportingDate ?? "", travelDetails: s.travelDetails ?? "", n,
+      campaignFrom: s.campaignFrom ?? ctx?.campaign.fromDate ?? "", campaignTo: s.campaignTo ?? ctx?.campaign.toDate ?? "",
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expenses: (s.expenses ?? []).map((e: any, i: number) => ({ id: `e${i}`, category: e.category, description: e.description ?? "", quantity: str(e.quantity), cost: str(e.cost), approved: String(e.approved ?? "") })),
-      deductions: Object.fromEntries(DEDUCTION_KEYS.map((k) => [k, str(s.deductions?.[k])])) as Record<DeductionKey, string>, otherRemark: s.otherDeductionRemark ?? "",
+      deductions: { ...(Object.fromEntries(DEDUCTION_KEYS.map((k) => [k, str(s.deductions?.[k])])) as Record<DeductionKey, string>), previousSalary: str(Math.max(manual, 0) + due) }, otherRemark: s.otherDeductionRemark ?? "",
+      driverChangeAmount: str(due),
     };
   }
-  const p = ctx?.prefill ?? {};
+  const p: Record<string, unknown> = ctx?.prefill ?? {};
   for (const k of FINAL_NUMBER_FIELDS) n[k] = str(p[k]);
   const days = ctx ? campaignDays(ctx) : null;
-  if (days) Object.assign(n, { onRoadDays: str(days.onRoadDays), onRoadSundays: str(days.onRoadSundays), haltDays: str(days.haltDays) });
+  if (days) Object.assign(n, { onRoadDays: str(days.onRoadDays), onRoadSundays: str(days.onRoadSundays) });
   return {
     jsNumber: String(p.jsNumber ?? ""), location: String(p.location ?? ""), reportingDate: String(p.reportingDate ?? ctx?.campaign.fromDate ?? ""), travelDetails: "", n, expenses: [],
-    deductions: { mileageShort: "", driverChangeTravel: str(p.driverChangeTravel), vehicleDamage: "", previousSalary: "", other: "" }, otherRemark: "",
+    campaignFrom: ctx?.campaign.fromDate ?? "", campaignTo: ctx?.campaign.toDate ?? "",
+    deductions: { mileageShort: "", vehicleDamage: "", previousSalary: str(due), other: "" }, otherRemark: "", driverChangeAmount: str(due),
   };
 }
 
 /**
  * Days of the campaign period, split with the project's own Sunday rule (RSOP "Sunday halt"):
- *   Sunday halt = YES -> Sundays are halt days;   NO -> Sundays are on-road Sundays.   Every other day is an on-road day.
+ *   Sunday halt = YES -> Sundays are not paid;   NO -> Sundays are on-road Sundays.   Every other day is an on-road day.
  */
 export function campaignDays(ctx: Pick<SettlementContext, "campaign">) {
   const { fromDate, toDate, sundayHalt } = ctx.campaign;
@@ -159,7 +174,14 @@ export function campaignDays(ctx: Pick<SettlementContext, "campaign">) {
   const calendar = countDays(fromDate, toDate, false);
   if (!calendar) return null;
   const sundays = calendar - countDays(fromDate, toDate, true);
-  return { calendar, onRoadDays: calendar - sundays, onRoadSundays: sundayHalt ? 0 : sundays, haltDays: sundayHalt ? sundays : 0 };
+  return { calendar, onRoadDays: calendar - sundays, onRoadSundays: sundayHalt ? 0 : sundays };
+}
+
+/** Travel Pay in paise: KM x rate when either is entered, otherwise the saved amount (mirrors validateFinalInput). */
+export function travelPayPaise(n: Pick<Record<FinalNumberKey, string>, "travelPay" | "travelKm" | "travelRate">): number {
+  const v = (s: string) => amountPaise(s) ?? 0;
+  const km = v(n.travelKm), rate = v(n.travelRate);
+  return km || rate ? Math.round((km * rate) / 100) : v(n.travelPay);
 }
 
 /** Same rules as the server; the server's figures are the ones saved. Values are in paise / hundredths. */
@@ -175,9 +197,7 @@ export function finalTotals(f: FinalForm) {
     { label: "On Road Days Salary", amount: mul(n.onRoadDays, n.perDaySalary) },
     { label: "On Road Sunday Salary", amount: mul(n.onRoadSundays, n.perDaySalary) },
     { label: "Food (Per Day)", amount: mul(n.onRoadDays + n.onRoadSundays, n.perDayFood) },
-    { label: "Halt Day Pay", amount: mul(n.haltDays, n.haltDayPay) },
-    { label: "Travel Pay", amount: n.travelPay },
-    { label: "Overtime", amount: mul(n.overtimeHours, n.overtimeRate) },
+    { label: "Travel Pay", amount: travelPayPaise(f.n) },
   ];
   const earningsTotal = earnings.reduce((s, e) => s + e.amount, 0);
   const rows = f.expenses.map((e) => {
@@ -193,22 +213,21 @@ export function finalTotals(f: FinalForm) {
   return { resultKm, expectedLitres, variationLitres, mileageShortSuggested, earnings, earningsTotal, rows, claimed, approved, rejected: claimed - approved, gross, totalDeduction, net };
 }
 
-export function validateFinalForm(f: FinalForm, totalDays: number | null, campaign?: { fromDate: string | null; toDate: string | null }): string[] {
+export function validateFinalForm(f: FinalForm, totalDays: number | null): string[] {
   const e: string[] = [];
-  if (!f.reportingDate) e.push("Reporting Date is required");
-  else if (!isYmd(f.reportingDate)) e.push("Reporting Date must be a valid date");
-  else if (campaign && isYmd(campaign.fromDate) && isYmd(campaign.toDate) && !inYmdRange(f.reportingDate, campaign.fromDate, campaign.toDate))
-    e.push("Reporting Date must be within the campaign start and end dates");
   const v = (s: string) => amountPaise(s);
+  if (!isYmd(f.campaignFrom) || !isYmd(f.campaignTo)) e.push("Campaign Start Date and End Date are required");
+  else if (f.campaignTo < f.campaignFrom) e.push("Campaign End Date cannot be before the Start Date");
+  if (!(v(f.n.travelKm) ?? 0) !== !(v(f.n.travelRate) ?? 0)) e.push("Enter both the Travel KM and the rate per KM");
   for (const k of FINAL_NUMBER_FIELDS) if (v(f.n[k]) === null) e.push(`${k} must contain digits only`);
   if (!(v(f.n.fixedMileage) ?? 0)) e.push("Fixed Mileage must be greater than zero");
   if ((v(f.n.closingKm) ?? 0) < (v(f.n.openingKm) ?? 0)) e.push("Closing KM cannot be less than Opening KM");
-  const days = ["onRoadDays", "onRoadSundays", "haltDays"] as const;
+  const days = ["onRoadDays", "onRoadSundays"] as const;
   if (days.some((k) => (v(f.n[k]) ?? 0) % 100 !== 0)) e.push("Days must be whole numbers");
   const total = days.reduce((s, k) => s + (v(f.n[k]) ?? 0), 0) / 100;
-  if (!total) e.push("Enter the On Road Days, On Road Sundays or Halt Days");
-  if (totalDays && total > totalDays) e.push(`On road days, Sundays and halt days (${total}) cannot exceed the campaign's ${totalDays} days`);
-  if ((v(f.n.overtimeHours) ?? 0) > 0 && !(v(f.n.overtimeRate) ?? 0)) e.push("Enter the overtime rate per hour");
+  if (!total) e.push("Enter the On Road Days or On Road Sundays");
+  if (totalDays && total > totalDays) e.push(`On road days and Sundays (${total}) cannot exceed the campaign's ${totalDays} days`);
+  if ((v(f.deductions.previousSalary) ?? 0) < (v(f.driverChangeAmount) ?? 0)) e.push(`Previous Salary Deduction must be at least ${f.driverChangeAmount} (driver change deduction)`);
   const seen = new Set<string>();
   f.expenses.forEach((x, i) => {
     const sig = `${x.category}|${x.description.trim().toLowerCase()}`;
@@ -227,7 +246,7 @@ export function validateFinalForm(f: FinalForm, totalDays: number | null, campai
 
 export function finalPayload(f: FinalForm, idempotencyKey: string) {
   return {
-    jsNumber: f.jsNumber.trim() || undefined, location: f.location.trim() || undefined, reportingDate: f.reportingDate || undefined, travelDetails: f.travelDetails.trim() || undefined, ...Object.fromEntries(FINAL_NUMBER_FIELDS.map((k) => [k, f.n[k].trim()])),
+    driverChangeAmount: f.driverChangeAmount || undefined, campaignFrom: f.campaignFrom || undefined, campaignTo: f.campaignTo || undefined, jsNumber: f.jsNumber.trim() || undefined, location: f.location.trim() || undefined, travelDetails: f.travelDetails.trim() || undefined, ...Object.fromEntries(FINAL_NUMBER_FIELDS.map((k) => [k, f.n[k].trim()])),
     expenses: f.expenses.map((x) => ({ category: x.category, description: x.description.trim() || undefined, quantity: x.quantity.trim(), cost: x.cost.trim(), approved: x.approved.trim() || undefined })),
     deductions: { ...Object.fromEntries(DEDUCTION_KEYS.map((k) => [k, f.deductions[k].trim()])), otherRemark: f.otherRemark.trim() || undefined }, idempotencyKey,
   };

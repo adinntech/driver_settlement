@@ -57,10 +57,10 @@ const login = async (role: string, username: string, password: string) =>
 
 const signage = {
   projectCode: "30000001", date: day(-3), client: "DALMIA", jobSheetNumber: "22070649", location: "RAMNAD",
-  numberOfVehicles: 2, fromDate: day(-2), toDate: day(3), arrivedBudget: 25000,
+  numberOfVehicles: 2, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 2 }], fromDate: day(-2), toDate: day(3), arrivedBudget: 25000,
 };
 const roadshow = {
-  projectCode: "30000002", billingName: "Sapphire Foods (KFC)", stateCode: "33", numberOfVans: 7,
+  projectCode: "30000002", billingName: "Sapphire Foods (KFC)", stateCode: "33", numberOfVans: 7, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 7 }],
   startDate: day(0), endDate: day(1), reportingDate: day(0),
   sundayHalt: "NO", reportingLocations: ["Madurai"],
 };
@@ -98,7 +98,7 @@ test("tracking requires auth; RBP cannot create", async () => {
   assert.equal(r.body.success, false);
 });
 
-test("signage with 2 vehicles creates 2 unique number sets; RBP can read", async () => {
+test("signage with 2 vehicles of one type: one Trackup, two PIF numbers; RBP can read", async () => {
   const rsop = await login("RSOP", "RSOP", "pass2");
   const r = await call("/tracking", "POST", { projectType: "SIGNAGE", details: signage }, rsop);
   assert.equal(r.status, 201);
@@ -106,8 +106,9 @@ test("signage with 2 vehicles creates 2 unique number sets; RBP can read", async
   assert.equal(v.length, 2);
   assert.match(v[0].trackupNumber, /^JS-\d{5}\/\d{4}-\d{2}$/);
   assert.match(v[0].pifNumber, /^PIF-\d{5}$/);
-  assert.match(v[0].displayNumber, /^\d{4}$/);
-  assert.notEqual(v[0].trackupNumber, v[1].trackupNumber);
+  assert.equal("displayNumber" in v[0], false);
+  assert.equal(v[0].trackupNumber, v[1].trackupNumber); // same vehicle type
+  assert.notEqual(v[0].pifNumber, v[1].pifNumber);
   assert.equal(r.body.data.createdByName, "RSOP");
   assert.ok(r.body.data.createdAt);
 
@@ -117,15 +118,14 @@ test("signage with 2 vehicles creates 2 unique number sets; RBP can read", async
   assert.equal(list.body.data.length, 1);
 });
 
-test("roadshow with 7 vans: all numbers unique across the whole DB, original data kept", async () => {
+test("roadshow with 7 vans: PIF numbers unique across the whole DB, original data kept", async () => {
   const rsop = await login("RSOP", "RSOP", "pass2");
   const r = await call("/tracking", "POST", { projectType: "ROADSHOW", details: roadshow }, rsop);
   assert.equal(r.status, 201);
   assert.equal(r.body.data.vehicles.length, 7);
   assert.equal(r.body.data.details.numberOfDays, 2);
   const all = await TrackingVehicle.find().lean();
-  for (const k of ["trackupNumber", "pifNumber", "displayNumber"])
-    assert.equal(new Set(all.map((x: any) => x[k])).size, all.length);
+  assert.equal(new Set(all.map((x: any) => x.pifNumber)).size, all.length);
 });
 
 test("idempotent requestId does not regenerate numbers", async () => {
@@ -149,8 +149,7 @@ test("concurrent creates never produce duplicates", async () => {
   assert.ok(rs.every((r) => r.status === 201));
   const all = await TrackingVehicle.find().lean();
   assert.equal(all.length, before + 16);
-  for (const k of ["trackupNumber", "pifNumber", "displayNumber"])
-    assert.equal(new Set(all.map((x: any) => x[k])).size, all.length);
+  assert.equal(new Set(all.map((x: any) => x.pifNumber)).size, all.length);
 });
 
 test("invalid payload returns 400 with sendResponse shape and creates nothing", async () => {

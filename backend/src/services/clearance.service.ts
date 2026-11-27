@@ -6,7 +6,6 @@ import { Clearance, ClearanceEvent, REJECTION_REASONS, type ClearanceAction, typ
 import { Driver } from "../models/Driver.js";
 import { DriverAdvance } from "../models/DriverAdvance.js";
 import { TrackingProject } from "../models/TrackingProject.js";
-import { TrackingVehicle } from "../models/TrackingVehicle.js";
 import { AllotmentEvent, VehicleAllotment } from "../models/VehicleAllotment.js";
 import { Vehicle, DOC_SECTIONS } from "../models/Vehicle.js";
 import { User } from "../models/User.js";
@@ -84,7 +83,7 @@ async function notifyRsa(c: any, version: number, resubmitted: boolean, at: Date
   await notifyRole("RSA", {
     type,
     title: resubmitted ? "Vehicle & driver allocation resubmitted" : "Vehicle & driver clearance needed",
-    message: `${resubmitted ? "A corrected vehicle and driver allocation has been resubmitted for RSA clearance" : "A new vehicle and driver allocation is waiting for RSA clearance"}. ${c.trackupNumber} · ${c.clientName ?? "—"} · Vehicle ${c.vehicleNo} · ${c.driverNumber} ${c.driverName} · Submitted ${ist(at)}`,
+    message: `${resubmitted ? "A corrected vehicle and driver allocation has been resubmitted for RSA clearance" : "A new vehicle and driver allocation is waiting for RSA clearance"}. ${c.trackupNumber} (${c.pifNumber}) · ${c.clientName ?? "—"} · Vehicle ${c.vehicleNo} · ${c.driverNumber} ${c.driverName} · Submitted ${ist(at)}`,
     link: rsaLink(c._id), meta: { ...brief(c), version, submittedAt: at }, dedupeKey: `${type}:${c._id}:${version}`,
   });
 }
@@ -94,7 +93,7 @@ async function notifyRbp(c: any, approved: boolean, by: string, at: Date, f: Adv
   const payload = {
     type,
     title: approved ? "Vehicle & driver approved" : "Vehicle & driver rejected",
-    message: `${approved ? "Your vehicle and driver allocation has been approved by RSA." : "Your vehicle and driver allocation has been rejected by RSA. Please review the rejection details."} ${c.trackupNumber} · Vehicle ${c.vehicleNo} · ${c.driverNumber} ${c.driverName} · Outstanding advance ${inr(f.outstanding)} · ${approved ? "Approved" : `Rejected – ${reason}`} · Reviewed by ${by} on ${ist(at)}`,
+    message: `${approved ? "Your vehicle and driver allocation has been approved by RSA." : "Your vehicle and driver allocation has been rejected by RSA. Please review the rejection details."} ${c.trackupNumber} (${c.pifNumber}) · Vehicle ${c.vehicleNo} · ${c.driverNumber} ${c.driverName} · Outstanding advance ${inr(f.outstanding)} · ${approved ? "Approved" : `Rejected – ${reason}`} · Reviewed by ${by} on ${ist(at)}`,
     link: rbpLink(c._id),
     meta: { ...brief(c), status: approved ? "APPROVED" : "REJECTED", outstandingAdvance: f.outstanding, rejectionReason: reason ?? null, reviewedBy: by, reviewedAt: at, version: c.currentVersion },
     dedupeKey: `${type}:${c._id}:${c.currentVersion}`,
@@ -106,9 +105,9 @@ async function notifyRbp(c: any, approved: boolean, by: string, at: Date, f: Adv
 
 // ---------------------------------------------------------------- sync: allotment -> clearance submission
 
-const fromAllotment = (a: any, proj: any, tv: any) => ({
+const fromAllotment = (a: any, proj: any) => ({
   trackingVehicle: a.trackingVehicle, project: a.project, allotment: a._id, vehicle: a.vehicle, driver: a.driver,
-  trackupNumber: a.trackupNumber, pifNumber: a.pifNumber, billNumber: a.billNumber ?? null, displayNumber: tv?.displayNumber ?? null,
+  trackupNumber: a.trackupNumber, pifNumber: a.pifNumber, billNumber: a.billNumber ?? null, 
   clientName: proj?.clientName ?? a.clientName, projectType: proj?.projectType ?? a.projectType, projectName: a.projectName ?? null,
   vehicleNo: a.vehicleNo, driverNumber: a.driverNumber, driverName: a.driverName,
 });
@@ -143,8 +142,8 @@ export async function syncClearances(opts: { trackingVehicle?: unknown; now?: Da
   for (const a of rows) {
     const c: any = a.clr;
     if (c?.status === "REJECTED") continue;
-    const [tv, proj]: any[] = await Promise.all([TrackingVehicle.findById(a.trackingVehicle).lean(), TrackingProject.findById(a.project).lean()]);
-    const base = fromAllotment(a, proj, tv);
+    const proj: any = await TrackingProject.findById(a.project).lean();
+    const base = fromAllotment(a, proj);
     const by = a.driverAssignedBy ?? a.updatedBy;
     const at: Date = a.driverAssignedAt ?? now;
     try {
@@ -194,7 +193,7 @@ export function clearanceFilter(q: ClearanceQuery): Record<string, unknown> {
   const and: any[] = [];
   if (q.q?.trim()) {
     const rx = new RegExp(esc(q.q.trim()), "i");
-    and.push({ $or: [{ trackupNumber: rx }, { pifNumber: rx }, { billNumber: rx }, { displayNumber: rx }, { clientName: rx }, { projectName: rx }, { vehicleNo: rx }, { driverNumber: rx }, { driverName: rx }] });
+    and.push({ $or: [{ trackupNumber: rx }, { pifNumber: rx }, { billNumber: rx }, { clientName: rx }, { projectName: rx }, { vehicleNo: rx }, { driverNumber: rx }, { driverName: rx }] });
   }
   if (q.status && ["YET_TO_APPROVE", "APPROVED", "REJECTED"].includes(q.status)) and.push({ status: q.status });
   else if (q.status === "YET_TO_DELIVER") and.push({ status: "APPROVED", deliveryStatus: { $ne: "DELIVERED" } }); // approved and not delivered yet
@@ -285,6 +284,7 @@ export async function clearanceDetail(id: string) {
     ...row(c),
     project: {
       trackupNumber: c.trackupNumber, pifNumber: c.pifNumber, billNumber: c.billNumber ?? null, projectType: c.projectType ?? null, projectName: c.projectName ?? null, clientName: c.clientName ?? null,
+      requestedVehicleType: a?.requestedVehicleType ?? null,
       projectFrom: (roadshow ? d.startDate : d.fromDate) ?? a?.projectStart ?? null, projectTo: (roadshow ? d.endDate : d.toDate) ?? a?.projectEnd ?? null,
       location: roadshow ? (d.reportingLocations ?? []).join(", ") || null : d.location ?? null,
       approvedBudgetAmount: version?.total ?? budget?.total ?? null, budgetNumber: budget?.budgetNumber ?? null,
@@ -396,12 +396,12 @@ export async function resubmitClearance(id: string, input: unknown, username: st
   if (!a || !a.activeDriver) throw new AppError("No active vehicle and driver allocation exists; allot a vehicle and driver before resubmitting", 409);
   const budget: any = await Budget.findOne({ vehicle: c.trackingVehicle }).lean();
   if (!budget || budget.approvalStatus !== "APPROVED" || budget.approvedVersion !== budget.currentVersion) throw new AppError("The latest budget of this project is not approved by RSOM", 409);
-  const [tv, proj]: any[] = await Promise.all([TrackingVehicle.findById(a.trackingVehicle).lean(), TrackingProject.findById(a.project).lean()]);
+  const proj: any = await TrackingProject.findById(a.project).lean();
   const fin = await verification(a.driver); // the (possibly new) driver's own history; the previous driver's is never reused
   const version = c.currentVersion + 1;
   const upd: any = await Clearance.findOneAndUpdate(
     { _id: c._id, status: "REJECTED", currentVersion: c.currentVersion },
-    { $set: { ...fromAllotment(a, proj, tv), currentVersion: version, status: "YET_TO_APPROVE", submittedBy: username, submittedAt: now, outstandingAdvance: fin.outstanding, financialStatus: fin.status }, $unset: { reviewedBy: 1, reviewedAt: 1, rejectionReason: 1, rejectionRemarks: 1 } },
+    { $set: { ...fromAllotment(a, proj), currentVersion: version, status: "YET_TO_APPROVE", submittedBy: username, submittedAt: now, outstandingAdvance: fin.outstanding, financialStatus: fin.status }, $unset: { reviewedBy: 1, reviewedAt: 1, rejectionReason: 1, rejectionRemarks: 1 } },
     { returnDocument: "after" },
   ).lean();
   if (!upd) throw new AppError("This allocation was just resubmitted; refresh", 409);

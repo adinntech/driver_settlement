@@ -66,10 +66,10 @@ test("allot form: invalid periods are rejected", () => {
   assert.ok(v({ allottedDate: "2026-11-20", allottedTime: "10:00", expectedReleaseDate: "", expectedReleaseTime: "", nextAvailableDate: "2026-11-23", nextAvailableTime: "10:00" }).some((m) => /in the past/.test(m)));
 });
 
-test("allot payload sends the trackup number of the chosen project vehicle and the typed values only", () => {
-  const p = toAllotPayload(okForm(), "JS-22351/2026-27");
-  assert.deepEqual(Object.keys(p).sort(), ["allottedDate", "allottedTime", "expectedReleaseDate", "expectedReleaseTime", "nextAvailableDate", "nextAvailableTime", "remarks", "trackupNumber", "vehicleId"]);
-  assert.equal(p.trackupNumber, "JS-22351/2026-27"); // PIF / names are never sent: the server maps them
+test("allot payload sends the PIF number of the chosen project vehicle and the typed values only", () => {
+  const p = toAllotPayload(okForm(), "PIF-25797");
+  assert.deepEqual(Object.keys(p).sort(), ["allottedDate", "allottedTime", "expectedReleaseDate", "expectedReleaseTime", "nextAvailableDate", "nextAvailableTime", "pifNumber", "remarks", "vehicleId"]);
+  assert.equal(p.pifNumber, "PIF-25797"); // the Trackup is shared, so the PIF identifies the vehicle; names are never sent: the server maps them
 });
 
 test("allot dialog shows the mapped project identifiers read-only, the vehicle autocomplete, schedule fields and the confirm button", () => {

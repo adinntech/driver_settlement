@@ -207,7 +207,7 @@ const roadshow = (r: RoadshowIn): Record<string, unknown> => {
   // Elements & Billing dates must lie within the campaign: clamp each one (clamping keeps the production order).
   const inCampaign = (offset: number) => d(Math.min(r.end, Math.max(r.start, offset)));
   return {
-    projectCode: seedProjectCode(`R:${r.client}`), billingName: r.client, stateCode: r.state, numberOfVans: r.vans, innovationModel: r.innovation, sundayHalt: r.halt,
+    projectCode: seedProjectCode(`R:${r.client}`), billingName: r.client, stateCode: r.state, numberOfVans: r.vans, vehicleTypes: [{ code: "L_BOX_ROOF", quantity: r.vans }], innovationModel: r.innovation, sundayHalt: r.halt,
     startDate: d(r.start), endDate: d(r.end), reportingDate: d(r.reporting), reportingLocations: r.locations, reportingPerson: r.person,
     contactNumber: r.contact, email: r.email, address: r.address, kmAllotted: r.km, extraKmAllowed: "NO", timing: r.timing,
     paSystem: "YES", mike: "YES", tv: "NO", promoter: "YES", leaflet: "YES", otherElements: "As per approved creative, all required elements",
@@ -217,7 +217,7 @@ const roadshow = (r: RoadshowIn): Record<string, unknown> => {
 };
 interface SignageIn { client: string; job: string; location: string; vehicles: number; budget: number; from: number; to: number; work: string; site: string }
 const signage = (s: SignageIn): Record<string, unknown> => ({
-  projectCode: seedProjectCode(`S:${s.client}`), date: d(s.from - 6), client: s.client, jobSheetNumber: s.job, location: s.location, numberOfVehicles: s.vehicles, arrivedBudget: s.budget,
+  projectCode: seedProjectCode(`S:${s.client}`), date: d(s.from - 6), client: s.client, jobSheetNumber: s.job, location: s.location, numberOfVehicles: s.vehicles, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: s.vehicles }], arrivedBudget: s.budget,
   fromDate: d(s.from), toDate: d(s.to), briefWorkDetails: s.work, siteDetails: s.site,
 });
 

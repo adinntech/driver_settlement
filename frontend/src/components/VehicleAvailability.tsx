@@ -94,7 +94,7 @@ function RefField({ field, label, a, onChange }: { field: "trackupNumber" | "pif
           ) : (
             <>
               {res.data.items.map((c) => (
-                <button type="button" key={c.trackupNumber} className="proj-item" role="option" aria-selected="false" disabled={!!c.allocatedTo} onClick={() => pick(c)}>
+                <button type="button" key={c.pifNumber} className="proj-item" role="option" aria-selected="false" disabled={!!c.allocatedTo} onClick={() => pick(c)}>
                   <strong>{c.trackupNumber} <span className="muted">↔</span> {c.pifNumber}</strong>
                   <span>{c.projectName} · {PROJECT_TYPE_LABEL[c.projectType] ?? c.projectType}</span>
                   <small className="muted">{c.clientName}{c.startDate ? ` · ${formatDate(c.startDate)} – ${formatDate(c.endDate)}` : ""}</small>

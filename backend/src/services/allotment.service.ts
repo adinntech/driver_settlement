@@ -51,7 +51,7 @@ function unavailableReason(v: any, now: Date): string | null {
   return `Vehicle ${v.vehicleNo} is no longer available (${a.reason})`;
 }
 
-/** Atomically takes an Available vehicle; null if it changed in the meantime (or the trackup is already held). */
+/** Atomically takes an Available vehicle; null if it changed in the meantime (or the project vehicle is already held). */
 async function reserveVehicle(v: any, data: AvailabilityData, username: string): Promise<any | null | "CONFLICT"> {
   try {
     return await Vehicle.findOneAndUpdate(
@@ -79,13 +79,13 @@ function availableNowBlock(prev: any, now: Date): AvailabilityData & { issueReso
   };
 }
 
-/** Frees the vehicle that currently holds this allotment's trackup. Null when its state no longer matches. */
-async function freeVehicle(vehicleId: unknown, trackup: string, username: string, now: Date): Promise<{ before: any; after: any } | null> {
+/** Frees the vehicle that currently holds this allotment's project vehicle (PIF). Null when its state no longer matches. */
+async function freeVehicle(vehicleId: unknown, pif: string, username: string, now: Date): Promise<{ before: any; after: any } | null> {
   const cur: any = await Vehicle.findById(vehicleId).lean();
-  if (!cur || cur.availability?.status !== "IN_USE" || cur.availability.project?.trackupNumber !== trackup) return null;
+  if (!cur || cur.availability?.status !== "IN_USE" || cur.availability.project?.pifNumber !== pif) return null;
   const block = availableNowBlock(cur.availability, now);
   const after: any = await Vehicle.findOneAndUpdate(
-    { _id: vehicleId, revision: cur.revision, "availability.status": "IN_USE", "availability.project.trackupNumber": trackup },
+    { _id: vehicleId, revision: cur.revision, "availability.status": "IN_USE", "availability.project.pifNumber": pif },
     { $set: { availability: block, updatedBy: username }, $inc: { revision: 1 } },
     { returnDocument: "after" },
   ).lean();
@@ -111,7 +111,7 @@ export async function searchAvailableVehicles(q: string, limit = 10, now = new D
   return items.map((v: any) => ({ _id: String(v._id), vehicleNo: v.vehicleNo, make: v.make ?? null, model: v.model ?? null, type: v.type ?? null }));
 }
 
-/** Approved projects (one row per project vehicle = its own trackup / PIF) with their current allotment, if any. */
+/** Approved projects (one row per project vehicle = its own PIF) with their current allotment, if any. */
 export async function listAllotmentProjects(q: string, page = 1, limit = 10) {
   const base = await searchApprovedProjects(q, page, limit);
   const items = base.items as any[];
@@ -218,14 +218,14 @@ export async function allotVehicle(input: unknown, username: string, now = new D
   const p = projectFromTracking(r.tv, r.proj, r.budget);
 
   const taken: any = await VehicleAllotment.findOne({ trackingVehicle: r.tv._id, status: "ACTIVE" }).lean();
-  if (taken) throw new AppError(`${p.trackupNumber} is already allotted to vehicle ${taken.vehicleNo}; use Change Vehicle to replace it`, 409);
+  if (taken) throw new AppError(`PIF ${p.pifNumber} (${p.trackupNumber}) is already allotted to vehicle ${taken.vehicleNo}; use Change Vehicle to replace it`, 409);
   const veh: any = await Vehicle.findById(d.vehicleId).lean();
   const why = unavailableReason(veh, now);
   if (why) throw new AppError(why, veh ? 409 : 404);
 
   const av = validateAvailability(availabilityInput(p, d.remarks, d.schedule), false, now, null);
   if (av.errors.length || !av.data) throw new AppError(av.errors.join("; "), 400);
-  const clash = await allocationConflict(p.trackupNumber);
+  const clash = await allocationConflict(p.pifNumber);
   if (clash) throw new AppError(clash, 409);
 
   // Option B (vehicle + driver): the driver is validated up front for a friendly error, and taken atomically below.
@@ -265,6 +265,7 @@ export async function allotVehicle(input: unknown, username: string, now = new D
       project: p.trackingProject, trackingVehicle: p.trackingVehicle, budget: p.budget, budgetVersion: p.budgetVersion,
       trackupNumber: p.trackupNumber, pifNumber: p.pifNumber, billNumber: p.billNumber ?? undefined, clientName: p.clientName,
       projectType: p.projectType, projectName: p.projectName, projectStart: p.startDate ?? undefined, projectEnd: p.endDate ?? undefined,
+      requestedVehicleType: p.vehicleType ?? undefined,
       allottedAt: d.allottedAt, expectedReleaseAt: istToDate(d.schedule.expectedReleaseDate, d.schedule.expectedReleaseTime),
       nextAvailableAt: nextAt, remarks: d.remarks ?? undefined,
       status: "ACTIVE", source: "ALLOTMENT", createdBy: username, updatedBy: username,
@@ -273,7 +274,7 @@ export async function allotVehicle(input: unknown, username: string, now = new D
     if (reservedDrv) await restoreDriver(drv._id, reservedDrv.availability.revision, drv.availability, username);
     await restoreVehicle(veh._id, reserved.revision, veh.availability, username); // nothing half-done is left behind
     if (isDup(e) && /activeDriver/.test(String((e as any).message))) throw new AppError(`Driver ${drv?.driverNumber} was just assigned to another vehicle; no vehicle was allotted`, 409);
-    if (isDup(e)) throw new AppError(`${p.trackupNumber} was just allotted to another vehicle`, 409);
+    if (isDup(e)) throw new AppError(`PIF ${p.pifNumber} (${p.trackupNumber}) was just allotted to another vehicle`, 409);
     throw e;
   }
   await logAllotment(a._id, "ALLOTTED", username, {
@@ -287,11 +288,11 @@ export async function allotVehicle(input: unknown, username: string, now = new D
       vehicleNo: veh.vehicleNo, trackupNumber: p.trackupNumber, assignedAt: now, later: false,
     });
     const drows = driverAvailabilityHistory(drv.availability, drvBlock).map((r) => ({
-      ...r, driver: drv._id, username, reason: `Allotted with vehicle ${veh.vehicleNo} to ${p.projectName} (${p.trackupNumber})`,
+      ...r, driver: drv._id, username, reason: `Allotted with vehicle ${veh.vehicleNo} to ${p.projectName} (${p.trackupNumber}, ${p.pifNumber})`,
     }));
     if (drows.length) await DriverHistory.insertMany(drows);
   }
-  const rows = vehicleRows(veh.availability, av.data, veh._id, username, `Allotted to ${p.projectName} (${p.trackupNumber})`);
+  const rows = vehicleRows(veh.availability, av.data, veh._id, username, `Allotted to ${p.projectName} (${p.trackupNumber}, ${p.pifNumber})`);
   if (rows.length) await VehicleHistory.insertMany(rows);
   return withUrls(a.toObject());
 }
@@ -315,7 +316,7 @@ export async function changeVehicle(id: string, input: unknown, username: string
   const why = unavailableReason(repl, now);
   if (why) throw new AppError(why, repl ? 409 : 404);
   const oldVeh: any = await Vehicle.findById(old.vehicle).lean();
-  if (!oldVeh || oldVeh.availability?.status !== "IN_USE" || oldVeh.availability.project?.trackupNumber !== old.trackupNumber)
+  if (!oldVeh || oldVeh.availability?.status !== "IN_USE" || oldVeh.availability.project?.pifNumber !== old.pifNumber)
     throw new AppError("The current vehicle's availability no longer matches this allotment; refresh and check Vehicle Management", 409);
 
   // the project identifiers and schedule are preserved from the original allotment
@@ -334,8 +335,8 @@ export async function changeVehicle(id: string, input: unknown, username: string
   const undoAllotment = () =>
     VehicleAllotment.updateOne({ _id: old._id }, { $set: { status: "ACTIVE", updatedBy: old.updatedBy, ...(old.activeDriver ? { activeDriver: old.activeDriver } : {}) }, $unset: { replacedBy: 1 } });
 
-  // 2) the original vehicle is released (its hold would otherwise block the replacement on the same trackup)
-  const freed = await freeVehicle(oldVeh._id, old.trackupNumber, username, now);
+  // 2) the original vehicle is released (its hold would otherwise block the replacement on the same PIF)
+  const freed = await freeVehicle(oldVeh._id, old.pifNumber, username, now);
   if (!freed) {
     await undoAllotment();
     throw new AppError("The current vehicle changed while replacing it; nothing was changed, please retry", 409);
@@ -358,6 +359,7 @@ export async function changeVehicle(id: string, input: unknown, username: string
       project: old.project, trackingVehicle: old.trackingVehicle, budget: old.budget, budgetVersion: old.budgetVersion,
       trackupNumber: old.trackupNumber, pifNumber: old.pifNumber, billNumber: old.billNumber, clientName: old.clientName,
       projectType: old.projectType, projectName: old.projectName, projectStart: old.projectStart, projectEnd: old.projectEnd,
+      requestedVehicleType: old.requestedVehicleType,
       allottedAt: now, expectedReleaseAt: old.expectedReleaseAt, nextAvailableAt: old.nextAvailableAt, remarks: old.remarks,
       status: "ACTIVE", source: "ALLOTMENT", previousAllotment: old._id, changedFromVehicleNo: old.vehicleNo, changeReason: d.reason,
       changeRemarks: d.remarks ?? undefined, changeAttachments: d.attachments, changedAt: now, createdBy: username, updatedBy: username,
@@ -407,7 +409,7 @@ export async function extendAllotment(id: string, input: unknown, username: stri
   if (nxt && nxt < a.allottedAt) throw new AppError("Next available date & time cannot be before the allotment date & time", 400);
 
   const veh: any = await Vehicle.findById(a.vehicle).lean();
-  if (!veh || veh.availability?.status !== "IN_USE" || veh.availability.project?.trackupNumber !== a.trackupNumber)
+  if (!veh || veh.availability?.status !== "IN_USE" || veh.availability.project?.pifNumber !== a.pifNumber)
     throw new AppError("The vehicle's availability no longer matches this allotment; refresh and check Vehicle Management", 409);
   const p = veh.availability.project;
   const av = validateAvailability(availabilityInput(p, p.remarks ?? null, v.data.schedule), false, now, veh.availability);
@@ -416,7 +418,7 @@ export async function extendAllotment(id: string, input: unknown, username: stri
   if (!rows.length && +(nxt ?? 0) === +(a.nextAvailableAt ? new Date(a.nextAvailableAt) : 0) && +(exp ?? 0) === +(a.expectedReleaseAt ? new Date(a.expectedReleaseAt) : 0)) throw new AppError("No changes to save", 400);
 
   const upd = await Vehicle.findOneAndUpdate(
-    { _id: veh._id, revision: veh.revision, "availability.status": "IN_USE", "availability.project.trackupNumber": a.trackupNumber },
+    { _id: veh._id, revision: veh.revision, "availability.status": "IN_USE", "availability.project.pifNumber": a.pifNumber },
     { $set: { availability: av.data, updatedBy: username }, $inc: { revision: 1 } }, { returnDocument: "after" },
   ).lean();
   if (!upd) throw new AppError("The vehicle was just changed by someone else; refresh and retry", 409);
@@ -444,7 +446,7 @@ export async function releaseAllotment(id: string, input: unknown, username: str
   if (!a) throw new AppError("Allotment not found", 404);
   if (a.status !== "ACTIVE") throw new AppError("This allotment is already closed", 409);
   const reason = v.data.remarks ? `Released by RBP: ${v.data.remarks}` : "Released by RBP";
-  const freed = await freeVehicle(a.vehicle, a.trackupNumber, username, now);
+  const freed = await freeVehicle(a.vehicle, a.pifNumber, username, now);
   if (!freed) throw new AppError("The vehicle's availability no longer matches this allotment; refresh and check Vehicle Management", 409);
   const res: any = await VehicleAllotment.findOneAndUpdate(
     { _id: a._id, status: "ACTIVE" }, { $set: { status: "RELEASED", releasedAt: now, releaseReason: reason, updatedBy: username } }, { returnDocument: "after" },

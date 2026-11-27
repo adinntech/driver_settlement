@@ -8,7 +8,7 @@ import { PAYMENT_MODE_LABEL, SettlementPayment } from "../models/SettlementPayme
 import { Vehicle } from "../models/Vehicle.js";
 import { AppError } from "../utils/AppError.js";
 import { maskTail, unseal } from "../utils/secureField.js";
-import { DEDUCTION_KEYS, DEDUCTION_LABELS } from "../utils/settlement.js";
+import { savedDeductionLines } from "../utils/settlement.js";
 import { CATEGORY_LABEL, ensureDseNumber } from "./settlement.service.js";
 
 /** Reports (RSO), the RSA accounts export and the individual driver salary PDF. All read the saved records only. */
@@ -39,7 +39,7 @@ export async function approvedPaymentRows(q: ReportQuery, statuses: string[] = [
   if (q.to && YMD.test(q.to)) filter.fromDate = { $lte: q.to };
   const rows: any[] = await SettlementPayment.find(filter).sort({ reviewedAt: -1 }).limit(5000).lean();
   return rows.map((p) => ({
-    _id: String(p._id), paymentNumber: p.paymentNumber, category: CATEGORY_LABEL[p.category as "DAILY" | "FINAL"], status: p.status, trackupNumber: p.trackupNumber, jsNumber: p.jsNumber ?? "",
+    _id: String(p._id), paymentNumber: p.paymentNumber, category: CATEGORY_LABEL[p.category as "DAILY" | "FINAL"], status: p.status, trackupNumber: p.trackupNumber, pifNumber: p.pifNumber ?? "", jsNumber: p.jsNumber ?? "",
     clientName: p.clientName ?? "", projectType: p.projectType, vehicleNo: p.vehicleNo ?? "", driverNumber: p.driverNumber ?? "", driverName: p.driverName ?? "", fromDate: p.fromDate, toDate: p.toDate,
     amount: p.amount, accountName: p.bank?.accountName ?? "", bankName: p.bank?.bankName ?? "", ifscCode: p.bank?.ifscCode ?? "", accountNumber: p.bank?.accountMasked ?? "",
     submittedBy: p.submittedBy, approvedBy: p.reviewedBy ?? "", approvedAt: p.reviewedAt ?? null,
@@ -177,7 +177,7 @@ export async function driverSalaryRows(q: ReportQuery) {
   if (q.to && YMD.test(q.to)) filter.fromDate = { $lte: q.to };
   const rows: any[] = await SettlementPayment.find(filter).sort({ reviewedAt: -1 }).limit(5000).lean();
   return rows.map((p) => ({
-    _id: String(p._id), paymentNumber: p.paymentNumber, status: p.status, driverNumber: p.driverNumber, driverName: p.driverName, vehicleNo: p.vehicleNo, trackupNumber: p.trackupNumber, jsNumber: p.jsNumber ?? "",
+    _id: String(p._id), paymentNumber: p.paymentNumber, status: p.status, driverNumber: p.driverNumber, driverName: p.driverName, vehicleNo: p.vehicleNo, trackupNumber: p.trackupNumber, pifNumber: p.pifNumber ?? "", jsNumber: p.jsNumber ?? "",
     clientName: p.clientName ?? "", fromDate: p.fromDate, toDate: p.toDate, onRoadDays: p.data?.days?.onRoadDays ?? 0, onRoadSundays: p.data?.days?.onRoadSundays ?? 0, haltDays: p.data?.days?.haltDays ?? 0,
     // KM allowance (blank for signage and for settlements saved before it was recorded); actual KM is always the Result KM
     regularKmPerDay: kmCell(p.data?.km?.kmPerDay), extraKmPerDay: kmCell(p.data?.km ? p.data.km.extraKmAllotted : null), allowedKmPerDay: kmCell(p.data?.km?.allowedKmPerDay),
@@ -214,7 +214,7 @@ async function workbook(title: string, cols: Col[], rows: Record<string, unknown
 }
 
 export const PAYMENT_COLS: Col[] = [
-  { header: "Payment No", key: "paymentNumber", width: 20 }, { header: "Category", key: "category", width: 24 }, { header: "Status", key: "status" }, { header: "Trackup No", key: "trackupNumber", width: 16 },
+  { header: "Payment No", key: "paymentNumber", width: 20 }, { header: "Category", key: "category", width: 24 }, { header: "Status", key: "status" }, { header: "Trackup No", key: "trackupNumber", width: 16 }, { header: "PIF No", key: "pifNumber", width: 14 },
   { header: "JS No", key: "jsNumber" }, { header: "Client", key: "clientName", width: 24 }, { header: "Project Type", key: "projectType" }, { header: "Vehicle No", key: "vehicleNo", width: 14 },
   { header: "Driver Code", key: "driverNumber" }, { header: "Driver Name", key: "driverName", width: 22 }, { header: "From", key: "fromDate" }, { header: "To", key: "toDate" },
   { header: "Amount (INR)", key: "amount", money: true, width: 16 }, { header: "Account Name", key: "accountName", width: 22 }, { header: "Bank", key: "bankName", width: 22 }, { header: "IFSC", key: "ifscCode" },
@@ -222,14 +222,14 @@ export const PAYMENT_COLS: Col[] = [
 ];
 
 /** RSA accounts export: approved entries only, with the full account number (the file goes to the accounts team). */
-export async function accountsExport(rows: any[]) {
+export async function accountsExport(rows: any[], sheet = "Approved Payments") {
   const shaped = rows.map((p) => ({
-    paymentNumber: p.paymentNumber, category: CATEGORY_LABEL[p.category as "DAILY" | "FINAL"], status: p.status, trackupNumber: p.trackupNumber, jsNumber: p.jsNumber ?? "", clientName: p.clientName ?? "",
+    paymentNumber: p.paymentNumber, category: CATEGORY_LABEL[p.category as "DAILY" | "FINAL"], status: p.status, trackupNumber: p.trackupNumber, pifNumber: p.pifNumber ?? "", jsNumber: p.jsNumber ?? "", clientName: p.clientName ?? "",
     projectType: p.projectType, vehicleNo: p.vehicleNo ?? "", driverNumber: p.driverNumber ?? "", driverName: p.driverName ?? "", fromDate: p.fromDate, toDate: p.toDate, amount: p.amount,
-    accountName: p.bank?.accountName ?? "", bankName: p.bank?.bankName ?? "", ifscCode: p.bank?.ifscCode ?? "", accountNumber: unseal(p.bank?.account) ?? p.bank?.accountMasked ?? "",
+    accountName: p.bank?.accountName ?? "", bankName: p.bank?.bankName ?? "", ifscCode: p.bank?.ifscCode ?? "", accountNumber: (p.status === "APPROVED" ? unseal(p.bank?.account) : null) ?? p.bank?.accountMasked ?? "", // full number only on payable rows
     submittedBy: p.submittedBy, approvedBy: p.reviewedBy ?? "", approvedAt: p.reviewedAt,
   }));
-  return workbook("Approved Payments", PAYMENT_COLS, shaped);
+  return workbook(sheet, PAYMENT_COLS, shaped);
 }
 
 export async function reportWorkbook(kind: string, q: ReportQuery): Promise<{ name: string; buffer: Buffer }> {
@@ -247,7 +247,7 @@ export async function reportWorkbook(kind: string, q: ReportQuery): Promise<{ na
   if (kind === "driver-salary")
     return { name: "driver-salary-report", buffer: await workbook("Driver Salary", [
       { header: "DSE No", key: "paymentNumber", width: 20 }, { header: "Status", key: "status" }, { header: "Driver Code", key: "driverNumber" }, { header: "Driver", key: "driverName", width: 22 },
-      { header: "Vehicle No", key: "vehicleNo", width: 14 }, { header: "Trackup No", key: "trackupNumber", width: 16 }, { header: "JS No", key: "jsNumber" }, { header: "Client", key: "clientName", width: 24 },
+      { header: "Vehicle No", key: "vehicleNo", width: 14 }, { header: "Trackup No", key: "trackupNumber", width: 16 }, { header: "PIF No", key: "pifNumber", width: 14 }, { header: "JS No", key: "jsNumber" }, { header: "Client", key: "clientName", width: 24 },
       { header: "From", key: "fromDate" }, { header: "To", key: "toDate" }, { header: "On Road Days", key: "onRoadDays" }, { header: "On Road Sundays", key: "onRoadSundays" }, { header: "Halt Days", key: "haltDays" },
       { header: "Regular KM/Day", key: "regularKmPerDay" }, { header: "Extra KM/Day", key: "extraKmPerDay" }, { header: "Allowed KM/Day", key: "allowedKmPerDay" },
       { header: "Total Allowed KM", key: "totalAllowedKm" }, { header: "Actual KM", key: "actualKm" }, { header: "Excess KM", key: "excessKm" },
@@ -324,6 +324,7 @@ export async function driverSalaryPdf(id: string): Promise<{ name: string; buffe
   };
   lv("JS No.", d.jsNumber ?? p.jsNumber ?? p.trackupNumber, L, 165, 113, 170);
   lv("Client", p.clientName ?? "", L, 177, 113, 120);
+  lv("PIF No.", p.pifNumber ?? "", L, 190, 113, 170);
   lv("Campaign Period", `From: ${dmy(d.campaignFrom)}   To: ${dmy(d.campaignTo)}`, L, 203, 113, 180);
   lv("Total Days", String(d.totalDays ?? ""), L, 218, 113, 170);
   lv("Location", fit(d.location ?? "", 170), L, 231, 113, 170);
@@ -389,9 +390,9 @@ export async function driverSalaryPdf(id: string): Promise<{ name: string; buffe
   y += 5;
   txt("Gross :", 300, y, { bold: true, w: LBL_R - 300 - 8, align: "right" }); txt(num2(d.gross), LBL_R, y, { bold: true, w: VAL_R - LBL_R, align: "right" });
   y += step;
-  for (const k of DEDUCTION_KEYS) {
-    txt(`${DEDUCTION_LABELS[k]} :`, 233, y);
-    txt(num2(d.deductions[k]), LBL_R, y, { w: VAL_R - LBL_R, align: "right" });
+  for (const [label, value] of savedDeductionLines(d.deductions)) {
+    txt(`${label} :`, 233, y);
+    txt(num2(value), LBL_R, y, { w: VAL_R - LBL_R, align: "right" });
     y += step;
   }
   txt("Total Deduction :", 233, y, { bold: true }); txt(num2(d.totalDeduction), LBL_R, y, { bold: true, w: VAL_R - LBL_R, align: "right" });

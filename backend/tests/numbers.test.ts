@@ -2,12 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   financialYear,
-  generateDisplayNumber,
   generatePifNumber,
   generateTrackupNumber,
 } from "../src/utils/numbers.js";
 import { countDays } from "../src/utils/days.js";
-import { allocateOne, type NumberSet, type NumberStore } from "../src/services/numberAllocator.js";
+import { allocatePif, sharedTrackup, type PifStore, type TrackupStore } from "../src/services/numberAllocator.js";
 import { validateTracking } from "../src/validators/tracking.validator.js";
 
 test("financial year: April starts new FY, March belongs to previous", () => {
@@ -21,9 +20,7 @@ test("number formats", () => {
   for (let i = 0; i < 200; i++) {
     assert.match(generateTrackupNumber(new Date("2026-10-22")), /^JS-\d{5}\/2026-27$/);
     assert.match(generatePifNumber(), /^PIF-\d{5}$/);
-    assert.match(generateDisplayNumber(), /^\d{4}$/);
   }
-  assert.ok(Number(generateDisplayNumber()) >= 1000);
 });
 
 test("countDays: inclusive, Sunday halt excludes Sundays", () => {
@@ -35,83 +32,78 @@ test("countDays: inclusive, Sunday halt excludes Sundays", () => {
   assert.equal(countDays("2026-10-26", "2026-10-24", false), 0);
 });
 
-function memoryStore(taken: NumberSet[] = []): NumberStore & { rows: NumberSet[] } {
-  const rows = [...taken];
+function trackupStore(current: string | null = null, taken: string[] = []): TrackupStore & { value: () => string | null } {
+  let value = current;
   return {
-    rows,
-    exists: async (s) =>
-      rows.some(
-        (r) =>
-          r.trackupNumber === s.trackupNumber ||
-          r.pifNumber === s.pifNumber ||
-          r.displayNumber === s.displayNumber,
-      ),
-    insert: async (s) => {
-      if (
-        rows.some(
-          (r) =>
-            r.trackupNumber === s.trackupNumber ||
-            r.pifNumber === s.pifNumber ||
-            r.displayNumber === s.displayNumber,
-        )
-      )
-        throw Object.assign(new Error("dup"), { code: 11000 });
-      rows.push(s);
+    value: () => value,
+    find: async () => value,
+    used: async (n) => taken.includes(n),
+    claim: async (n) => {
+      if (value) throw Object.assign(new Error("dup"), { code: 11000 });
+      value = n;
     },
   };
 }
 
-test("allocateOne skips an already used number", async () => {
-  const store = memoryStore([{ trackupNumber: "JS-11111/2026-27", pifNumber: "PIF-11111", displayNumber: "1111" }]);
-  const seq = ["JS-11111/2026-27", "JS-22222/2026-27"];
-  let i = 0;
-  const set = await allocateOne(store, 1, {
-    trackup: () => seq[Math.min(i++, 1)],
-    pif: () => "PIF-33333",
-    display: () => "3333",
-  });
-  assert.equal(set.trackupNumber, "JS-22222/2026-27");
+test("sharedTrackup: reuses the group's number, skips used ones, and adopts the winner of a race", async () => {
+  assert.equal(await sharedTrackup(trackupStore("JS-1")), "JS-1");
+  const seq = ["JS-2", "JS-3"];
+  assert.equal(await sharedTrackup(trackupStore(null, ["JS-2"]), () => seq.shift()!), "JS-3");
+  const raced = trackupStore();
+  const claim = raced.claim;
+  raced.claim = async () => {
+    await claim("JS-9"); // someone else claims the group first
+    throw Object.assign(new Error("dup"), { code: 11000 });
+  };
+  assert.equal(await sharedTrackup(raced), "JS-9");
 });
 
-test("allocateOne retries when the DB unique index rejects (race)", async () => {
-  const store = memoryStore();
+function pifStore(taken: string[] = []): PifStore & { rows: string[] } {
+  const rows = [...taken];
+  return {
+    rows,
+    exists: async (p) => rows.includes(p),
+    insert: async (p) => {
+      if (rows.includes(p)) throw Object.assign(new Error("dup"), { code: 11000 });
+      rows.push(p);
+    },
+  };
+}
+
+test("allocatePif skips used numbers, retries a rejected insert, rethrows other errors and gives up", async () => {
+  const seq = ["PIF-1", "PIF-2"];
+  assert.equal(await allocatePif(pifStore(["PIF-1"]), () => seq.shift()!), "PIF-2");
+  const race = pifStore();
+  const insert = race.insert;
   let first = true;
-  const original = store.insert;
-  store.insert = async (s, n) => {
+  race.insert = async (p) => {
     if (first) {
       first = false;
       throw Object.assign(new Error("dup"), { code: 11000 });
     }
-    return original(s, n);
+    return insert(p);
   };
-  const set = await allocateOne(store, 1);
-  assert.equal(store.rows.length, 1);
-  assert.ok(set.trackupNumber.startsWith("JS-"));
-});
-
-test("allocateOne rethrows non-duplicate errors and gives up when exhausted", async () => {
-  const bad = memoryStore();
+  assert.match(await allocatePif(race), /^PIF-/);
+  assert.equal(race.rows.length, 1);
+  const bad = pifStore();
   bad.insert = async () => {
     throw new Error("boom");
   };
-  await assert.rejects(allocateOne(bad, 1), /boom/);
-  const always = memoryStore();
-  always.exists = async () => true;
-  await assert.rejects(allocateOne(always, 1), /exhausted/);
+  await assert.rejects(allocatePif(bad), /boom/);
+  await assert.rejects(allocatePif({ exists: async () => true, insert: async () => {} }), /exhausted/);
 });
 
-test("concurrent allocation yields all-unique numbers", async () => {
-  const store = memoryStore();
-  const sets = await Promise.all(Array.from({ length: 100 }, (_, i) => allocateOne(store, i + 1)));
-  for (const k of ["trackupNumber", "pifNumber", "displayNumber"] as const)
-    assert.equal(new Set(sets.map((s) => s[k])).size, 100);
+test("concurrent allocation yields all-unique PIF numbers", async () => {
+  const store = pifStore();
+  const pifs = await Promise.all(Array.from({ length: 100 }, () => allocatePif(store)));
+  assert.equal(new Set(pifs).size, 100);
 });
 
 const roadshow = {
   projectCode: "20000001",
   billingName: "Sapphire Foods (KFC)",
   stateCode: "33",
-  numberOfVans: 7,
+  numberOfVans: 7, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 7 }],
   startDate: "2027-10-22",
   endDate: "2027-10-23",
   reportingDate: "2027-10-22",
@@ -126,7 +118,7 @@ const signage = {
   client: "DALMIA",
   jobSheetNumber: "22070649",
   location: "RAMNAD",
-  numberOfVehicles: 2,
+  numberOfVehicles: 2, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 2 }],
   fromDate: "2026-10-21",
   toDate: "2026-10-26",
   arrivedBudget: 25000,
@@ -148,7 +140,7 @@ test("roadshow validation: rejects bad input", () => {
     email: "nope",
     contactNumber: "12",
     reportingLocations: [],
-    numberOfVans: 0,
+    numberOfVans: 0, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 0 }],
     sundayHalt: "MAYBE",
   });
   assert.ok(r.errors.length >= 6);

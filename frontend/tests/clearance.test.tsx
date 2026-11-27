@@ -19,7 +19,7 @@ const fin = (over: Partial<ClearanceFinancial> = {}): ClearanceFinancial => ({
 });
 
 test("sidebar: RSA gets Vehicle & Driver Clearance, RBP gets On-Road Vehicles last; RSOP / RSOM unchanged", () => {
-  assert.deepEqual(NAV.RSA.map((n) => n.label), ["Payments", "Vehicle & Driver Clearance", "On Road Vehicles", "Driver Payments", "Payment Completed"]); // settlement pages appended
+  assert.deepEqual(NAV.RSA.map((n) => n.label), ["Payments", "Vehicle & Driver Clearance", "On Road Vehicles", "Driver Payments", "Payment Completed", "IOCL Data"]); // settlement pages appended
   assert.equal(NAV.RSA[1].href, "/rsa/clearance");
   assert.deepEqual(NAV.RBP.map((n) => n.label), ["Projects & Budgets", "Vehicle Management", "Driver Management", "Vehicle Deliver", "On Road Vehicles", "Driver Payments"]); // payments appended after the existing entries
   assert.equal(NAV.RBP[3].href, "/rbp/on-road");
@@ -67,7 +67,7 @@ test("RSA table: required columns, Review action, Not Available for unverified a
 });
 
 test("RBP table: delivery columns, View + Deliver actions only where allowed", () => {
-  assert.deepEqual([...RBP_COLUMNS], ["Trackup Number", "Project Type", "Client / Billing Name", "Vehicle Number", "Driver Number", "Driver Name", "RSA Approval Status", "Delivery Status", "RSA Approved Date", "Delivered Date", "Actions"]);
+  assert.deepEqual([...RBP_COLUMNS], ["Trackup Number", "PIF Number", "Project Type", "Client / Billing Name", "Vehicle Number", "Driver Number", "Driver Name", "RSA Approval Status", "Delivery Status", "RSA Approved Date", "Delivered Date", "Actions"]);
   const items = [
     row({ _id: "a".repeat(24), status: "APPROVED", deliveryStatus: "YET_TO_DELIVER", approvedAt: "2026-11-24T05:30:00.000Z" }),
     row({ _id: "b".repeat(24), status: "APPROVED", deliveryStatus: "DELIVERED", approvedAt: "2026-11-24T05:30:00.000Z", deliveredAt: "2026-11-25T05:30:00.000Z" }),
@@ -80,7 +80,7 @@ test("RBP table: delivery columns, View + Deliver actions only where allowed", (
   assert.ok(!/deliver\?id=[bcd]{24}/.test(html)); // never for delivered, rejected or pending
   assert.equal((html.match(/>View</g) ?? []).length, 4);
   for (const t of ["Yet to Deliver", "Delivered", "Pending", "Approved", "Rejected", "24-Nov-2026", "25-Nov-2026"]) assert.match(html, new RegExp(t));
-  assert.ok(!html.includes("PIF-11111")); // minimal columns
+  assert.ok(html.includes("PIF-11111")); // the Trackup is shared, so rows are told apart by PIF
 });
 
 test("filters bar: mass search, status, project type, date range, Clear Filters", () => {

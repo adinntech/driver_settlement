@@ -13,6 +13,3 @@ const rand = (min: number, max: number): number => randomInt(min, max + 1);
 export const generateTrackupNumber = (date?: Date) =>
   `JS-${rand(10000, 99999)}/${financialYear(date)}`;
 export const generatePifNumber = () => `PIF-${rand(10000, 99999)}`;
-/** 4 digits normally; 5 digits once the 4-digit space (9,000 values) is used up. */
-export const generateDisplayNumber = (fiveDigits = false) =>
-  fiveDigits ? String(rand(10000, 99999)) : String(rand(1000, 9999));

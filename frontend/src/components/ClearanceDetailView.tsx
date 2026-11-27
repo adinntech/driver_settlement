@@ -39,7 +39,7 @@ function Screen({ mode }: { mode: "RSA" | "RBP" }) {
       <div className="page-head">
         <div>
           <Link href={back} className="muted">← Back</Link>
-          <h1>{mode === "RSA" ? "Review Vehicle & Driver" : "Vehicle Delivery Details"} · {d.trackupNumber}</h1>
+          <h1>{mode === "RSA" ? "Review Vehicle & Driver" : "Vehicle Delivery Details"} · {d.trackupNumber} · {d.pifNumber}</h1>
           <p className="muted">Version V{d.version} · Submitted {formatDateTime(d.submittedAt)} by {d.submittedBy} <ClearanceStatusBadge status={d.status} /></p>
         </div>
       </div>

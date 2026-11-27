@@ -32,7 +32,7 @@ export interface ClearanceHistoryRow { _id: string; version: number; action: str
 export interface ClearanceDetail extends ClearanceRow {
   project: {
     trackupNumber: string; pifNumber: string; billNumber: string | null; projectType: string | null; projectName: string | null; clientName: string | null; projectFrom: string | null; projectTo: string | null;
-    location: string | null; approvedBudgetAmount: number | null; budgetNumber: string | null; rsomStatus: string | null; rsomApprovedBy: string | null; rsomApprovedAt: string | null;
+    location: string | null; approvedBudgetAmount: number | null; requestedVehicleType?: string | null; budgetNumber: string | null; rsomStatus: string | null; rsomApprovedBy: string | null; rsomApprovedAt: string | null;
   };
   vehicle: {
     _id: string; vehicleNo: string; make: string | null; model: string | null; type: string | null; status: string | null; availabilityStatus: string | null; allottedAt: string | null;

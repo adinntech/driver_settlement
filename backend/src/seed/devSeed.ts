@@ -78,7 +78,7 @@ export function assertDevOnly(): void {
 const today = todayYmd();
 const d = (n: number) => addDays(today, n);
 
-class Tally {
+export class Tally {
   created: Record<string, number> = {};
   existing: Record<string, number> = {};
   add(kind: string, wasCreated: boolean) {
@@ -87,7 +87,7 @@ class Tally {
   }
 }
 
-async function loadActors(): Promise<Actors> {
+export async function loadActors(): Promise<Actors> {
   await seedUsers(); // creates only the env-configured logins that are missing; never touches an existing user
   const out: Partial<Actors> = {};
   for (const role of ["RSOP", "RBP", "RSOM", "RSA"] as RoleKey[]) {
@@ -115,7 +115,7 @@ const driverInput = (s: DriverSpec) => {
   };
 };
 
-async function ensureDriver(s: DriverSpec, rbp: Actor, t: Tally): Promise<any> {
+export async function ensureDriver(s: DriverSpec, rbp: Actor, t: Tally): Promise<any> {
   const found: any = await Driver.findOne({ mobileDigits: s.mobile }).lean();
   if (found) { t.add("drivers", false); return found; }
   const created = await createDriver(driverInput(s), rbp.username);
@@ -155,7 +155,7 @@ const issueBlock = (i: typeof ISSUE_FOR_V16, reportedDaysAgo: number | null) => 
   },
 });
 
-async function ensureVehicle(s: VehicleSpec, rbp: Actor, t: Tally): Promise<any> {
+export async function ensureVehicle(s: VehicleSpec, rbp: Actor, t: Tally): Promise<any> {
   const found: any = await Vehicle.findOne({ vehicleNo: s.vehicleNo }).lean();
   if (found) { t.add("vehicles", false); return found; }
   const base = vehicleBase(s);
@@ -200,7 +200,7 @@ function budgetInput(p: BudgetParams, project: any) {
   };
 }
 
-async function ensureBudget(plan: BudgetPlan, tv: any, project: any, a: Actors, t: Tally): Promise<void> {
+export async function ensureBudget(plan: BudgetPlan, tv: any, project: any, a: Actors, t: Tally): Promise<void> {
   let budget: any = await Budget.findOne({ vehicle: tv._id }).lean();
   if (!budget) {
     const r = await createBudget(String(tv._id), budgetInput(plan.v1, project), a.RBP.username);
@@ -323,7 +323,7 @@ export function makePng(w: number, h: number, rgb: [number, number, number]): Bu
 }
 const photo = (name: string, rgb: [number, number, number]) => { const buffer = makePng(480, 300, rgb); return { originalname: name, mimetype: "image/png", size: buffer.length, buffer }; };
 
-async function ensureClearance(plan: ClearancePlan, tv: any, a: Actors, t: Tally): Promise<void> {
+export async function ensureClearance(plan: ClearancePlan, tv: any, a: Actors, t: Tally): Promise<void> {
   const had = await Clearance.exists({ trackingVehicle: tv._id });
   await syncClearances({ trackingVehicle: tv._id }); // the real allotment -> clearance submission (RBP -> RSA)
   let c: any = await Clearance.findOne({ trackingVehicle: tv._id }).lean();
@@ -346,7 +346,7 @@ async function ensureClearance(plan: ClearancePlan, tv: any, a: Actors, t: Tally
   }
   await reload();
   if (plan.deliver && c.status === "APPROVED" && c.deliveryStatus !== "DELIVERED") {
-    const label = String(tv.trackupNumber).replace(/[^A-Za-z0-9]+/g, "-");
+    const label = String(tv.pifNumber).replace(/[^A-Za-z0-9]+/g, "-");
     const speedo = await uploadDeliveryPhoto(String(c._id), "speedometer", photo(`speedometer-${label}.png`, [40, 90, 160]), a.RBP.username);
     const proof = await uploadDeliveryPhoto(String(c._id), "evidence", photo(`handover-${label}.png`, [60, 140, 90]), a.RBP.username);
     await deliverVehicle(String(c._id), { version: c.currentVersion, description: plan.deliver, speedometerPhoto: { key: speedo.key }, evidencePhoto: { key: proof.key } }, a.RBP.username);
@@ -356,7 +356,7 @@ async function ensureClearance(plan: ClearancePlan, tv: any, a: Actors, t: Tally
 
 // ---------------------------------------------------------------- payments + release
 
-async function ensurePayment(p: PaymentPlan, tv: any, project: any, a: Actors, t: Tally): Promise<void> {
+export async function ensurePayment(p: PaymentPlan, tv: any, project: any, a: Actors, t: Tally): Promise<void> {
   const idempotencyKey = `devseed-${p.key}`;
   const had = await RsaPayment.exists({ trackingVehicle: tv._id, idempotencyKey });
   await createPayment(String(tv._id), {

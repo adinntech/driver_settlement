@@ -50,6 +50,7 @@ function ApproveDialog({ d, onClose, onDone }: { d: ClearanceDetail; onClose: ()
     <Modal title="Approve Vehicle & Driver" onClose={onClose}>
       <dl className="kv compact">
         <div><dt>Trackup Number</dt><dd>{d.trackupNumber}</dd></div>
+        <div><dt>PIF Number</dt><dd>{d.pifNumber}</dd></div>
         <div><dt>Vehicle Number</dt><dd>{d.vehicleNo}</dd></div>
         <div><dt>Driver</dt><dd>{d.driverNumber} · {d.driverName}</dd></div>
         <div><dt>Advance Verification</dt><dd>{financialLabel(d.financial.status)} ({outstandingText(d.financial.outstanding, d.financial.status)})</dd></div>
@@ -89,7 +90,7 @@ function RejectDialog({ d, onClose, onDone }: { d: ClearanceDetail; onClose: () 
   }
   return (
     <Modal title="Reject Vehicle & Driver" onClose={onClose}>
-      <p className="muted">{d.trackupNumber} · {d.vehicleNo} · {d.driverNumber} {d.driverName} · Outstanding advance: {outstandingText(d.financial.outstanding, d.financial.status)}</p>
+      <p className="muted">{d.trackupNumber} · {d.pifNumber} · {d.vehicleNo} · {d.driverNumber} {d.driverName} · Outstanding advance: {outstandingText(d.financial.outstanding, d.financial.status)}</p>
       <label className="field"><span>Rejection Reason *</span>
         <Select value={reason} onChange={(e) => setReason(e.target.value)} aria-label="Rejection reason">
           <option value="">Select a reason</option>{REJECTION_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
@@ -144,7 +145,7 @@ export function RbpActions({ d, onDone }: { d: ClearanceDetail; onDone: () => vo
       </div>
       {confirm && (
         <Modal title="Resubmit for RSA Approval" onClose={() => setConfirm(false)}>
-          <p className="muted">Resubmit {d.trackupNumber} with the vehicle and driver currently allotted. A new version is created and RSA is notified. Approved budget: {formatInr(d.project.approvedBudgetAmount)}.</p>
+          <p className="muted">Resubmit {d.trackupNumber} ({d.pifNumber}) with the vehicle and driver currently allotted. A new version is created and RSA is notified. Approved budget: {formatInr(d.project.approvedBudgetAmount)}.</p>
           <div className="actions-row">
             <button className="btn btn-outline" onClick={() => setConfirm(false)} disabled={busy}>Cancel</button>
             <button className="btn btn-primary" onClick={go} disabled={busy}>{busy ? "Please wait…" : "Confirm Resubmission"}</button>

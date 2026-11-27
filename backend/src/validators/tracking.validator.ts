@@ -1,3 +1,4 @@
+import { parseVehicleTypes } from "../utils/vehicleTypes.js";
 import { countDays } from "../utils/days.js";
 import { addDaysYmd, isYmd, todayIst } from "../utils/dates.js";
 import { normalizeIndianPhone } from "../utils/phone.js";
@@ -53,6 +54,9 @@ export function validateTracking(projectType: unknown, input: unknown, opts: Tra
     errors.push("Number of vehicles must be a whole number between 1 and 100");
 
   const details: Obj = { ...b };
+  const types = parseVehicleTypes(b.vehicleTypes, count);
+  errors.push(...types.errors);
+  details.vehicleTypes = types.items;
   if (projectType === "ROADSHOW") delete details.model;
   let clientName = "";
   // Project Code (both types): exactly 8 digits, kept as text so leading zeros survive.

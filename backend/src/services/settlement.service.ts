@@ -2,7 +2,6 @@
 import mongoose from "mongoose";
 import type { RoleKey } from "../config/roles.js";
 import { rsaOptions } from "../config/rsaOptions.js";
-import { AllotmentEvent } from "../models/VehicleAllotment.js";
 import { Budget } from "../models/Budget.js";
 import { Driver } from "../models/Driver.js";
 import { DriverAdvance } from "../models/DriverAdvance.js";
@@ -10,10 +9,11 @@ import { Counter, RsaPayment } from "../models/RsaPayment.js";
 import { ENTRY_PAYMENT_MODES, PAYMENT_MODE_LABEL, SettlementPayment, SettlementPaymentEvent, type PaymentCategory } from "../models/SettlementPayment.js";
 import { TrackingProject } from "../models/TrackingProject.js";
 import { AppError } from "../utils/AppError.js";
+import { pendingDriverChange } from "./driverChangeDeduction.js";
 import { financialYear } from "../utils/numbers.js";
 import { kmAllowanceOf } from "../utils/kmAllowance.js";
 import { maskTail, seal } from "../utils/secureField.js";
-import { daysBetween, dailyData, finalData, FINAL_EXPENSE_CATEGORIES, DEDUCTION_LABELS, validateDailyInput, validateFinalInput } from "../utils/settlement.js";
+import { daysBetween, dailyData, finalData, finalPeriod, FINAL_EXPENSE_CATEGORIES, DEDUCTION_LABELS, validateDailyInput, validateFinalInput } from "../utils/settlement.js";
 import { notifyRole, notifyUsername } from "./notification.service.js";
 import { checkAdvanceEligibility, listEligibleProjects, projectContext, viewBudget, viewDriver, type EligibleQuery } from "./rsa.service.js";
 
@@ -108,12 +108,11 @@ export async function settlementContext(tvId: string) {
   const bd = budget?.data ?? {};
   const perDay = (amt: unknown, unit: unknown, days: number) => (unit === "PER_CAMPAIGN" && days ? Math.round((Number(amt) / days) * 100) / 100 : Number(amt) || 0);
   const days = Number(bd.numberOfDays) || camp.totalDays || 0;
-  const changes: any[] = await AllotmentEvent.find({ allotment: ctx._raw.allotment, action: "DRIVER_CHANGED" }).lean();
-  const travelDeduction = changes.filter((e) => e.details?.from?.driverId === ctx._raw.driver).reduce((s, e) => s + (Number(e.details?.travelAmountDeduction) || 0), 0);
+  const driverChange = await pendingDriverChange(ctx._raw.driver);
   const [advances, dailyAdvances, existingFinal, rsaEntries]: any[] = await Promise.all([
     DriverAdvance.find({ driver: ctx._raw.driver, submittedAt: { $gte: new Date(`${camp.fromDate ?? "1970-01-01"}T00:00:00+05:30`) } }).select("finalAdvanceAmount workingDays submittedAt submittedBy").sort({ submittedAt: 1 }).lean(),
     SettlementPayment.find({ allotment: ctx._raw.allotment, driver: ctx._raw.driver, category: "DAILY", status: { $ne: "REJECTED" } }).select("paymentNumber status fromDate toDate amount submittedAt completion data.salaryAdvance data.dieselTotal data.foodAmount data.cashInHand data.dieselEntries").sort({ fromDate: 1 }).lean(),
-    SettlementPayment.findOne({ finalLock: `${ctx._raw.allotment}:${ctx._raw.driver}` }).select("paymentNumber status").lean(),
+    SettlementPayment.findOne({ category: "FINAL", trackingVehicle: tvId, driver: ctx._raw.driver }).sort({ submittedAt: -1 }).select("paymentNumber status").lean(),
     RsaPayment.find({ trackingVehicle: tvId }).select("paymentNumber entryDateTime totalPayable cashInHand dieselEntries").sort({ entryDateTime: -1 }).limit(100).lean(),
   ]);
   const paidDaily = dailyAdvances.filter((p: any) => p.status === "APPROVED" || p.status === "COMPLETED"); // only approved daily payments count as paid
@@ -147,8 +146,8 @@ export async function settlementContext(tvId: string) {
       estimatedKmPerDay: Number(bd.estimatedKmPerDay) || 0, fixedMileage: Number(bd.mileage) || 0,
       estimatedBudget: budget?.total ?? 0, estimatedKm: Number(bd.totalKm) || (Number(bd.estimatedKmPerDay) || 0) * days,
       estimatedFuel: Number(bd.mileage) ? Math.round((((Number(bd.totalKm) || (Number(bd.estimatedKmPerDay) || 0) * days) / Number(bd.mileage)) * 100)) / 100 : 0,
-      perDaySalary: perDay(bd.salaryAmount, bd.salaryUnit, days) || Number(driver?.salary) || 0, perDayFood: perDay(bd.foodAmount, bd.foodUnit, days), haltDayPay: Number(bd.haltFood) || 0,
-      driverChangeTravel: travelDeduction, suspenseAmount: advanceTotal,
+      perDaySalary: perDay(bd.salaryAmount, bd.salaryUnit, days) || Number(driver?.salary) || 0, perDayFood: perDay(bd.foodAmount, bd.foodUnit, days),
+      driverChangeAmount: driverChange.amount, suspenseAmount: advanceTotal,
     },
   };
 }
@@ -177,13 +176,17 @@ export async function getSettlement(id: string) {
   };
 }
 
-export interface ListQuery { scope?: string; category?: string; status?: string; q?: string; from?: string; to?: string; projectType?: string; page?: number; limit?: number; sort?: string; dir?: string }
+export interface ListQuery { scope?: string; category?: string; status?: string; q?: string; from?: string; to?: string; projectType?: string; page?: number; limit?: number; sort?: string; dir?: string; approvedOn?: string }
 const SORTS: Record<string, string> = { submittedAt: "submittedAt", amount: "amount", paymentNumber: "paymentNumber", fromDate: "fromDate", status: "status", driverName: "driverName", vehicleNo: "vehicleNo" };
+
+/** Roles whose queue and summary cards are limited to the one category they approve. */
+const APPROVER_ONLY: Partial<Record<RoleKey, PaymentCategory>> = { RSOM: "DAILY" };
 
 /** Common approval queue. Completed payments are listed separately (`status=COMPLETED`). */
 export function listFilter(q: ListQuery, role: RoleKey) {
   const and: any[] = [];
-  if (q.category === "DAILY" || q.category === "FINAL") and.push({ category: q.category });
+  const category = role === "RSOM" ? APPROVER_ONLY.RSOM : q.category; // RSOM works on daily payments only, whatever is asked for
+  if (category === "DAILY" || category === "FINAL") and.push({ category });
   // scope=all: the shared Driver Payments module (RBP and RSA see the same full list, paid entries included: they stay there with
   // "Entry Completed" and also appear in Payment Completed). RSA's accounts queue (no scope) stays pending + approved only.
   const shared = q.scope === "all" && (role === "RBP" || role === "RSA");
@@ -199,6 +202,10 @@ export function listFilter(q: ListQuery, role: RoleKey) {
   }
   if (q.from && YMD.test(q.from)) and.push({ toDate: { $gte: q.from } }); // period overlaps [from, to]
   if (q.to && YMD.test(q.to)) and.push({ fromDate: { $lte: q.to } });
+  if (q.approvedOn && YMD.test(q.approvedOn)) { // the IST day of approval (Bulk Entry)
+    const start = new Date(`${q.approvedOn}T00:00:00+05:30`);
+    if (!Number.isNaN(start.getTime())) and.push({ reviewedAt: { $gte: start, $lt: new Date(start.getTime() + 86_400_000) } });
+  }
   return { $and: and };
 }
 
@@ -211,7 +218,7 @@ export async function listSettlements(q: ListQuery, role: RoleKey) {
   const [items, total, counts]: any[] = await Promise.all([
     SettlementPayment.find(filter).sort({ [sortKey]: dir, _id: dir }).skip((page - 1) * limit).limit(limit).lean(),
     SettlementPayment.countDocuments(filter),
-    SettlementPayment.aggregate([{ $group: { _id: { c: "$category", s: "$status" }, n: { $sum: 1 }, amount: { $sum: "$amount" } } }]),
+    SettlementPayment.aggregate([{ $match: APPROVER_ONLY[role] ? { category: APPROVER_ONLY[role] } : {} }, { $group: { _id: { c: "$category", s: "$status" }, n: { $sum: 1 }, amount: { $sum: "$amount" } } }]),
   ]);
   const summary: Record<string, { count: number; amount: number }> = {};
   for (const c of counts) {
@@ -250,10 +257,15 @@ function buildDaily(input: unknown, projectType: string, camp: { fromDate: strin
 
 function buildFinal(input: unknown, camp: ReturnType<typeof campaignOf>) {
   if (!camp.fromDate || !camp.toDate) throw new AppError("The campaign period of this project is not set", 409);
-  const v = validateFinalInput(input, { totalDays: daysBetween(camp.fromDate, camp.toDate), fromDate: camp.fromDate, toDate: camp.toDate }); // on-road + Sunday + halt days and reporting date fit inside the campaign calendar
+  const p = finalPeriod(input, { fromDate: camp.fromDate, toDate: camp.toDate, totalDays: camp.totalDays });
+  if (p.errors.length) throw new AppError(p.errors.join("; "), 400);
+  const { fromDate, toDate, totalDays, days } = p.period;
+  // on-road days and Sundays fit inside the campaign calendar. Reporting Date is read-only: the project's, never the browser's.
+  const v = validateFinalInput({ ...(input && typeof input === "object" ? input : {}), reportingDate: undefined }, { totalDays: days });
   if (v.errors.length || !v.data) throw new AppError(v.errors.join("; "), 400);
-  const data = finalData(v.data, { fromDate: camp.fromDate, toDate: camp.toDate, totalDays: camp.totalDays, km: camp.km });
-  return { data, key: v.data.idempotencyKey, fromDate: camp.fromDate, toDate: camp.toDate, amount: data.netAmount };
+  v.data.reportingDate = camp.reportingDate ?? camp.fromDate;
+  const data = finalData(v.data, { fromDate, toDate, totalDays, km: camp.km }); // the KM allowance stays the project's
+  return { data, key: v.data.idempotencyKey, fromDate, toDate, amount: data.netAmount };
 }
 
 /**
@@ -308,6 +320,24 @@ export async function withLock<T>(key: string, fn: () => Promise<T>): Promise<T>
   }
 }
 
+/**
+ * Previous Salary Deduction carries the driver-change deductions this driver still owes. The figure the form was built on must still
+ * be current, the deduction may not be below it (more can be added by hand), and the events recovered are recorded with the entry.
+ */
+async function applyDriverChange(data: any, input: unknown, driverId: string, exceptPaymentId?: string) {
+  const due = await pendingDriverChange(driverId, exceptPaymentId);
+  const seen = Number((input as any)?.driverChangeAmount ?? 0);
+  if (Math.round(seen * 100) !== Math.round(due.amount * 100))
+    throw new AppError(`The driver change deduction for this driver is now ${due.amount}; reload the form and check Previous Salary Deduction`, 409);
+  if (Math.round(data.deductions.previousSalary * 100) < Math.round(due.amount * 100))
+    throw new AppError(`Previous Salary Deduction must be at least ${due.amount} (driver change deduction)`, 400);
+  data.driverChangeAmount = due.amount;
+  data.driverChangeEvents = due.events;
+}
+
+/** Finals of one driver are saved one at a time (on any project), so two cannot recover the same driver change. */
+const payLock = (category: PaymentCategory, tvId: string, driver: string) => (category === "FINAL" ? `FINAL:${driver}` : `DAILY:${tvId}:${driver}`);
+
 export async function submitSettlement(category: PaymentCategory, tvId: string, input: unknown, username: string, role: EntryRole | Date = "RBP", now = new Date()) {
   if (role instanceof Date) [now, role] = [role, "RBP"]; // older call shape (username, now)
   if (category !== "DAILY" && category !== "FINAL") throw new AppError("Unknown payment category", 400);
@@ -323,13 +353,15 @@ export async function submitSettlement(category: PaymentCategory, tvId: string, 
   const finalLock = category === "FINAL" ? `${refs.allotment}:${refs.driver}` : undefined;
   let saved: any;
   try {
-    saved = await withLock(`${category}:${tvId}:${refs.driver}`, async () => {
+    saved = await withLock(payLock(category, tvId, refs.driver), async () => {
     const again: any = await SettlementPayment.findOne({ idempotencyKey: built.key }).lean(); // a retry that waited for the lock
     if (again) return { replayOf: again };
     if (category === "DAILY") await assertNoDailyOverlap(tvId, refs.driver, built.fromDate, built.toDate);
     else {
-      const dup: any = await SettlementPayment.findOne({ finalLock }).select("paymentNumber status").lean();
-      if (dup) throw new AppError(`A final settlement (${dup.paymentNumber}, ${dup.status.toLowerCase()}) already exists for this driver on this vehicle`, 409);
+      // any status counts, whatever allotment it was raised on: a rejected one is corrected and resubmitted, not entered again
+      const dup: any = await SettlementPayment.findOne({ category: "FINAL", trackingVehicle: tvId, driver: refs.driver }).select("paymentNumber status").lean();
+      if (dup) throw new AppError(`A final settlement (${dup.paymentNumber}, ${dup.status.toLowerCase()}) already exists for this driver on this vehicle${dup.status === "REJECTED" ? "; correct and resubmit it" : ""}`, 409);
+      await applyDriverChange(built.data, input, refs.driver);
     }
     return inTxn(async (session) => {
       const [doc]: any[] = await SettlementPayment.create([{
@@ -373,8 +405,9 @@ export async function resubmitSettlement(id: string, input: unknown, username: s
   const built = p.category === "DAILY" ? buildDaily(body, p.projectType, camp, { fromDate: p.fromDate, toDate: p.toDate }) : buildFinal(body, camp);
   let upd: any;
   try {
-    upd = await withLock(`${p.category}:${p.trackingVehicle}:${p.driver}`, async () => {
+    upd = await withLock(payLock(p.category, String(p.trackingVehicle), String(p.driver)), async () => {
     if (p.category === "DAILY") await assertNoDailyOverlap(String(p.trackingVehicle), String(p.driver), built.fromDate, built.toDate, id);
+    else await applyDriverChange(built.data, input, String(p.driver), id);
     return inTxn(async (session) => {
       const u: any = await SettlementPayment.findOneAndUpdate(
         { _id: id, status: "REJECTED", version: p.version },
@@ -452,20 +485,22 @@ export async function ensureDseNumber(id: string): Promise<number> {
 
 // ------------------------------------------------------------------------------------------------ RSA: export + completion
 
-/** Approved (not yet completed) entries of both categories, for the accounts Excel. Each export is recorded on every row. */
-export async function approvedForExport(q: { category?: string; from?: string; to?: string }, username: string) {
-  const filter: any = { status: "APPROVED" };
-  if (q.category === "DAILY" || q.category === "FINAL") filter.category = q.category;
-  if (q.from && YMD.test(q.from)) filter.toDate = { $gte: q.from };
-  if (q.to && YMD.test(q.to)) filter.fromDate = { $lte: q.to };
-  const rows: any[] = await SettlementPayment.find(filter).sort({ category: 1, reviewedAt: 1 }).lean();
+/**
+ * The rows of an RSA payment export: the same filters as the Driver Payments table (listFilter), every page. Each exported
+ * approved row is recorded (it has gone to accounts); rows in any other status are only read.
+ */
+export async function paymentsForExport(q: Pick<ListQuery, "category" | "status" | "q" | "from" | "to">, username: string) {
+  const rows: any[] = await SettlementPayment.find(listFilter({ ...q, scope: "all" }, "RSA")).sort({ category: 1, reviewedAt: 1 }).lean();
   const now = new Date();
-  for (const r of rows) {
+  for (const r of rows.filter((x) => x.status === "APPROVED")) {
     await SettlementPayment.updateOne({ _id: r._id, status: "APPROVED" }, { $set: { exportedAt: now }, $inc: { exportCount: 1 } });
     await logEvent(r, "EXPORTED", username, "RSA");
   }
   return rows;
 }
+
+/** Export Approved: every approved (not yet completed) daily and final payment, whatever the table is filtered to. */
+export const approvedForExport = (username: string) => paymentsForExport({ status: "APPROVED" }, username);
 
 export interface CompletionInput { referenceNumber?: unknown; referenceDate?: unknown; paymentDate?: unknown; paymentMode?: unknown; bankName?: unknown; transactionDetails?: unknown; remarks?: unknown }
 
@@ -535,6 +570,32 @@ export async function completeSettlement(id: string, input: CompletionInput, use
   });
   await notifyUsername(p.submittedBy, { type: "PAYMENT_COMPLETED", title: `${p.paymentNumber} paid`, message: `Payment reference ${v.data.referenceNumber} on ${v.data.paymentDate}`, link: paymentsHome(p.submittedRole), meta: { payment: id }, dedupeKey: `pay:${id}:completed` });
   return getSettlement(id);
+}
+
+const BULK_MAX = 100;
+
+/**
+ * Bulk Entry (RSA): the single completion above, once per payment, so a refused one never stops the others. Every item brings its
+ * own mode, date, bank and reference, and the usual one-reference-per-payment rule applies. Nothing is shared between items.
+ */
+export async function completeBulk(input: any, username: string, now = new Date()) {
+  const b = input && typeof input === "object" ? input : {};
+  const items: any[] = Array.isArray(b.items) ? b.items : [];
+  if (!items.length) throw new AppError("Select at least one payment", 400);
+  if (items.length > BULK_MAX) throw new AppError(`At most ${BULK_MAX} payments can be entered at once`, 400);
+  if (!items.every((x) => validId(x?.id))) throw new AppError("Invalid payment id", 400);
+  if (new Set(items.map((x) => x.id.toLowerCase())).size !== items.length) throw new AppError("The same payment was selected twice", 400);
+  const results: { id: string; ok: boolean; message: string }[] = [];
+  for (const item of items) {
+    try {
+      await completeSettlement(item.id, { referenceNumber: item.referenceNumber, referenceDate: item.referenceDate, paymentDate: item.paymentDate, paymentMode: item.paymentMode, bankName: item.bankName }, username, now);
+      results.push({ id: item.id, ok: true, message: "Completed" });
+    } catch (e) {
+      if (!(e instanceof AppError)) console.error("Bulk entry failed", item.id, e);
+      results.push({ id: item.id, ok: false, message: e instanceof AppError ? e.message : "Could not be saved; check Payment Completed before retrying" });
+    }
+  }
+  return { results };
 }
 
 // ------------------------------------------------------------------------------------------------ re-exports for the RBP side panels

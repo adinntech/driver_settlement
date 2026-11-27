@@ -21,7 +21,7 @@ const options: RsaOptions = {
   dieselPaymentModes: ["ePayment", "Cash", "Fuel Card"], paymentFor: [{ key: "ROADSHOW", label: "Roadshow" }, { key: "SIGNAGE", label: "Signage" }],
 };
 const ctx = (over: Partial<RsaContext> = {}): RsaContext => ({
-  trackingVehicle: "t".repeat(24), allotment: "a".repeat(24), trackupNumber: "JS-22342/2026-27", pifNumber: "PIF-11111", displayNumber: "4821", projectType: "ROADSHOW", clientName: "KEN LIFESTYLES PRIVATE LIMITED-TN",
+  trackingVehicle: "t".repeat(24), allotment: "a".repeat(24), trackupNumber: "JS-22342/2026-27", pifNumber: "PIF-11111", projectType: "ROADSHOW", clientName: "KEN LIFESTYLES PRIVATE LIMITED-TN",
   projectName: "KEN Roadshow", vehicleNo: "TN58BK3088", driverNumber: "DR-4821", driverName: "SAMPATH M", campaignFromDate: "2026-11-24", campaignToDate: "2026-12-02", approvedBudgetAmount: 125000.5, budgetVersion: 2,
   vehicleAllottedAt: "2026-11-24T04:30:00.000Z", driverAssignedAt: "2026-11-24T04:31:00.000Z", allotmentStatus: "ACTIVE", paymentCount: 0, paymentStatus: "PENDING", lastPaymentAt: null,
   billNumber: null, paymentFor: "ROADSHOW", entryDateTime: "2026-11-24T06:30:00.000Z",
@@ -36,7 +36,7 @@ const panel = (f: PaymentForm = form(), c: RsaContext = ctx()) => renderToStatic
 test("RSA is the fourth login: own home, own sidebar; the other three logins are unchanged", () => {
   assert.equal(homeFor("RSA"), "/rsa");
   assert.deepEqual(NAV.RSA.slice(0, 2), [{ href: "/rsa", label: "Payments" }, { href: "/rsa/clearance", label: "Vehicle & Driver Clearance" }]); // original entries first, unchanged
-  assert.deepEqual(NAV.RSA.slice(2).map((n) => n.href), ["/rsa/on-road-vehicles", "/rsa/driver-payments", "/rsa/settlements/completed"]);
+  assert.deepEqual(NAV.RSA.slice(2).map((n) => n.href), ["/rsa/on-road-vehicles", "/rsa/driver-payments", "/rsa/settlements/completed", "/rsa/iocl-data"]);
   assert.equal(homeFor("RSO"), "/rso"); // RSO is a separate login from RSOM
   assert.deepEqual(NAV.RSO.map((n) => n.href), ["/rso", "/rso/reports"]);
   assert.equal(homeFor("RSOP"), "/rsop");
@@ -215,14 +215,14 @@ test("payment detail shows every entered part with its own timestamps", () => {
 
 // ================================================================== dashboard
 const row = (over: Partial<RsaProjectRow> = {}): RsaProjectRow => ({
-  trackingVehicle: "t".repeat(24), allotment: "a".repeat(24), trackupNumber: "JS-22342/2026-27", pifNumber: "PIF-11111", displayNumber: "4821", projectType: "ROADSHOW", clientName: "KEN LIFESTYLES", projectName: null,
+  trackingVehicle: "t".repeat(24), allotment: "a".repeat(24), trackupNumber: "JS-22342/2026-27", pifNumber: "PIF-11111", projectType: "ROADSHOW", clientName: "KEN LIFESTYLES", projectName: null,
   vehicleNo: "TN58BK3088", driverNumber: "DR-4821", driverName: "SAMPATH M", campaignFromDate: "2026-11-24", campaignToDate: "2026-12-02", approvedBudgetAmount: 125000.5, budgetVersion: 1,
   vehicleAllottedAt: null, driverAssignedAt: null, allotmentStatus: "ACTIVE", paymentCount: 0, paymentStatus: "PENDING", lastPaymentAt: null, ...over,
 });
 
 test("dashboard table: JS number, PIF, display number, type, client, vehicle, driver, campaign dates, budget, payment status, last payment", () => {
-  assert.deepEqual([...RSA_COLUMNS].slice(0, 13), ["Trackup No (JS)", "PIF No", "Display No", "Type", "Client / Billing Name", "Vehicle No", "Driver No", "Driver Name", "Campaign From", "Campaign To", "Approved Budget", "Payment Status", "Last Payment"]);
-  const html = renderToStaticMarkup(<RsaProjectTable items={[row(), row({ trackingVehicle: "u".repeat(24), projectType: "SIGNAGE", paymentCount: 2, paymentStatus: "ENTERED", lastPaymentAt: "2026-11-24T06:30:00.000Z", displayNumber: null })]} />);
+  assert.deepEqual([...RSA_COLUMNS].slice(0, 12), ["Trackup No (JS)", "PIF No", "Type", "Client / Billing Name", "Vehicle No", "Driver No", "Driver Name", "Campaign From", "Campaign To", "Approved Budget", "Payment Status", "Last Payment"]);
+  const html = renderToStaticMarkup(<RsaProjectTable items={[row(), row({ trackingVehicle: "u".repeat(24), projectType: "SIGNAGE", paymentCount: 2, paymentStatus: "ENTERED", lastPaymentAt: "2026-11-24T06:30:00.000Z" })]} />);
   for (const v of ["JS-22342/2026-27", "PIF-11111", "4821", "Roadshow", "Signage", "KEN LIFESTYLES", "TN58BK3088", "DR-4821", "SAMPATH M", "24-Nov-2026", "02-Dec-2026", "₹1,25,000.50", "No entry yet", "Entered", "24-Nov-2026, 12:00 PM"])
     assert.ok(html.includes(v), v);
   assert.ok(html.includes(`href="/rsa/payment?id=${"t".repeat(24)}"`));

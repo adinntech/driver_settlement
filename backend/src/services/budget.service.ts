@@ -16,7 +16,7 @@ const validId = (id: string) => /^[a-f0-9]{24}$/i.test(id);
 /** Read-only context shown on the budget form, taken from the original RSOP entry. */
 export function buildContext(
   project: { projectType: string; clientName: string; details?: Record<string, any> },
-  vehicle: { trackupNumber: string; pifNumber: string; displayNumber: string; vehicleIndex: number },
+  vehicle: { trackupNumber: string; pifNumber: string; vehicleIndex: number; vehicleType?: string | null },
 ) {
   const d = project.details ?? {};
   const roadshow = project.projectType === "ROADSHOW";
@@ -34,8 +34,8 @@ export function buildContext(
     km: kmAllowanceOf(project.projectType, d), // RoadShow KM allotment incl. the one-time Extra KM pool (null for signage)
     trackupNumber: vehicle.trackupNumber,
     pifNumber: vehicle.pifNumber,
-    displayNumber: vehicle.displayNumber,
     vehicleIndex: vehicle.vehicleIndex,
+    vehicleType: vehicle.vehicleType ?? null,
   };
 }
 

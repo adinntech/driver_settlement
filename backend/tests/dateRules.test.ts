@@ -7,7 +7,7 @@ import { validateDailyInput, validateFinalInput } from "../src/utils/settlement.
 
 const NOW = new Date("2026-11-25T06:00:00Z"); // 11:30 IST
 const roadshow = (over: Record<string, unknown> = {}) => ({
-  projectCode: "12345678", billingName: "KFC", stateCode: "33", numberOfVans: 1, sundayHalt: "NO", reportingLocations: ["Chennai"],
+  projectCode: "12345678", billingName: "KFC", stateCode: "33", numberOfVans: 1, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 1 }], sundayHalt: "NO", reportingLocations: ["Chennai"],
   startDate: "2026-11-25", endDate: "2026-11-30", reportingDate: "2026-11-27", ...over,
 });
 const errs = (over: Record<string, unknown>, opts = {}) => validateTracking("ROADSHOW", roadshow(over), { now: NOW, ...opts }).errors;
@@ -60,7 +60,7 @@ test("RSOP: the Model / Backlit field is not stored for a roadshow", () => {
 });
 
 test("signage: entry date cannot be in the future; From date is today back to 7 days ago; To date may be later", () => {
-  const sig = { projectCode: "12345678", client: "D", jobSheetNumber: "1", location: "X", numberOfVehicles: 1, date: "2026-11-25", fromDate: "2026-11-18", toDate: "2026-12-05" };
+  const sig = { projectCode: "12345678", client: "D", jobSheetNumber: "1", location: "X", numberOfVehicles: 1, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 1 }], date: "2026-11-25", fromDate: "2026-11-18", toDate: "2026-12-05" };
   const sErr = (o: Record<string, unknown>) => validateTracking("SIGNAGE", { ...sig, ...o }, { now: NOW }).errors;
   assert.deepEqual(sErr({}), []);
   assert.deepEqual(sErr({ fromDate: "2026-11-25" }), []);

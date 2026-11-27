@@ -38,7 +38,7 @@ test("+ Enter Payment: project selection first (eligible projects only), then th
   assert.ok(pick.includes("Back to payment entries") && pick.includes('href="/rsa"'));
   assert.ok(!pick.includes("PaymentFormPanel")); // the form is not shown while choosing
   const row: RsaProjectRow = {
-    trackingVehicle: "t".repeat(24), allotment: "a".repeat(24), trackupNumber: "JS-22342/2026-27", pifNumber: "PIF-1", displayNumber: "4821", projectType: "ROADSHOW", clientName: "KEN", projectName: null,
+    trackingVehicle: "t".repeat(24), allotment: "a".repeat(24), trackupNumber: "JS-22342/2026-27", pifNumber: "PIF-1", projectType: "ROADSHOW", clientName: "KEN", projectName: null,
     vehicleNo: "TN58BK3088", driverNumber: "DR-1", driverName: "SAMPATH M", campaignFromDate: "2026-11-24", campaignToDate: "2026-12-02", approvedBudgetAmount: 1000, budgetVersion: 1,
     vehicleAllottedAt: null, driverAssignedAt: null, allotmentStatus: "ACTIVE", paymentCount: 0, paymentStatus: "PENDING", lastPaymentAt: null,
   };
@@ -94,7 +94,7 @@ test("filters are combined into one server request together with the page and pa
 
 // ================================================================== table, empty, pagination
 test("history table: the twelve requested columns with correct values; order as delivered (latest first); no undefined", () => {
-  assert.deepEqual([...HISTORY_COLUMNS], ["Payment Number", "Trackup Number", "Project Type", "Client / Billing Name", "Vehicle Number", "Driver Name", "From Date", "To Date", "Total Payable", "Entry Date & Time", "Created By", "Actions"]);
+  assert.deepEqual([...HISTORY_COLUMNS], ["Payment Number", "Trackup Number", "PIF Number", "Project Type", "Client / Billing Name", "Vehicle Number", "Driver Name", "From Date", "To Date", "Total Payable", "Entry Date & Time", "Created By", "Actions"]);
   const html = renderToStaticMarkup(<RsaHistoryTable items={[pay(3), pay(2), pay(1, { driverName: null, clientName: null, campaignFromDate: null, campaignToDate: null })]} onView={noop} />);
   for (const h of HISTORY_COLUMNS.filter((c) => c !== "Actions")) assert.ok(html.includes(`<th>${h.replace(/&/g, "&amp;")}</th>`), h);
   for (const v of ["PAY-000003/2026-27", "JS-10003/2026-27", "Signage", "Roadshow", "KEN LIFESTYLES", "TN58BK3088", "SAMPATH M", "24-Nov-2026", "02-Dec-2026", "₹3,000.50", "23-Nov-2026, 10:00 AM", "RSA"]) assert.ok(html.includes(v), v);

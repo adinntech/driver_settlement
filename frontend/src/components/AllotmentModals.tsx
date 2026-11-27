@@ -52,6 +52,7 @@ export function ProjectSummary({ p }: { p: AllotmentProject }) {
       <KV k="Client / Billing Name" v={p.clientName} />
       <KV k="Project Type" v={p.projectType === "ROADSHOW" ? "Roadshow" : "Signage"} />
       <KV k="Project Name" v={p.projectName} />
+      {p.vehicleType && <KV k="Requested Vehicle Type" v={p.vehicleType} />}
       <KV k="Trackup Number" v={<strong className="num">{p.trackupNumber}</strong>} />
       <KV k="PIF Number" v={<strong className="num">{p.pifNumber}</strong>} />
       <KV k="Bill Number" v={p.billNumber} />
@@ -91,7 +92,7 @@ export function AllotModal({ project, onClose, onDone }: { project: AllotmentPro
     inflight.current = true;
     setBusy(true);
     try {
-      await request("/vehicle-allotments", "POST", toAllotPayload(f, project.trackupNumber));
+      await request("/vehicle-allotments", "POST", toAllotPayload(f, project.pifNumber));
       toast(withDriver && pick.driver ? `Vehicle ${f.vehicleNo} and driver ${pick.driver.driverNumber} allotted to ${project.projectName}` : `Vehicle ${f.vehicleNo} allotted to ${project.projectName}`);
       onDone();
     } catch (e) {
@@ -107,6 +108,7 @@ export function AllotModal({ project, onClose, onDone }: { project: AllotmentPro
       <Modal title="Confirm Vehicle Allotment" onClose={onClose}>
         <dl className="kv allot-proj" data-step="summary">
           <KV k="Allocation" v={ALLOT_MODE_LABEL[f.mode]} />
+          {project.vehicleType && <KV k="Requested Vehicle Type" v={project.vehicleType} />}
           <KV k="Vehicle Number" v={<strong className="num">{f.vehicleNo}</strong>} />
           {withDriver && pick.driver && (
             <>
@@ -135,7 +137,7 @@ export function AllotModal({ project, onClose, onDone }: { project: AllotmentPro
     );
 
   return (
-    <Modal title={`Allot Vehicle · ${project.trackupNumber}`} onClose={onClose} wide>
+    <Modal title={`Allot Vehicle · ${project.trackupNumber} · ${project.pifNumber}`} onClose={onClose} wide>
       <Errors list={errors} />
       <h4 className="sub">Project</h4>
       <ProjectSummary p={project} />
@@ -256,7 +258,7 @@ export function ChangeModal({ project, onClose, onDone }: { project: AllotmentPr
     );
 
   return (
-    <Modal title={`Change Vehicle · ${project.trackupNumber}`} onClose={onClose}>
+    <Modal title={`Change Vehicle · ${project.trackupNumber} · ${project.pifNumber}`} onClose={onClose}>
       <Errors list={errors} />
       <Field label="Current Vehicle Number">
         <input value={a.vehicleNo} readOnly aria-label="Current Vehicle Number" />
@@ -341,6 +343,7 @@ export function AssignDriverModal({ target, onClose, onDone }: { target: DriverT
           <KV k="Vehicle" v={<strong className="num">{target.vehicleNo}</strong>} />
           <KV k="Project" v={target.projectName} />
           <KV k="Trackup Number" v={target.trackupNumber} />
+          <KV k="PIF Number" v={target.pifNumber} />
           <KV k="Driver Number" v={<strong className="num">{d.driverNumber}</strong>} />
           <KV k="Driver Name" v={d.driverName} />
           <KV k="Driver Type" v={DRIVER_TYPE_TEXT[d.driverType] ?? d.driverType} />
@@ -357,7 +360,7 @@ export function AssignDriverModal({ target, onClose, onDone }: { target: DriverT
     <Modal title={`Assign Driver · ${target.vehicleNo}`} onClose={onClose}>
       <Errors list={errors} />
       <Field label="Vehicle"><input value={target.vehicleNo} readOnly aria-label="Vehicle" /></Field>
-      <Field label="Project"><input value={[target.trackupNumber, target.projectName].filter(Boolean).join(" · ")} readOnly aria-label="Project" /></Field>
+      <Field label="Project"><input value={[target.trackupNumber, target.pifNumber, target.projectName].filter(Boolean).join(" · ")} readOnly aria-label="Project" /></Field>
       <h4 className="sub">Driver (Available Now only)</h4>
       <DriverPicker pick={pick} onChange={(p) => { setPick(p); setEditingBank(false); }} />
       {d && <DriverBankSection key={d._id} driverId={d._id} allotmentId={target._id} onEditingChange={setEditingBank} />}
@@ -428,6 +431,7 @@ export function ChangeDriverModal({ target, current, onClose, onDone }: { target
         <dl className="kv allot-proj" data-step="summary">
           <KV k="Vehicle" v={target.vehicleNo} />
           <KV k="Trackup Number" v={target.trackupNumber} />
+          <KV k="PIF Number" v={target.pifNumber} />
           <KV k="Current Driver" v={driverLabel(current)} />
           <KV k="Replacement Driver" v={<strong>{driverLabel({ driverNumber: d.driverNumber, driverName: d.driverName })}</strong>} />
           <KV k="Change Reason" v={f.reason} />
@@ -461,7 +465,7 @@ export function ChangeDriverModal({ target, current, onClose, onDone }: { target
       <Field label="Travel Amount Deduction">
         <input className="num-input" inputMode="decimal" value={f.travelAmountDeduction} placeholder="0" aria-label="Travel Amount Deduction" aria-invalid={!!validateDeduction(f.travelAmountDeduction)}
           onChange={(e) => setF((x) => ({ ...x, travelAmountDeduction: sanitizeDeduction(e.target.value) }))} />
-        <small className="muted" data-note="deduction">{validateDeduction(f.travelAmountDeduction) ?? `Numbers only · ${formatDeduction(deductionValue(f.travelAmountDeduction))} · recorded in the change history, no budget or salary is changed`}</small>
+        <small className="muted" data-note="deduction">{validateDeduction(f.travelAmountDeduction) ?? `Numbers only · ${formatDeduction(deductionValue(f.travelAmountDeduction))} · deducted from the replaced driver in Previous Salary Deduction on their next Final Settlement`}</small>
       </Field>
       <Field label="Supporting Attachment">
         <div className="chg-files">

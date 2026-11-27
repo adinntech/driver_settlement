@@ -53,8 +53,8 @@ const withStatus = (v: any, now = new Date()) => ({
 const withReview = (v: any, flags: Map<string, string>) => (flags.has(String(v._id)) ? { ...v, allocationReview: flags.get(String(v._id)) } : v);
 
 const dupMessage = (e: unknown, vehicleNo: string | null) =>
-  (e as { keyPattern?: Record<string, unknown> })?.keyPattern?.["availability.project.trackupNumber"]
-    ? "This trackup number is already allocated to another vehicle"
+  (e as { keyPattern?: Record<string, unknown> })?.keyPattern?.["availability.project.pifNumber"]
+    ? "This PIF number is already allocated to another vehicle"
     : `Vehicle number ${vehicleNo} already exists`;
 
 /** Resolves the project link (read-only on RSOP data), then validates the availability block. */
@@ -89,7 +89,7 @@ export async function createVehicle(input: any, username: string) {
   const errors = [...v.errors, ...av.errors];
   if (errors.length) throw new AppError(errors.join("; "), 400);
   await duplicateCheck(v.data.vehicleNo);
-  const clash = av.data?.status === "IN_USE" ? await allocationConflict(av.data.project?.trackupNumber) : null;
+  const clash = av.data?.status === "IN_USE" ? await allocationConflict(av.data.project?.pifNumber) : null;
   if (clash) throw new AppError(clash, 409);
   let doc;
   try {
@@ -130,11 +130,11 @@ export async function updateVehicle(id: string, input: any, username: string) {
   const prevAv = existing.availability;
   if (av.data?.status === "IN_USE" && prevAv?.status === "ISSUE")
     throw new AppError("This vehicle has an open issue; mark it Available Now once it is resolved before allocating it to a project", 409);
-  if (av.data?.status === "IN_USE" && prevAv?.status === "IN_USE" && prevAv.project?.trackupNumber && av.data.project?.trackupNumber
-    && prevAv.project.trackupNumber !== av.data.project.trackupNumber)
-    throw new AppError(`Vehicle is already allocated to trackup ${prevAv.project.trackupNumber}; release it (Available Now) before allocating another project`, 409);
+  if (av.data?.status === "IN_USE" && prevAv?.status === "IN_USE" && prevAv.project?.pifNumber && av.data.project?.pifNumber
+    && prevAv.project.pifNumber !== av.data.project.pifNumber)
+    throw new AppError(`Vehicle is already allocated to PIF ${prevAv.project.pifNumber} (${prevAv.project.trackupNumber}); release it (Available Now) before allocating another project`, 409);
   const avRows = av.data ? availabilityHistory(existing.availability, av.data) : [];
-  const clash = av.data?.status === "IN_USE" && avRows.length ? await allocationConflict(av.data.project?.trackupNumber, id) : null;
+  const clash = av.data?.status === "IN_USE" && avRows.length ? await allocationConflict(av.data.project?.pifNumber, id) : null;
   if (clash) throw new AppError(clash, 409);
 
   let nextStatus = existing.status as string;

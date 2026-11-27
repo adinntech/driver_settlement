@@ -92,7 +92,7 @@ export function PaymentEntryForm({ p, onCancel, onDone, inline = false }: { p: S
           </div>
         </div>
         <dl className="pe-facts">
-          <div><dt><Icon d={ICONS.doc} />JobSheet No.</dt><dd>{p.jsNumber ?? p.trackupNumber}</dd></div>
+          <div><dt><Icon d={ICONS.doc} />JobSheet No.</dt><dd>{p.jsNumber ?? p.trackupNumber}{p.pifNumber && <small> {p.pifNumber}</small>}</dd></div>
           <div><dt><Icon d={ICONS.truck} />Vehicle No.</dt><dd>{p.vehicleNo ?? "-"}</dd></div>
           <div><dt><Icon d={ICONS.building} />Client Name</dt><dd title={p.clientName ?? undefined}>{p.clientName ?? "-"}</dd></div>
           <div><dt><Icon d={ICONS.user} />Driver Name</dt><dd title={[p.driverName, p.driverNumber].filter(Boolean).join(" · ") || undefined}>{p.driverName ?? "-"}{p.driverNumber && <small> {p.driverNumber}</small>}</dd></div>

@@ -67,7 +67,7 @@ export const RSA_COLUMNS = [
   "Trackup Number", "PIF Number", "Project Type", "Client / Billing Name", "Vehicle Number", "Driver Number", "Driver Name", "Advance Amount", "Approval Status", "Allocated Date", "Actions",
 ] as const;
 export const RBP_COLUMNS = [
-  "Trackup Number", "Project Type", "Client / Billing Name", "Vehicle Number", "Driver Number", "Driver Name", "RSA Approval Status", "Delivery Status", "RSA Approved Date", "Delivered Date", "Actions",
+  "Trackup Number", "PIF Number", "Project Type", "Client / Billing Name", "Vehicle Number", "Driver Number", "Driver Name", "RSA Approval Status", "Delivery Status", "RSA Approved Date", "Delivered Date", "Actions",
 ] as const;
 
 export function ClearanceTable({ items, mode, hrefFor }: { items: ClearanceRow[]; mode: "RSA" | "RBP"; hrefFor: (id: string) => string }) {
@@ -80,7 +80,7 @@ export function ClearanceTable({ items, mode, hrefFor }: { items: ClearanceRow[]
           {items.map((c) => (
             <tr key={c._id}>
               <td><strong className="num">{c.trackupNumber}</strong></td>
-              {mode === "RSA" && <td>{c.pifNumber}</td>}
+              <td>{c.pifNumber}</td>
               <td>{c.projectType ? TYPE_LABEL[c.projectType] : "—"}</td>
               <td>{dash(c.clientName)}</td>
               <td>{c.vehicleNo}</td>
@@ -203,6 +203,7 @@ export function DetailSections({ d }: { d: ClearanceDetail }) {
         <dl className="kv">
           <KV k="Trackup Number" v={p.trackupNumber} /><KV k="PIF Number" v={p.pifNumber} /><KV k="Bill Number" v={p.billNumber} />
           <KV k="Project Type" v={p.projectType ? TYPE_LABEL[p.projectType] : null} /><KV k="Project Name" v={p.projectName} /><KV k="Client / Billing Name" v={p.clientName} />
+          {p.requestedVehicleType && <KV k="Requested Vehicle Type" v={p.requestedVehicleType} />}
           <KV k="Project From Date" v={formatDate(p.projectFrom)} /><KV k="Project To Date" v={formatDate(p.projectTo)} /><KV k="Project Location" v={p.location} />
           <KV k="Approved Budget Amount" v={formatInr(p.approvedBudgetAmount)} /><KV k="RSOM Approval Status" v={p.rsomStatus} />
         </dl>

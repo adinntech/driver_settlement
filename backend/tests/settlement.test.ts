@@ -90,7 +90,7 @@ describe("calculations", () => {
     assert.equal(c.expectedLitres, 100);
     assert.equal(c.variationLitres, 10);
     assert.equal(c.mileageShortSuggestedP, 95500); // 10 l x 95.50
-    const earnings = 20 * 800 + 3 * 800 + 23 * 250 + 2 * 300 + 1500 + 5.5 * 100;
+    const earnings = 20 * 800 + 3 * 800 + 23 * 250 + 1500; // halt days and overtime are no longer paid, even if sent
     assert.equal(c.earningsP, earnings * 100);
     assert.equal(c.claimedP, (600 + 1200) * 100);
     assert.equal(c.approvedP, (600 + 1000) * 100);
@@ -103,7 +103,7 @@ describe("calculations", () => {
   test("final settlement validation rejects bad amounts", () => {
     const errs = (b: any, days: number | null = 10) => validateFinalInput({ fixedMileage: "8", onRoadDays: "5", idempotencyKey: "abcdefgh3", ...b }, { totalDays: days }).errors.join(" | ");
     assert.match(errs({ openingKm: "500", closingKm: "100" }), /Closing KM cannot be less/);
-    assert.match(errs({ onRoadDays: "8", haltDays: "5" }), /cannot exceed the campaign's 10 days/);
+    assert.match(errs({ onRoadDays: "8", onRoadSundays: "5" }), /cannot exceed the campaign's 10 days/);
     assert.match(errs({ onRoadDays: "2.5" }), /whole number/);
     assert.match(errs({ perDaySalary: "-5" }), /cannot be negative/);
     assert.match(errs({ expenses: [{ category: "TOLL", quantity: "1", cost: "100", approved: "150" }] }), /cannot be more than the claimed/);
@@ -241,15 +241,17 @@ describe("workflow across RBP, RSOM, RSO and RSA", () => {
       openingKm: "12000", closingKm: "12900", dieselCost: "94.20", ioclLitres: "120", ioclKms: "880", estimatedBudget: pre.estimatedBudget, estimatedKm: pre.estimatedKm, estimatedFuel: pre.estimatedFuel,
       perDaySalary: "900", perDayFood: "250", haltDayPay: "300", travelPay: "1000", onRoadDays: "3", onRoadSundays: "0", haltDays: "1", suspenseAmount: "500",
       expenses: [{ category: "TOLL", quantity: "2", cost: "180" }, { category: "OTHERS", description: "Parking", quantity: "1", cost: "100", approved: "60" }],
-      deductions: { mileageShort: "200", driverChangeTravel: "0", vehicleDamage: "0", previousSalary: "0", other: "0" }, idempotencyKey: key(),
+      deductions: { mileageShort: "200", vehicleDamage: "0", previousSalary: "0", other: "0" }, idempotencyKey: key(),
     };
     const r = await api("RBP", "POST", `/settlements/projects/${tvA}/final`, body);
     assert.equal(r.status, 201, JSON.stringify(r.body));
     finalId = r.body.data._id;
     assert.match(r.body.data.paymentNumber, /^DSE-/);
-    const expectedNet = 3 * 900 + 3 * 250 + 300 + 1000 + 360 + 60 - 200 - 500;
+    const expectedNet = 3 * 900 + 3 * 250 + 1000 + 360 + 60 - 200 - 500;
     assert.equal(r.body.data.amount, expectedNet);
     assert.equal(r.body.data.data.netAmount, expectedNet);
+    assert.equal(r.body.data.data.reportingDate, c.campaign.reportingDate ?? c.campaign.fromDate, "the project's date, whatever was sent");
+    assert.ok(!r.body.data.data.earnings.some((e: any) => e.key === "halt" || e.key === "overtime"));
     const dup = await api("RBP", "POST", `/settlements/projects/${tvA}/final`, { ...body, idempotencyKey: key() });
     assert.equal(dup.status, 409);
     assert.match(dup.body.message, /already exists/);
@@ -260,6 +262,17 @@ describe("workflow across RBP, RSOM, RSO and RSA", () => {
   test("the salary PDF exists only after RSO approval; RSOM cannot approve finals", async () => {
     assert.equal((await api("RSO", "GET", `/settlements/${finalId}/salary-pdf`)).status, 409, "no PDF before approval");
     assert.equal((await api("RSOM", "POST", `/settlements/${finalId}/approve`, {})).status, 403, "RSOM cannot approve a final settlement");
+    assert.equal((await api("RSOM", "POST", `/settlements/${finalId}/reject`, { reason: "Not mine to decide" })).status, 403, "RSOM cannot reject a final settlement");
+    for (const query of ["", "&category=FINAL", "&category=DAILY", "&status=APPROVED"]) {
+      const list = (await api("RSOM", "GET", `/settlements?limit=100${query}`)).body.data;
+      assert.ok(list.items.every((x: any) => x.category === "DAILY"), `RSOM lists daily only ${query}`);
+      assert.ok(Object.keys(list.summary).every((k) => k.startsWith("DAILY:")), "RSOM summary counts daily only");
+    }
+    assert.equal((await api("RSOM", "GET", `/settlements/${finalId}`)).status, 403, "RSOM cannot open a final by its id");
+    assert.equal((await api("RSOM", "GET", `/settlements/${dailyId}`)).status, 200, "RSOM still opens daily payments");
+    for (const role of ["RSO", "RBP", "RSA"]) assert.equal((await api(role, "GET", `/settlements/${finalId}`)).status, 200, `${role} still opens finals`);
+    const rso = (await api("RSO", "GET", "/settlements?category=FINAL&limit=100")).body.data;
+    assert.ok(rso.items.some((x: any) => x._id === finalId) && Object.keys(rso.summary).some((k) => k.startsWith("FINAL:")), "RSO still sees finals");
     const ok = await api("RSO", "POST", `/settlements/${finalId}/approve`, { comment: "Verified" });
     assert.equal(ok.status, 200);
     assert.equal(ok.body.data.reviewedRole, "RSO");
@@ -306,7 +319,7 @@ describe("workflow across RBP, RSOM, RSO and RSA", () => {
     assert.deepEqual(numbers, new Set(approvedNow.map((p) => p.paymentNumber)), "exactly the approved entries");
     assert.ok(approvedNow.some((p) => p.category === "DAILY") && approvedNow.some((p) => p.category === "FINAL"));
     for (const role of ["RSOP", "RBP", "RSOM", "RSO"]) assert.equal((await api(role, "GET", "/settlements/export/approved")).status, 403, `${role} cannot export`);
-    assert.deepEqual(header, ["Payment No", "Category", "Status", "Trackup No", "JS No", "Client", "Project Type", "Vehicle No", "Driver Code", "Driver Name", "From", "To", "Amount (INR)", "Account Name", "Bank", "IFSC", "Account Number", "Submitted By", "Approved By", "Approved On"], "the accounts export keeps its columns");
+    assert.deepEqual(header, ["Payment No", "Category", "Status", "Trackup No", "PIF No", "JS No", "Client", "Project Type", "Vehicle No", "Driver Code", "Driver Name", "From", "To", "Amount (INR)", "Account Name", "Bank", "IFSC", "Account Number", "Submitted By", "Approved By", "Approved On"], "the accounts export keeps its columns");
 
     const today = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
     const bad = await api("RSA", "POST", `/settlements/${dailyId}/complete`, { referenceNumber: "", paymentDate: today, paymentMode: "EPAYMENT", bankName: "SBI" });

@@ -16,6 +16,8 @@ import { DecimalInput, PhoneInput } from "@/components/ui/Inputs";
 import { isValidPhone, toFullPhone } from "@/utils/phone";
 import { allowanceText, extraKmError, kmAllowance, parseKmPerDay } from "@/utils/kmAllowance";
 import { projectCodeError } from "@/utils/projectCode";
+import { VehicleTypeModal, VehicleTypeSummary } from "@/components/VehicleTypePicker";
+import { selectedTotal, toVehicleTypes, vehicleTypesError, vehicleTypesText, type VehicleTypeSelection } from "@/utils/vehicleTypes";
 
 type Form = Record<string, string>;
 const CITIES = ["Chennai", "Madurai", "Thanjavur", "Salem", "Vellore", "Coimbatore", "Trichy", "Virudhunagar", "Tirunelveli", "Erode", "Tiruppur", "Kanyakumari", "Ramnad", "Pondicherry"];
@@ -146,6 +148,23 @@ function LocationPicker({ value, onChange }: { value: string[]; onChange: (v: st
   );
 }
 
+/** Vehicle type selection of one form. The popup opens when the user leaves the vehicle-count field (or presses Enter in it). */
+function useVehicleTypes(countText: string | undefined) {
+  const count = Number(countText);
+  const valid = Number.isInteger(count) && count >= 1 && count <= 100;
+  const [selection, setSelection] = useState<VehicleTypeSelection>({});
+  const [open, setOpen] = useState(false);
+  const commit = () => {
+    if (!valid || selectedTotal(selection) === count) return;
+    if (selectedTotal(selection) > count) setSelection({}); // never more types than vehicles: choose again
+    setOpen(true);
+  };
+  const countProps = { onBlur: commit, onKeyDown: (e: { key: string; currentTarget: { blur: () => void } }) => { if (e.key === "Enter") e.currentTarget.blur(); } };
+  const summary = <VehicleTypeSummary count={count} value={selection} onEdit={() => setOpen(true)} />;
+  const modal = open && valid && <VehicleTypeModal count={count} value={selection} onChange={setSelection} onClose={() => setOpen(false)} />;
+  return { countProps, summary, modal, error: valid ? vehicleTypesError(selection, count) : null, list: toVehicleTypes(selection) };
+}
+
 function useSubmit(projectType: ProjectType) {
   const router = useRouter();
   const toast = useToast();
@@ -176,19 +195,19 @@ function useSubmit(projectType: ProjectType) {
         <thead>
           <tr>
             <th>#</th>
+            <th>Vehicle Type</th>
             <th>Trackup</th>
             <th>PIF</th>
-            <th>Display</th>
           </tr>
         </thead>
         <tbody>
           {created.vehicles.map((v) => (
             <tr key={v._id}>
               <td>{v.vehicleIndex}</td>
+              <td>{v.vehicleType}</td>
               {[
                 [v.trackupNumber, "Trackup Number"],
                 [v.pifNumber, "PIF Number"],
-                [v.displayNumber, "Display Number"],
               ].map(([val, label]) => (
                 <td key={label}>
                   <span className="num">
@@ -249,6 +268,7 @@ function RoadshowForm() {
   const [step, setStep] = useState(0);
   const [confirm, setConfirm] = useState(false);
   const { submit, busy, done } = useSubmit("ROADSHOW");
+  const types = useVehicleTypes(f.numberOfVans);
 
   const days = useMemo(
     () => (f.startDate && f.endDate ? countDays(f.startDate, f.endDate, f.sundayHalt === "YES") : 0),
@@ -265,6 +285,7 @@ function RoadshowForm() {
       if (!f.stateCode?.trim()) e.push("State code is required");
       const n = Number(f.numberOfVans);
       if (!Number.isInteger(n) || n < 1 || n > 100) e.push("Number of vans must be between 1 and 100");
+      else if (types.error) e.push(types.error);
       if (!f.startDate || !f.endDate) e.push("Start and end dates are required");
       else if (!isYmd(f.startDate) || !isYmd(f.endDate)) e.push("Start and end dates must be valid dates");
       else {
@@ -319,7 +340,7 @@ function RoadshowForm() {
     }
     const { extraKmAllotted, ...rest } = clean(f);
     const err = await submit({
-      ...rest, contactNumber: toFullPhone(f.contactNumber ?? "") || undefined, numberOfVans: Number(f.numberOfVans), reportingLocations: locs,
+      ...rest, contactNumber: toFullPhone(f.contactNumber ?? "") || undefined, numberOfVans: Number(f.numberOfVans), vehicleTypes: types.list, reportingLocations: locs,
       ...(extraYes ? { extraKmAllotted: Number(extraKmAllotted) } : {}), // No -> not sent; the server stores 0
     });
     setConfirm(false);
@@ -352,8 +373,9 @@ function RoadshowForm() {
           <ProjectCodeField bind={bind("projectCode")} />
           <Field label="Billing Name *"><input {...bind("billingName")} placeholder="Sapphire Foods (KFC)" /></Field>
           <Field label="State Code *"><input {...bind("stateCode")} placeholder="33" /></Field>
-          <Field label="Number of Vans *"><input type="number" min={1} max={100} {...bind("numberOfVans")} /></Field>
+          <Field label="Number of Vans *"><input type="number" min={1} max={100} {...bind("numberOfVans")} {...types.countProps} /></Field>
           <Field label="Innovation Model / LED Model"><input {...bind("innovationModel")} placeholder="2 Sided LED Van" /></Field>
+          {types.summary}
           <Field label="Sunday Halt"><YesNo value={f.sundayHalt} onChange={(v) => set("sundayHalt", v)} /></Field>
           <Field label="Start Date *" hint="Today or up to 7 days back"><DateInput value={f.startDate ?? ""} min={minStart} max={earlierOf(today, f.endDate)} onChange={(e) => setCampaign("startDate", e.target.value)} aria-label="Start Date" /></Field>
           <Field label="End Date *" hint="On or after the start date"><DateInput value={f.endDate ?? ""} min={f.startDate || minStart} onChange={(e) => setCampaign("endDate", e.target.value)} aria-label="End Date" /></Field>
@@ -431,13 +453,14 @@ function RoadshowForm() {
       {confirm && (
         <ConfirmDialog
           title="Create tracking numbers?"
-          message={`This will generate ${f.numberOfVans} unique Trackup, PIF and Display number set(s) for ${f.billingName}. Numbers cannot be regenerated afterwards.`}
+          message={`This will generate one Trackup Number per vehicle type and a unique PIF Number for each of ${f.numberOfVans} vehicle(s) for ${f.billingName}: ${vehicleTypesText(types.list)}. Numbers cannot be regenerated afterwards.`}
           confirmLabel="Create"
           busy={busy}
           onConfirm={create}
           onCancel={() => setConfirm(false)}
         />
       )}
+      {types.modal}
       {done}
     </div>
   );
@@ -450,6 +473,7 @@ function SignageForm() {
   const [confirm, setConfirm] = useState(false);
   const [manualDays, setManualDays] = useState(false);
   const { submit, busy, done } = useSubmit("SIGNAGE");
+  const types = useVehicleTypes(f.numberOfVehicles);
 
   const auto = f.fromDate && f.toDate ? countDays(f.fromDate, f.toDate, false) : 0;
   const totalDays = manualDays ? f.totalDaysOfWork ?? "" : auto ? String(auto) : "";
@@ -463,6 +487,7 @@ function SignageForm() {
     if (!f.location?.trim()) e.push("Location is required");
     const n = Number(f.numberOfVehicles);
     if (!Number.isInteger(n) || n < 1 || n > 100) e.push("Number of vehicles must be between 1 and 100");
+    else if (types.error) e.push(types.error);
     if (!f.date || !isYmd(f.date)) e.push("Date must be a valid date");
     else if (f.date > todayIst()) e.push("Date cannot be in the future");
     if (!f.fromDate || !f.toDate) e.push("From and To dates are required");
@@ -481,7 +506,7 @@ function SignageForm() {
     const e = validate();
     setErrors(e);
     if (e.length) return setConfirm(false);
-    const payload: Record<string, unknown> = { ...clean(f), numberOfVehicles: Number(f.numberOfVehicles) };
+    const payload: Record<string, unknown> = { ...clean(f), numberOfVehicles: Number(f.numberOfVehicles), vehicleTypes: types.list };
     if (f.arrivedBudget) payload.arrivedBudget = Number(f.arrivedBudget);
     if (manualDays) payload.totalDaysOfWork = Number(f.totalDaysOfWork);
     const err = await submit(payload);
@@ -504,7 +529,8 @@ function SignageForm() {
         <Field label="Client *"><input {...bind("client")} placeholder="DALMIA" /></Field>
         <Field label="Job Sheet Number *"><input {...bind("jobSheetNumber")} placeholder="22070649" /></Field>
         <Field label="Location *"><input {...bind("location")} placeholder="RAMNAD" /></Field>
-        <Field label="Number of Vehicles *"><input type="number" min={1} max={100} {...bind("numberOfVehicles")} /></Field>
+        <Field label="Number of Vehicles *"><input type="number" min={1} max={100} {...bind("numberOfVehicles")} {...types.countProps} /></Field>
+        {types.summary}
         <Field label="Arrived Budget (₹)"><input type="number" min={0} {...bind("arrivedBudget")} placeholder="25000" /></Field>
         <Field label="From Date *" hint="Today or up to 7 days back"><DateInput {...bind("fromDate")} min={minStart} max={earlierOf(today, f.toDate)} /></Field>
         <Field label="To Date *"><DateInput {...bind("toDate")} min={f.fromDate || minStart} /></Field>
@@ -539,13 +565,14 @@ function SignageForm() {
       {confirm && (
         <ConfirmDialog
           title="Create tracking numbers?"
-          message={`This will generate ${f.numberOfVehicles || 0} unique Trackup, PIF and Display number set(s) for ${f.client || "this client"}. Numbers cannot be regenerated afterwards.`}
+          message={`This will generate one Trackup Number per vehicle type and a unique PIF Number for each of ${f.numberOfVehicles || 0} vehicle(s) for ${f.client || "this client"}: ${vehicleTypesText(types.list)}. Numbers cannot be regenerated afterwards.`}
           confirmLabel="Create"
           busy={busy}
           onConfirm={create}
           onCancel={() => setConfirm(false)}
         />
       )}
+      {types.modal}
       {done}
     </div>
   );

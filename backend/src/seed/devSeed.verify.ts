@@ -125,15 +125,15 @@ export async function verifyDevSeed(base: string, creds: Creds): Promise<VerifyR
   const approvals = await call(tokens.RSOM, "/approvals?limit=100");
   check("RSOM", "approval list loads", approvals.status === 200, `HTTP ${approvals.status}`);
 
-  const bySpec = (rows: any[] | undefined, trackup: string, key = "trackupNumber") => (rows ?? []).filter((x) => x[key] === trackup);
+  const bySpec = (rows: any[] | undefined, pif: string, key = "pifNumber") => (rows ?? []).filter((x) => x[key] === pif);
   const rbpClearances = new Map<string, any>();
 
   for (const [tvId, { spec, plan, index, tv }] of tvOf) {
     const scope = `${spec.key}#${index}`;
-    const trackup = tv.trackupNumber as string;
+    const pif = tv.pifNumber as string; // the Trackup Number is shared between vehicles
 
     // RBP: allotments (the full chain, newest first)
-    const rows = bySpec(allots.data?.items, trackup);
+    const rows = bySpec(allots.data?.items, pif);
     if (plan.allot) {
       const expectedRows = 1 + (plan.allot.changeVehicleTo ? 1 : 0);
       eq(`RBP/${scope}`, "allotment rows (original + replacement)", rows.length, expectedRows);
@@ -149,8 +149,8 @@ export async function verifyDevSeed(base: string, creds: Creds): Promise<VerifyR
 
     // RBP on-road + RSA clearance: same underlying record
     const exp = expectClearance(plan);
-    const cRbp = bySpec(onRoad.data?.items, trackup)[0];
-    const cRsa = bySpec(rsaList.data?.items, trackup)[0];
+    const cRbp = bySpec(onRoad.data?.items, pif)[0];
+    const cRsa = bySpec(rsaList.data?.items, pif)[0];
     if (exp) {
       check(`RBP/${scope}`, "on-road row exists", !!cRbp);
       check(`RSA/${scope}`, "clearance row exists", !!cRsa);
@@ -174,7 +174,7 @@ export async function verifyDevSeed(base: string, creds: Creds): Promise<VerifyR
 
     // RSOM: every submitted budget
     const submitted = plan.budget && plan.budget.end !== "DRAFT";
-    const aRow = bySpec(approvals.data?.items, trackup)[0];
+    const aRow = bySpec(approvals.data?.items, pif)[0];
     if (submitted) {
       check(`RSOM/${scope}`, "budget is in the approval list", !!aRow);
       eq(`RSOM/${scope}`, "approval status", aRow?.status, plan.budget!.end);
@@ -187,7 +187,7 @@ export async function verifyDevSeed(base: string, creds: Creds): Promise<VerifyR
     } else check(`RSOM/${scope}`, "draft / missing budget is not shown to RSOM", !aRow);
 
     // RSA: payment-eligible projects (approved budget + allotment with a driver) and their payment history
-    const eligibleRow = bySpec(eligible.data?.items, trackup)[0];
+    const eligibleRow = bySpec(eligible.data?.items, pif)[0];
     const shouldBeEligible = plan.budget?.end === "APPROVED" && hasDriver(plan);
     eq(`RSA/${scope}`, "eligible for payment entry", !!eligibleRow, shouldBeEligible);
     if (eligibleRow) {
@@ -232,7 +232,7 @@ async function integrity(check: (s: string, n: string, ok: boolean, d?: string) 
   const tvIds = tvs.map((x) => x._id);
   const tvSet = new Set(tvIds.map(String));
   const unique = (xs: unknown[]) => new Set(xs.map(String)).size === xs.length;
-  check(S, "trackup / PIF / display numbers are unique", unique(tvs.map((x) => x.trackupNumber)) && unique(tvs.map((x) => x.pifNumber)) && unique(tvs.map((x) => x.displayNumber)));
+  check(S, "PIF numbers are unique", unique(tvs.map((x) => x.pifNumber)));
 
   // budgets: references, totals, versions
   const budgets: any[] = await Budget.find({ project: { $in: projectIds } }).lean();

@@ -9,6 +9,7 @@ process.env.RSOM_USERNAME = "RSOM";
 process.env.RSOM_PASSWORD = "pass3";
 process.env.STORAGE_TYPE = "local";
 
+import { perVehicleTrackups } from "./legacyNumbers.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Server } from "node:http";
@@ -83,13 +84,13 @@ let projP: any; // pool of approved project vehicles held by "busy" fixture vehi
   const mk = async (body: unknown) => {
     const r = await call("/tracking", "POST", body, t.rsop);
     assert.equal(r.status, 201, JSON.stringify(r.body));
-    return r.body.data;
+    return perVehicleTrackups<any>(r.body.data);
   };
-  projA = await mk({ projectType: "SIGNAGE", details: { projectCode: "11000001", client: "Alpha Foods", jobSheetNumber: "ZZALT-1", location: "Salem", date: d(0), fromDate: d(0), toDate: d(12), numberOfVehicles: 12 } });
-  projB = await mk({ projectType: "SIGNAGE", details: { projectCode: "11000002", client: "Beta Drafts", jobSheetNumber: "ZZALT-2", location: "Erode", date: d(0), fromDate: d(0), toDate: d(5), numberOfVehicles: 1 } });
-  projC = await mk({ projectType: "SIGNAGE", details: { projectCode: "11000003", client: "Gamma Versions", jobSheetNumber: "ZZALT-3", location: "Hosur", date: d(0), fromDate: d(0), toDate: d(5), numberOfVehicles: 1 } });
-  projR = await mk({ projectType: "ROADSHOW", details: { projectCode: "11000004", billingName: "Roadie Co", stateCode: "33", startDate: d(0), endDate: d(8), reportingDate: d(3), sundayHalt: "NO", numberOfVans: 2, reportingLocations: ["Chennai", "Trichy"] } });
-  projP = await mk({ projectType: "SIGNAGE", details: { projectCode: "11000005", client: "Pool Holders", jobSheetNumber: "ZZALT-4", location: "Karur", date: d(0), fromDate: d(0), toDate: d(5), numberOfVehicles: 8 } });
+  projA = await mk({ projectType: "SIGNAGE", details: { projectCode: "11000001", client: "Alpha Foods", jobSheetNumber: "ZZALT-1", location: "Salem", date: d(0), fromDate: d(0), toDate: d(12), numberOfVehicles: 12, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 12 }] } });
+  projB = await mk({ projectType: "SIGNAGE", details: { projectCode: "11000002", client: "Beta Drafts", jobSheetNumber: "ZZALT-2", location: "Erode", date: d(0), fromDate: d(0), toDate: d(5), numberOfVehicles: 1, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 1 }] } });
+  projC = await mk({ projectType: "SIGNAGE", details: { projectCode: "11000003", client: "Gamma Versions", jobSheetNumber: "ZZALT-3", location: "Hosur", date: d(0), fromDate: d(0), toDate: d(5), numberOfVehicles: 1, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 1 }] } });
+  projR = await mk({ projectType: "ROADSHOW", details: { projectCode: "11000004", billingName: "Roadie Co", stateCode: "33", startDate: d(0), endDate: d(8), reportingDate: d(3), sundayHalt: "NO", numberOfVans: 2, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 2 }], reportingLocations: ["Chennai", "Trichy"] } });
+  projP = await mk({ projectType: "SIGNAGE", details: { projectCode: "11000005", client: "Pool Holders", jobSheetNumber: "ZZALT-4", location: "Karur", date: d(0), fromDate: d(0), toDate: d(5), numberOfVehicles: 8, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 8 }] } });
   const approved = { approvalStatus: "APPROVED", approvedVersion: 1 };
   for (const tv of projP.vehicles) await mkBudget(tv, projP._id, approved);
   for (let i = 0; i < 10; i++) await mkBudget(projA.vehicles[i], projA._id, approved);
@@ -267,6 +268,7 @@ test("allot: vehicle becomes In Use, identifiers auto-populated, times stored in
   assert.notEqual(A(0).pifNumber, A(1).pifNumber);
   assert.equal(a.clientName, "Alpha Foods");
   assert.equal(a.projectType, "SIGNAGE");
+  assert.equal(a.requestedVehicleType, "Centre Portion Without Roof");
   assert.equal(a.projectStart, d(0));
   assert.equal(a.billNumber ?? null, null);
   assert.equal(a.remarks, "Bring the ladder");
@@ -392,6 +394,8 @@ test("change vehicle: reason mandatory, replacement must be available, old is re
   assert.equal(n.previousAllotment, first._id);
   assert.equal(n.changeAttachments.length, 2);
   assert.ok(n.changeAttachments[0].url.includes("/files/")); // served from the existing storage
+  assert.ok(first.requestedVehicleType);
+  assert.equal(n.requestedVehicleType, first.requestedVehicleType);
   for (const k of ["trackupNumber", "pifNumber", "clientName", "projectName", "projectType", "projectStart", "projectEnd", "remarks"]) assert.equal(n[k], first[k], k); // identifiers preserved
   assert.equal(n.nextAvailableAt, first.nextAvailableAt);
   assert.equal(n.expectedReleaseAt, first.expectedReleaseAt);

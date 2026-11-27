@@ -1,5 +1,5 @@
 import { EXPENSE_OPTIONS } from "../config/rsaOptions.js";
-import { calculatePayable, parseAmountPaise, rupees, validatePaymentInput, type PaymentInput } from "./rsaPayment.js";
+import { MAX_AMOUNT_PAISE, calculatePayable, parseAmountPaise, rupees, validatePaymentInput, type PaymentInput } from "./rsaPayment.js";
 import { kmUsage, type KmAllowance } from "./kmAllowance.js";
 
 /**
@@ -61,23 +61,52 @@ export function dailyData(d: DailyInput) {
 // ------------------------------------------------------------------------------------------------------------- final settlement
 
 export const FINAL_EXPENSE_CATEGORIES = EXPENSE_OPTIONS.filter((o) => ["FUEL", "FLEET_BALANCE", "TOLL", "FOOD_ALLOWANCE", "TRAVEL", "PERMIT", "SERVICE", "OTHERS"].includes(o.key));
-export const DEDUCTION_KEYS = ["mileageShort", "driverChangeTravel", "vehicleDamage", "previousSalary", "other"] as const;
+export const DEDUCTION_KEYS = ["mileageShort", "vehicleDamage", "previousSalary", "other"] as const;
 export type DeductionKey = (typeof DEDUCTION_KEYS)[number];
 export const DEDUCTION_LABELS: Record<DeductionKey, string> = {
-  mileageShort: "Mileage Shortage Deduction", driverChangeTravel: "Driver Change Travel Amount Deduction", vehicleDamage: "Vehicle Damage Deduction",
-  previousSalary: "Previous Salary Deduction", other: "Other Deduction",
+  mileageShort: "Mileage Shortage Deduction", vehicleDamage: "Vehicle Damage Deduction", previousSalary: "Previous Salary Deduction", other: "Other Deduction",
 };
+/**
+ * Lines of a SAVED settlement, for the salary statement: older ones also stored the driver-change amount as its own line, and keep
+ * showing it. New ones carry it inside Previous Salary Deduction.
+ */
+export const savedDeductionLines = (d: Record<string, number | undefined>): [string, number][] =>
+  (["mileageShort", "driverChangeTravel", "vehicleDamage", "previousSalary", "other"] as const)
+    .filter((k) => k !== "driverChangeTravel" || d[k] !== undefined)
+    .map((k) => [k === "driverChangeTravel" ? "Driver Change Travel Amount Deduction" : DEDUCTION_LABELS[k], Number(d[k]) || 0]);
 
 /** Number fields of the final form: [key, label]. Values are non-negative with up to 2 decimals (kept in hundredths). */
 const NUMBER_FIELDS = [
   ["estimatedKmPerDay", "Estimated KM Per Day"], ["fixedMileage", "Fixed Mileage"], ["openingKm", "Opening KM"], ["closingKm", "Closing KM"],
   ["dieselCost", "Fuel Cost (per litre)"], ["ioclLitres", "IOCL card usage (litres)"], ["ioclKms", "IOCL card usage (KMs)"],
   ["estimatedBudget", "Estimated Budget"], ["estimatedKm", "Estimated KM"], ["estimatedFuel", "Estimated Fuel"],
-  ["perDaySalary", "Per Day Salary"], ["perDayFood", "Per Day Food"], ["haltDayPay", "Halt Day Pay"], ["travelPay", "Travel Pay"], ["overtimeRate", "Overtime rate per hour"],
-  ["onRoadDays", "On Road Days"], ["onRoadSundays", "On Road Sunday"], ["haltDays", "Halt Days"], ["overtimeHours", "Overtime (hours)"],
+  ["perDaySalary", "Per Day Salary"], ["perDayFood", "Per Day Food"], ["travelPay", "Travel Pay"], ["travelKm", "Travel KM"], ["travelRate", "Travel rate per KM"],
+  ["onRoadDays", "On Road Days"], ["onRoadSundays", "On Road Sunday"], 
   ["suspenseAmount", "Suspense Amount"],
 ] as const;
 type NumKey = (typeof NUMBER_FIELDS)[number][0];
+
+/**
+ * The campaign period of one final settlement: the project's own dates unless they were changed on the form. A changed period
+ * affects this settlement only (never the project), and its day count replaces the project's.
+ */
+export function finalPeriod(input: unknown, campaign: { fromDate: string; toDate: string; totalDays: number | null }) {
+  const b = (input && typeof input === "object" ? input : {}) as Obj;
+  const pick = (v: unknown, fallback: string) => (blank(v) ? fallback : v);
+  const fromDate = pick(b.campaignFrom, campaign.fromDate);
+  const toDate = pick(b.campaignTo, campaign.toDate);
+  const changed = fromDate !== campaign.fromDate || toDate !== campaign.toDate;
+  const same = { fromDate: campaign.fromDate, toDate: campaign.toDate, totalDays: campaign.totalDays, days: daysBetween(campaign.fromDate, campaign.toDate) };
+  if (!changed) return { errors: [] as string[], period: same };
+  const errors: string[] = [];
+  if (!isDate(fromDate)) errors.push("Campaign Start Date must be a valid date");
+  if (!isDate(toDate)) errors.push("Campaign End Date must be a valid date");
+  if (errors.length) return { errors, period: same };
+  const days = daysBetween(fromDate as string, toDate as string);
+  if (days < 1) errors.push("Campaign End Date cannot be before the Start Date");
+  else if (days > 366) errors.push("The campaign period cannot be longer than 366 days");
+  return { errors, period: { fromDate: fromDate as string, toDate: toDate as string, totalDays: days as number | null, days } };
+}
 
 export interface FinalExpenseIn { category: string; label: string; description: string | null; quantity: number; cost: number; approved: number } // hundredths / paise
 export interface FinalInput {
@@ -112,13 +141,18 @@ export function validateFinalInput(input: unknown, ctx: { totalDays: number | nu
   };
   const n = {} as Record<NumKey, number>;
   for (const [k, label] of NUMBER_FIELDS) n[k] = num(b[k], label);
-  for (const k of ["onRoadDays", "onRoadSundays", "haltDays"] as const) if (n[k] % 100 !== 0) errors.push(`${NUMBER_FIELDS.find((f) => f[0] === k)![1]} must be a whole number`);
+  for (const k of ["onRoadDays", "onRoadSundays"] as const) if (n[k] % 100 !== 0) errors.push(`${NUMBER_FIELDS.find((f) => f[0] === k)![1]} must be a whole number`);
+  // Travel Pay = KM x rate when they are given (the typed amount is then ignored); without them the amount stands as before
+  if (n.travelKm || n.travelRate) {
+    if (!n.travelKm || !n.travelRate) errors.push("Enter both the Travel KM and the rate per KM");
+    n.travelPay = Math.round((n.travelKm * n.travelRate) / 100);
+    if (n.travelPay > MAX_AMOUNT_PAISE) errors.push("Travel Pay is too large");
+  }
   if (!n.fixedMileage) errors.push("Fixed Mileage must be greater than zero");
   if (n.closingKm < n.openingKm) errors.push("Closing KM cannot be less than Opening KM");
-  if (!n.onRoadDays && !n.onRoadSundays && !n.haltDays) errors.push("Enter the On Road Days, On Road Sundays or Halt Days");
-  const days = (n.onRoadDays + n.onRoadSundays + n.haltDays) / 100;
-  if (ctx.totalDays && days > ctx.totalDays) errors.push(`On road days, Sundays and halt days (${days}) cannot exceed the campaign's ${ctx.totalDays} days`);
-  if (n.overtimeHours > 0 && !n.overtimeRate) errors.push("Enter the overtime rate per hour");
+  if (!n.onRoadDays && !n.onRoadSundays) errors.push("Enter the On Road Days or On Road Sundays");
+  const days = (n.onRoadDays + n.onRoadSundays) / 100;
+  if (ctx.totalDays && days > ctx.totalDays) errors.push(`On road days and Sundays (${days}) cannot exceed the campaign's ${ctx.totalDays} days`);
 
   const reportingDate = blank(b.reportingDate) ? null : isDate(b.reportingDate) ? (b.reportingDate as string) : (errors.push("Reporting Date must be a valid date"), null);
   if (reportingDate && ctx.fromDate && ctx.toDate && isDate(ctx.fromDate) && isDate(ctx.toDate) && (reportingDate < ctx.fromDate || reportingDate > ctx.toDate))
@@ -168,7 +202,7 @@ export function validateFinalInput(input: unknown, ctx: { totalDays: number | nu
  *   Variation in litres  = IOCL litres used - expected litres   (positive = more fuel used than the mileage allows)
  *   Mileage short (hint) = max(variation, 0) x Fuel Cost per litre   (shown as a suggestion; the deduction is entered by RBP)
  *   Earnings             = On road days x per day salary + On road Sundays x per day salary + (on road days + Sundays) x per day food
- *                          + halt days x halt day pay + travel pay + overtime hours x overtime rate
+ *                          + travel pay
  *   Claimed (per row)    = quantity x cost;   rejected = claimed - approved
  *   Gross                = earnings + approved expenses
  *   Net Amount           = Gross - Total Deduction - Suspense Amount
@@ -184,9 +218,7 @@ export function calculateFinal(d: FinalInput) {
     { key: "salary", label: "On Road Days Salary", quantity: n.onRoadDays / 100, rate: n.perDaySalary / 100, amountP: mul(n.onRoadDays, n.perDaySalary) },
     { key: "sundaySalary", label: "On Road Sunday Salary", quantity: n.onRoadSundays / 100, rate: n.perDaySalary / 100, amountP: mul(n.onRoadSundays, n.perDaySalary) },
     { key: "food", label: "Food (Per Day)", quantity: (n.onRoadDays + n.onRoadSundays) / 100, rate: n.perDayFood / 100, amountP: mul(n.onRoadDays + n.onRoadSundays, n.perDayFood) },
-    { key: "halt", label: "Halt Day Pay", quantity: n.haltDays / 100, rate: n.haltDayPay / 100, amountP: mul(n.haltDays, n.haltDayPay) },
     { key: "travel", label: "Travel Pay", quantity: 1, rate: n.travelPay / 100, amountP: n.travelPay },
-    { key: "overtime", label: "Overtime", quantity: n.overtimeHours / 100, rate: n.overtimeRate / 100, amountP: mul(n.overtimeHours, n.overtimeRate) },
   ];
   const earningsP = earnings.reduce((s, e) => s + e.amountP, 0);
   const expenses = d.expenses.map((e) => {
@@ -215,8 +247,8 @@ export function finalData(d: FinalInput, campaign: { fromDate: string; toDate: s
     km: campaign.km ? kmUsage(campaign.km, c.resultKm) : null,
     fuel: { fixedMileage: h("fixedMileage"), openingKm: h("openingKm"), closingKm: h("closingKm"), resultKm: c.resultKm, dieselCost: h("dieselCost"), ioclLitres: h("ioclLitres"), ioclKms: h("ioclKms"), expectedLitres: c.expectedLitres, variationLitres: c.variationLitres, mileageShortSuggested: rupees(c.mileageShortSuggestedP) },
     estimate: { estimatedBudget: h("estimatedBudget"), estimatedKm: h("estimatedKm"), estimatedFuel: h("estimatedFuel") },
-    rates: { perDaySalary: h("perDaySalary"), perDayFood: h("perDayFood"), haltDayPay: h("haltDayPay"), travelPay: h("travelPay"), overtimeRate: h("overtimeRate") },
-    days: { onRoadDays: h("onRoadDays"), onRoadSundays: h("onRoadSundays"), haltDays: h("haltDays"), overtimeHours: h("overtimeHours") },
+    rates: { perDaySalary: h("perDaySalary"), perDayFood: h("perDayFood"), travelPay: h("travelPay"), travelKm: h("travelKm"), travelRate: h("travelRate") },
+    days: { onRoadDays: h("onRoadDays"), onRoadSundays: h("onRoadSundays") },
     earnings: c.earnings.map((e) => ({ key: e.key, label: e.label, quantity: e.quantity, rate: e.rate, amount: rupees(e.amountP) })),
     expenses: c.expenses.map((e) => ({ category: e.category, label: e.label, description: e.description, quantity: e.quantity / 100, cost: rupees(e.cost), claimed: rupees(e.claimedP), approved: rupees(e.approved), rejected: rupees(e.rejectedP) })),
     deductions: Object.fromEntries(DEDUCTION_KEYS.map((k) => [k, rupees(d.deductions[k])])) as Record<DeductionKey, number>,

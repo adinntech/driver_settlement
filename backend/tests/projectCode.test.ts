@@ -46,8 +46,8 @@ const call = async (path: string, method = "GET", body?: unknown, token?: string
 };
 let rsop = "";
 const token = async () => (rsop ||= (await call("/auth/login", "POST", { role: "RSOP", username: "RSOP", password: "pass2" })).body.data.token);
-const signage = (code: unknown, client = "DALMIA", n = 1) => ({ projectCode: code, date: day(-3), client, jobSheetNumber: "J1", location: "RAMNAD", numberOfVehicles: n, fromDate: day(-2), toDate: day(3) });
-const roadshow = (code: unknown, client = "DALMIA", n = 1) => ({ projectCode: code, billingName: client, stateCode: "33", numberOfVans: n, startDate: day(0), endDate: day(1), reportingDate: day(0), sundayHalt: "NO", reportingLocations: ["Madurai"] });
+const signage = (code: unknown, client = "DALMIA", n = 1) => ({ projectCode: code, date: day(-3), client, jobSheetNumber: "J1", location: "RAMNAD", numberOfVehicles: n, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: n }], fromDate: day(-2), toDate: day(3) });
+const roadshow = (code: unknown, client = "DALMIA", n = 1) => ({ projectCode: code, billingName: client, stateCode: "33", numberOfVans: n, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: n }], startDate: day(0), endDate: day(1), reportingDate: day(0), sundayHalt: "NO", reportingLocations: ["Madurai"] });
 const post = async (projectType: string, details: unknown) => call("/tracking", "POST", { projectType, details }, await token());
 
 test("validation: exactly 8 digits, both project types (frontend uses the same rule)", () => {
@@ -72,8 +72,9 @@ test("API rejects invalid codes; a valid request with N vehicles creates N indiv
   assert.equal(r.body.data.projectCode, "12345678");
   assert.equal(r.body.data.details.projectCode, "12345678");
   assert.equal(r.body.data.vehicles.length, 10);
-  const nums = r.body.data.vehicles.flatMap((v: any) => [v.trackupNumber, v.pifNumber, v.displayNumber]);
-  assert.equal(new Set(nums).size, 30); // every vehicle keeps its own Trackup, PIF and Display numbers
+  const nums = r.body.data.vehicles.map((v: any) => v.pifNumber);
+  assert.equal(new Set(nums).size, 10); // every vehicle keeps its own PIF Number
+  assert.equal(new Set(r.body.data.vehicles.map((v: any) => v.trackupNumber)).size, 1); // one type = one Trackup
 });
 
 test("duplicate code: same client adds another request to the project; another client is rejected; types are separate", async () => {

@@ -129,7 +129,7 @@ export default function DeliveryForm({ id }: { id: string }) {
     return (
       <div className="card" role="status">
         <h3>Vehicle delivered successfully</h3>
-        <p className="muted">{d.trackupNumber} · {d.vehicleNo} · {d.driverName}</p>
+        <p className="muted">{d.trackupNumber} · {d.pifNumber} · {d.vehicleNo} · {d.driverName}</p>
         <Link href="/rbp/on-road" className="btn btn-primary">Back to Vehicle Deliver</Link>
       </div>
     );
@@ -214,6 +214,7 @@ export default function DeliveryForm({ id }: { id: string }) {
         <Modal title="Confirm Vehicle Delivery" onClose={() => !busy && setConfirm(false)}>
           <dl className="kv compact">
             <div><dt>Trackup Number</dt><dd>{d.trackupNumber}</dd></div>
+            <div><dt>PIF Number</dt><dd>{d.pifNumber}</dd></div>
             <div><dt>Vehicle Number</dt><dd>{d.vehicleNo}</dd></div>
             <div><dt>Driver</dt><dd>{d.driverName}</dd></div>
             <div><dt>RSA Approval Status</dt><dd>Approved</dd></div>

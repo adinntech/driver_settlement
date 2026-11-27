@@ -115,6 +115,7 @@ export function Body({ d, onAssign, onChangeDriver }: { d: AllotmentDetailData; 
         <KV k="Project Type" v={a.projectType === "ROADSHOW" ? "Roadshow" : "Signage"} />
         <KV k="Trackup Number" v={a.trackupNumber} />
         <KV k="PIF Number" v={a.pifNumber} />
+        {a.requestedVehicleType && <KV k="Requested Vehicle Type" v={a.requestedVehicleType} />}
         <KV k="Bill Number" v={a.billNumber} />
         <KV k="Project Period" v={projectPeriod(a.projectStart, a.projectEnd, formatDate)} />
       </dl>

@@ -22,7 +22,6 @@ const paymentSchema = new Schema(
     allotment: { type: Schema.Types.ObjectId, ref: "VehicleAllotment", required: true },
     trackupNumber: { type: String, required: true },
     pifNumber: { type: String, required: true },
-    displayNumber: String,
     billNumber: String,
     clientName: String,
     projectType: String,

@@ -17,7 +17,7 @@ test("sidebar: the RBP menu is renamed to Vehicle Deliver on the same route; oth
   assert.deepEqual(NAV.RBP.map((n) => n.label), ["Projects & Budgets", "Vehicle Management", "Driver Management", "Vehicle Deliver", "On Road Vehicles", "Driver Payments"]); // payments appended after the existing entries
   assert.equal(NAV.RBP[3].href, "/rbp/on-road"); // no duplicate module / route
   assert.ok(!NAV.RBP.some((n) => n.label === "On-Road Vehicles"));
-  assert.deepEqual(NAV.RSA.map((n) => n.label), ["Payments", "Vehicle & Driver Clearance", "On Road Vehicles", "Driver Payments", "Payment Completed"]); // settlement pages appended
+  assert.deepEqual(NAV.RSA.map((n) => n.label), ["Payments", "Vehicle & Driver Clearance", "On Road Vehicles", "Driver Payments", "Payment Completed", "IOCL Data"]); // settlement pages appended
   assert.deepEqual(NAV.RSOM, [{ href: "/rsom", label: "Budget Approvals" }, { href: "/rsom/payments", label: "Daily Payment Approvals" }]);
   assert.deepEqual(NAV.RSOP.map((n) => n.label), ["Dashboard", "New Tracking Request"]);
 });

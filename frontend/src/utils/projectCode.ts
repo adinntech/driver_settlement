@@ -22,7 +22,7 @@ export interface ProjectGroup {
   budgetsCreated: number;
   lastCreatedAt: string;
   requests: Project[];
-  /** Every vehicle of the project with its own request (Trackup / PIF / Display stay per vehicle). */
+  /** Every vehicle of the project with its own request (PIF stays per vehicle; the Trackup is shared by one vehicle type). */
   rows: { p: Project; v: Vehicle; position: number }[];
 }
 

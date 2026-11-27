@@ -8,6 +8,7 @@ process.env.RBP_PASSWORD = "123123";
 process.env.RSOM_USERNAME = "RSOM";
 process.env.RSOM_PASSWORD = "pass3";
 
+import { perVehicleTrackups } from "./legacyNumbers.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Server } from "node:http";
@@ -52,7 +53,7 @@ const login = async (role: string, u: string, p: string) =>
 const codeOf = (client: string) => String(10_000_000 + ([...client].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 90_000_000));
 const signage = (client: string) => ({
   projectCode: codeOf(client), date: day(-3), client, jobSheetNumber: "22403", location: "RAMNAD",
-  numberOfVehicles: 1, fromDate: day(-2), toDate: day(3),
+  numberOfVehicles: 1, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 1 }], fromDate: day(-2), toDate: day(3),
 });
 const budgetBody = {
   mileage: 12, estimatedKmPerDay: 150, onRoadDate: day(-2), completionDate: day(3), sundayHalt: true, numberOfDays: 6, // Halt Food needs Sunday Halt
@@ -66,6 +67,7 @@ const T = async () => (tokens ??= { rsop: await login("RSOP", "RSOP", "pass2"), 
 async function newBudget(client: string) {
   const t = await T();
   const p = (await call("/tracking", "POST", { projectType: "SIGNAGE", details: signage(client) }, t.rsop)).body.data;
+  await perVehicleTrackups(p);
   const vehicle = p.vehicles[0];
   const b = (await call("/budgets", "POST", { vehicleId: vehicle._id, ...budgetBody }, t.rbp)).body.data.budget;
   return { t, p, vehicle, b };
@@ -156,7 +158,6 @@ test("listing, filters, pagination, stats and review detail for RSOM", async () 
 
   const d = (await call("/approvals/" + a.b._id, "GET", undefined, t.rsom)).body.data;
   assert.equal(d.context.client, "Alpha Foods");
-  assert.equal(d.context.displayNumber, a.vehicle.displayNumber);
   assert.equal(d.budget.data.tolls[0].location, "Salem");
   assert.equal(d.versions.length, 1);
   assert.deepEqual(d.events.map((e: any) => e.action), ["CREATED", "SUBMITTED"]);
@@ -185,7 +186,7 @@ test("approve: confirms version, records approver, notifies RBP, no duplicates, 
   const notes = (await call("/notifications", "GET", undefined, t.rbp)).body.data.items.filter((x: any) => x.meta?.budgetId === b._id);
   assert.equal(notes.length, 1);
   assert.equal(notes[0].type, "BUDGET_APPROVED");
-  assert.ok(notes[0].message.includes(`Your budget for ${vehicle.trackupNumber} has been approved by RSOM`));
+  assert.ok(notes[0].message.includes(`Your budget for ${vehicle.trackupNumber} (${vehicle.pifNumber}) has been approved by RSOM`));
   assert.ok(notes[0].message.includes("Approve Client") && notes[0].message.includes("V1") && notes[0].message.includes("₹"));
   assert.equal(notes[0].link, `/rbp/budget?vehicle=${vehicle._id}`);
   assert.equal(notes[0].meta.total, a.body.data.total);
@@ -272,7 +273,7 @@ test("full reject -> correct -> resubmit -> approve cycle with history, notifica
   assert.deepEqual(seen.rejection.fields.map((x: any) => x.field), ["tolls", "haltFood", "others"]);
   const note = (await call("/notifications", "GET", undefined, t.rbp)).body.data.items.find((x: any) => x.meta?.budgetId === b._id);
   assert.equal(note.type, "BUDGET_REJECTED");
-  assert.ok(note.message.includes(`Your budget for ${vehicle.trackupNumber} has been rejected by RSOM. Please review the rejection details.`));
+  assert.ok(note.message.includes(`Your budget for ${vehicle.trackupNumber} (${vehicle.pifNumber}) has been rejected by RSOM. Please review the rejection details.`));
   assert.ok(note.message.includes("Several amounts need correction") && note.message.includes("tolls") && note.message.includes("V1") && note.message.includes("Cycle Client"));
 
   // a rejected version can neither be approved nor resubmitted unchanged

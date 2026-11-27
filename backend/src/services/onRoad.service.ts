@@ -19,7 +19,7 @@ export async function listOnRoadVehicles(q: OnRoadQuery) {
   const and: any[] = [];
   if (q.q?.trim()) {
     const rx = new RegExp(esc(q.q.trim()), "i");
-    and.push({ $or: [{ trackupNumber: rx }, { pifNumber: rx }, { displayNumber: rx }, { clientName: rx }, { vehicleNo: rx }, { driverName: rx }, { driverNumber: rx }, { projectName: rx }] });
+    and.push({ $or: [{ trackupNumber: rx }, { pifNumber: rx }, { clientName: rx }, { vehicleNo: rx }, { driverName: rx }, { driverNumber: rx }, { projectName: rx }] });
   }
   if (q.projectType && ["ROADSHOW", "SIGNAGE"].includes(q.projectType)) and.push({ projectType: q.projectType });
   const pipeline: any[] = [
@@ -48,8 +48,8 @@ export async function listOnRoadVehicles(q: OnRoadQuery) {
     const pay = x.pay?.[0];
     return {
       clearanceId: String(x._id), trackingVehicle: String(x.trackingVehicle), allotment: String(x.allotment),
-      trackupNumber: x.trackupNumber, pifNumber: x.pifNumber, displayNumber: x.displayNumber ?? null, projectType: x.proj?.projectType ?? x.projectType ?? null,
-      clientName: x.clientName ?? x.proj?.clientName ?? null, projectName: x.projectName ?? null, vehicleNo: x.vehicleNo ?? null,
+      trackupNumber: x.trackupNumber, pifNumber: x.pifNumber, projectType: x.proj?.projectType ?? x.projectType ?? null,
+      clientName: x.clientName ?? x.proj?.clientName ?? null, projectName: x.projectName ?? null, vehicleNo: x.vehicleNo ?? null, requestedVehicleType: x.a?.requestedVehicleType ?? null,
       driverNumber: x.driverNumber ?? null, driverName: x.driverName ?? null,
       campaignFromDate: (road(x) ? x.proj?.details?.startDate : x.proj?.details?.fromDate) ?? null,
       campaignToDate: (road(x) ? x.proj?.details?.endDate : x.proj?.details?.toDate) ?? null,

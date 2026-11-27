@@ -11,6 +11,7 @@ process.env.RSA_USERNAME = "RSA";
 process.env.RSA_PASSWORD = "pass4";
 process.env.STORAGE_TYPE = "local";
 
+import { perVehicleTrackups } from "./legacyNumbers.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Server } from "node:http";
@@ -91,12 +92,12 @@ const mkBudget = (tv: any, proj: any, state: Record<string, unknown> = { approva
 const mkProject = async (body: unknown) => {
   const r = await call("/tracking", "POST", body, (await T()).rsop);
   assert.equal(r.status, 201, JSON.stringify(r.body));
-  return r.body.data as any;
+  return perVehicleTrackups<any>(r.body.data);
 };
 const sched = { expectedReleaseDate: d(3), expectedReleaseTime: "20:00", nextAvailableDate: d(4), nextAvailableTime: "09:00" };
 const allotTo = async (tvx: any, driver?: any) => {
   const v = await mkVehicle();
-  const r = await call("/vehicle-allotments", "POST", { vehicleId: v._id, trackupNumber: tvx.trackupNumber, ...sched, ...(driver ? { driverId: driver._id } : {}) }, (await T()).rbp);
+  const r = await call("/vehicle-allotments", "POST", { vehicleId: v._id, pifNumber: tvx.pifNumber, ...sched, ...(driver ? { driverId: driver._id } : {}) }, (await T()).rbp);
   assert.equal(r.status, 201, JSON.stringify(r.body));
   return { vehicle: v, allotment: r.body.data };
 };
@@ -107,8 +108,8 @@ const rsaUser: any = await User.findOne({ role: "RSA" }).lean();
 const rbpUser: any = await User.findOne({ role: "RBP" }).lean();
 const notes = (user: any, type: string) => Notification.find({ recipient: user._id, type }).lean() as Promise<any[]>;
 
-const sig = await mkProject({ projectType: "SIGNAGE", details: { projectCode: "15000001", client: "Kensign Lifestyles", jobSheetNumber: "ZZCL-1", location: "Coimbatore", date: d(0), fromDate: d(0), toDate: d(9), numberOfVehicles: 10 } });
-const road = await mkProject({ projectType: "ROADSHOW", details: { projectCode: "15000002", billingName: "Ken Roadshow Pvt", stateCode: "33", startDate: d(0), endDate: d(8), reportingDate: d(3), sundayHalt: "NO", numberOfVans: 2, reportingLocations: ["Chennai", "Trichy"] } });
+const sig = await mkProject({ projectType: "SIGNAGE", details: { projectCode: "15000001", client: "Kensign Lifestyles", jobSheetNumber: "ZZCL-1", location: "Coimbatore", date: d(0), fromDate: d(0), toDate: d(9), numberOfVehicles: 10, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 10 }] } });
+const road = await mkProject({ projectType: "ROADSHOW", details: { projectCode: "15000002", billingName: "Ken Roadshow Pvt", stateCode: "33", startDate: d(0), endDate: d(8), reportingDate: d(3), sundayHalt: "NO", numberOfVans: 2, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 2 }], reportingLocations: ["Chennai", "Trichy"] } });
 const [A, C, D, E, F, G] = sig.vehicles.slice(0, 6);
 void D; void G;
 const B = road.vehicles[0];
@@ -197,7 +198,7 @@ test("vehicle-only allotment later gets a driver -> clearance is created at assi
 
 test("mass search, filters, combined filters, pagination, summary, latest first (RSA and RBP)", async () => {
   const q = async (qs: string) => (await rsa(`?${qs}`)).body.data;
-  for (const term of [A.trackupNumber, A.pifNumber, "kensign", alA.vehicle.vehicleNo.toLowerCase(), "sampath", drvA.driverNumber, A.displayNumber]) {
+  for (const term of [A.trackupNumber, A.pifNumber, "kensign", alA.vehicle.vehicleNo.toLowerCase(), "sampath", drvA.driverNumber]) {
     const r = await q(`q=${encodeURIComponent(term)}`);
     assert.ok(r.items.some((x: any) => x.trackupNumber === A.trackupNumber), term);
   }

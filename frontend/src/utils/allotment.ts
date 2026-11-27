@@ -85,9 +85,9 @@ export function validateAllotForm(f: AllotForm, now = new Date()): string[] {
   return e;
 }
 
-export function toAllotPayload(f: AllotForm, trackupNumber: string) {
+export function toAllotPayload(f: AllotForm, pifNumber: string) {
   return {
-    trackupNumber, vehicleId: f.vehicleId, allottedDate: f.allottedDate, allottedTime: f.allottedTime,
+    pifNumber, vehicleId: f.vehicleId, allottedDate: f.allottedDate, allottedTime: f.allottedTime,
     expectedReleaseDate: f.expectedReleaseDate, expectedReleaseTime: f.expectedReleaseTime,
     nextAvailableDate: f.nextAvailableDate, nextAvailableTime: f.nextAvailableTime, remarks: f.remarks,
     ...(f.mode === "VEHICLE_DRIVER" && f.driverId ? { driverId: f.driverId } : {}), // vehicle-only requests are exactly what they were before

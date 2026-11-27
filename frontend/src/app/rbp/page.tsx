@@ -9,6 +9,7 @@ import { ApprovalBadge } from "@/components/ApprovalTimeline";
 import { statusOf } from "@/utils/budgetDescribe";
 import { useApi } from "@/hooks/useApi";
 import { useDebounce } from "@/hooks/useDebounce";
+import { vehicleCardDetails, vehicleTypesText } from "@/utils/vehicleTypes";
 import type { Project } from "@/types/domain";
 import { formatDate, formatDateTime, labelize } from "@/utils/format";
 
@@ -41,7 +42,7 @@ function Projects() {
       </div>
       <div className="card">
         <div className="filters">
-          <input placeholder="Search client, Trackup, PIF or Display number" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input placeholder="Search client, Trackup or PIF number" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         {list.loading ? (
           <Skeleton rows={5} />
@@ -69,7 +70,7 @@ function ProjectBlock({ p, open, onToggle }: { p: Project; open: boolean; onTogg
         ["Project Code", p.projectCode ?? "—"],
         ["Billing Name", p.clientName],
         ["Total Vans", String(p.vehicleCount)],
-        ["Trackup Numbers", String(p.vehicles.length)],
+        ["Trackup Numbers", String(new Set(p.vehicles.map((v) => v.trackupNumber)).size)],
         ["Start", formatDate(d.startDate as string)],
         ["End", formatDate(d.endDate as string)],
         ["Reporting Date", formatDate(d.reportingDate as string)],
@@ -79,10 +80,13 @@ function ProjectBlock({ p, open, onToggle }: { p: Project; open: boolean; onTogg
         ["Client", p.clientName],
         ["Job Sheet", String(d.jobSheetNumber ?? "—")],
         ["Vehicles", String(p.vehicleCount)],
+        ["Trackup Numbers", String(new Set(p.vehicles.map((v) => v.trackupNumber)).size)],
         ["Total Days", String(d.totalDaysOfWork ?? "—")],
         ["From", formatDate(d.fromDate as string)],
         ["To", formatDate(d.toDate as string)],
       ];
+  const requested = vehicleTypesText(d.vehicleTypes);
+  if (requested) master.push(["Vehicle Types", requested]);
   return (
     <div className={`project${open ? " open" : ""}`}>
       <button className="project-head" onClick={onToggle} aria-expanded={open}>
@@ -104,7 +108,7 @@ function ProjectBlock({ p, open, onToggle }: { p: Project; open: boolean; onTogg
             <div key={v._id} className="vehicle">
               <div className="vehicle-top">
                 <strong>
-                  Vehicle {v.vehicleIndex} of {p.vehicleCount}
+                  Vehicle {v.vehicleIndex} of {p.vehicleCount}{v.vehicleType ? ` · ${v.vehicleType}` : ""}
                 </strong>
                 <span className="inline">
                   <StatusBadge status={v.budgetStatus} />
@@ -115,7 +119,6 @@ function ProjectBlock({ p, open, onToggle }: { p: Project; open: boolean; onTogg
                 {[
                   ["Trackup", v.trackupNumber],
                   ["PIF", v.pifNumber],
-                  ["Display", v.displayNumber],
                 ].map(([l, val]) => (
                   <span key={l} className="num">
                     <small>{l}</small> {val}
@@ -125,7 +128,7 @@ function ProjectBlock({ p, open, onToggle }: { p: Project; open: boolean; onTogg
                 <span className="muted">Created {formatDateTime(v.createdAt)}</span>
               </div>
               <dl className="kv compact">
-                {Object.entries(d)
+                {vehicleCardDetails(d, v.vehicleType)
                   .filter(([, val]) => val !== undefined && val !== "")
                   .map(([k, val]) => (
                     <div key={k}>

@@ -8,7 +8,7 @@ import { calculateFinal, finalData, validateFinalInput } from "../src/utils/sett
 const NOW = new Date("2026-11-25T06:00:00Z");
 // 2026-11-25 (Wed) .. 2026-12-04 (Fri): 10 calendar days, 1 Sunday (29 Nov)
 const roadshow = (over: Record<string, unknown> = {}) => ({
-  projectCode: "12345678", billingName: "KFC", stateCode: "33", numberOfVans: 1, sundayHalt: "NO", reportingLocations: ["Chennai"],
+  projectCode: "12345678", billingName: "KFC", stateCode: "33", numberOfVans: 1, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 1 }], sundayHalt: "NO", reportingLocations: ["Chennai"],
   startDate: "2026-11-25", endDate: "2026-12-04", reportingDate: "2026-11-26", kmAllotted: "90 KM per day", ...over,
 });
 const v = (over: Record<string, unknown> = {}) => validateTracking("ROADSHOW", roadshow(over), { now: NOW });
@@ -79,7 +79,7 @@ test("usage: extra KM used is capped at extra/day x days; excess only above the 
 });
 
 test("budget context carries the per-day allowance (roadshow) and none for signage", () => {
-  const vehicle = { trackupNumber: "T", pifNumber: "P", displayNumber: "D", vehicleIndex: 1 };
+  const vehicle = { trackupNumber: "T", pifNumber: "P", vehicleIndex: 1 };
   const details = { ...v({ extraKmAllowed: "YES", extraKmAllotted: 20 }).details };
   const km = buildContext({ projectType: "ROADSHOW", clientName: "KFC", details }, vehicle).km!;
   assert.deepEqual([km.allowedKmPerDay, km.totalAllowedKm], [110, 1100]);

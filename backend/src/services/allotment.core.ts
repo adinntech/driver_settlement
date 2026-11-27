@@ -43,11 +43,11 @@ export async function releaseActiveAllotments(vehicleId: unknown, o: { username:
  */
 export async function syncAllotmentFromVehicle(vehicle: any, prev: any, username: string): Promise<void> {
   const cur = vehicle?.availability;
-  const prevTrackup = prev?.status === "IN_USE" ? prev.project?.trackupNumber ?? null : null;
-  const curTrackup = cur?.status === "IN_USE" ? cur.project?.trackupNumber ?? null : null;
-  if (prevTrackup && prevTrackup !== curTrackup)
+  const prevPif = prev?.status === "IN_USE" ? prev.project?.pifNumber ?? null : null;
+  const curPif = cur?.status === "IN_USE" ? cur.project?.pifNumber ?? null : null;
+  if (prevPif && prevPif !== curPif)
     await releaseActiveAllotments(vehicle._id, { username, reason: "Vehicle availability was changed in Vehicle Management" });
-  if (!curTrackup || !cur.project?.trackingVehicle) return;
+  if (!curPif || !cur.project?.trackingVehicle) return;
 
   const expected = istToDate(cur.expectedReleaseDate, cur.expectedReleaseTime);
   const next = istToDate(cur.nextAvailableDate, cur.nextAvailableTime); // null = no next-available moment (optional)

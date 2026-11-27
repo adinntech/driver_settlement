@@ -1,7 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { authenticate, requireRole } from "../middleware/auth.js";
 import {
-  approvedForExport, checkAdvanceEligibility, completeSettlement, getSettlement, listEligibleProjects, listSettlements, resubmitSettlement, reviewSettlement, settlementContext,
+  approvedForExport, checkAdvanceEligibility, completeBulk, completeSettlement,getSettlement, listEligibleProjects, listSettlements, paymentsForExport, resubmitSettlement, reviewSettlement, settlementContext,
   settlementOptions, submitSettlement, viewBudget, viewDriver,
 } from "../services/settlement.service.js";
 import { accountsExport, approvedPaymentRows, driverListRows, driverSalaryPdf, driverSalaryRows, reportWorkbook, vehicleMisRows } from "../services/settlementReports.service.js";
@@ -35,7 +35,7 @@ router.get("/options", ALL, wrap(async (_req, res) => void ok(res, "Options fetc
 // ---- RBP: project picker + read-only side panels + submit
 const ENTRY = requireRole("RBP", "RSA"); // the shared Driver Payments module
 router.get("/projects", ENTRY, wrap(async (req, res) => {
-  ok(res, "Eligible projects fetched", await listEligibleProjects({ q: q(req.query.q), projectType: q(req.query.projectType), page: n(req.query.page), limit: n(req.query.limit) }));
+  ok(res, "Eligible projects fetched", await listEligibleProjects({ q: q(req.query.q), projectType: q(req.query.projectType), page: n(req.query.page), limit: n(req.query.limit), forFinal: req.query.kind === "final" }));
 }));
 // On Road Vehicles tab (RBP + RSA): delivered vehicles still on road; daily payments open the existing entry form below.
 router.get("/on-road", ENTRY, wrap(async (req, res) => {
@@ -57,15 +57,25 @@ for (const [path, category] of [["daily", "DAILY"], ["final", "FINAL"]] as const
 router.get("/", ALL, wrap(async (req, res) => {
   ok(res, "Payments fetched", await listSettlements({
     scope: q(req.query.scope), category: q(req.query.category), status: q(req.query.status), q: q(req.query.q), from: q(req.query.from), to: q(req.query.to), projectType: q(req.query.projectType),
-    page: n(req.query.page), limit: n(req.query.limit), sort: q(req.query.sort), dir: q(req.query.dir),
+    page: n(req.query.page), limit: n(req.query.limit), sort: q(req.query.sort), dir: q(req.query.dir), approvedOn: q(req.query.approvedOn),
   }, req.user!.role));
 }));
 
-// ---- RSA: accounts export (approved, not yet completed)
+// ---- RSA: Bulk Entry (the single completion below, once per payment)
+router.post("/complete-bulk", requireRole("RSA"), wrap(async (req, res) => {
+  ok(res, "Bulk entry processed", await completeBulk(req.body, req.user!.username));
+}));
+
+// ---- RSA: accounts export (all approved) and the export of whatever the table is filtered to
 router.get("/export/approved", requireRole("RSA"), wrap(async (req, res) => {
-  const rows = await approvedForExport({ category: q(req.query.category), from: q(req.query.from), to: q(req.query.to) }, req.user!.username);
+  const rows = await approvedForExport(req.user!.username);
   if (!rows.length) throw new AppError("There are no approved payments to export", 404);
   xlsx(res, "approved-payments", await accountsExport(rows));
+}));
+router.get("/export/filtered", requireRole("RSA"), wrap(async (req, res) => {
+  const rows = await paymentsForExport({ category: q(req.query.category), status: q(req.query.status), q: q(req.query.q), from: q(req.query.from), to: q(req.query.to) }, req.user!.username);
+  if (!rows.length) throw new AppError("There are no payments matching the current filters", 404);
+  xlsx(res, "filtered-payments", await accountsExport(rows, "Payments"));
 }));
 
 // ---- RSO reports: JSON for the screens, Excel per report
@@ -84,7 +94,9 @@ router.get("/reports/:kind/export", requireRole("RSO"), wrap(async (req, res) =>
 
 // ---- one payment
 router.get("/:id", ALL, wrap(async (req, res) => {
-  ok(res, "Payment fetched", await getSettlement(String(req.params.id))); // one shared record: every role sees the same details and history
+  const payment = await getSettlement(String(req.params.id)); // one shared record: every role that may open it sees the same details and history
+  if (req.user!.role === "RSOM" && payment.category !== "DAILY") throw new AppError("RSOM can view daily vehicle payments only", 403);
+  ok(res, "Payment fetched", payment);
 }));
 router.get("/:id/salary-pdf", requireRole("RSO", "RSA"), wrap(async (req, res) => {
   const r = await driverSalaryPdf(String(req.params.id));

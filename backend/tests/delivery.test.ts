@@ -11,6 +11,7 @@ process.env.RSA_USERNAME = "RSA";
 process.env.RSA_PASSWORD = "pass4";
 process.env.STORAGE_TYPE = "local";
 
+import { perVehicleTrackups } from "./legacyNumbers.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Server } from "node:http";
@@ -95,11 +96,11 @@ const mkBudget = (tvx: any, proj: any) =>
 const mkProject = async (body: unknown) => {
   const r = await call("/tracking", "POST", body, (await T()).rsop);
   assert.equal(r.status, 201, JSON.stringify(r.body));
-  return r.body.data as any;
+  return perVehicleTrackups<any>(r.body.data);
 };
 const sched = { expectedReleaseDate: d(3), expectedReleaseTime: "20:00", nextAvailableDate: d(4), nextAvailableTime: "09:00" };
-const sig = await mkProject({ projectType: "SIGNAGE", details: { projectCode: "15000001", client: "Kensign Lifestyles", jobSheetNumber: "ZZDL-1", location: "Coimbatore", date: d(0), fromDate: d(0), toDate: d(9), numberOfVehicles: 10 } });
-const road = await mkProject({ projectType: "ROADSHOW", details: { projectCode: "15000002", billingName: "Ken Roadshow Pvt", stateCode: "33", startDate: d(0), endDate: d(8), reportingDate: d(3), sundayHalt: "NO", numberOfVans: 6, reportingLocations: ["Chennai", "Trichy"] } });
+const sig = await mkProject({ projectType: "SIGNAGE", details: { projectCode: "15000001", client: "Kensign Lifestyles", jobSheetNumber: "ZZDL-1", location: "Coimbatore", date: d(0), fromDate: d(0), toDate: d(9), numberOfVehicles: 10, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 10 }] } });
+const road = await mkProject({ projectType: "ROADSHOW", details: { projectCode: "15000002", billingName: "Ken Roadshow Pvt", stateCode: "33", startDate: d(0), endDate: d(8), reportingDate: d(3), sundayHalt: "NO", numberOfVans: 6, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 6 }], reportingLocations: ["Chennai", "Trichy"] } });
 const nextIdx = new Map<any, number>();
 let next = 0;
 /** A fresh project vehicle with budget + vehicle + driver allotted through the real API; the clearance is created by the assignment. */
@@ -111,7 +112,7 @@ const fresh = async (proj = sig, driverName = `Delivery Driver ${String.fromChar
   await mkBudget(tvx, proj);
   const veh = await mkVehicle();
   const drv = await mkDriver(driverName);
-  const r = await call("/vehicle-allotments", "POST", { vehicleId: veh._id, trackupNumber: tvx.trackupNumber, ...sched, driverId: drv._id }, (await T()).rbp);
+  const r = await call("/vehicle-allotments", "POST", { vehicleId: veh._id, pifNumber: tvx.pifNumber, ...sched, driverId: drv._id }, (await T()).rbp);
   assert.equal(r.status, 201, JSON.stringify(r.body));
   const c: any = await Clearance.findOne({ trackingVehicle: tvx._id }).lean();
   return { tvx, veh, drv, allotment: r.body.data, cid: String(c._id) };

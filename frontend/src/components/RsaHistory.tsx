@@ -82,7 +82,7 @@ export function RsaHistoryFilters({
 }
 
 export const HISTORY_COLUMNS = [
-  "Payment Number", "Trackup Number", "Project Type", "Client / Billing Name", "Vehicle Number", "Driver Name", "From Date", "To Date", "Total Payable", "Entry Date & Time", "Created By", "Actions",
+  "Payment Number", "Trackup Number", "PIF Number", "Project Type", "Client / Billing Name", "Vehicle Number", "Driver Name", "From Date", "To Date", "Total Payable", "Entry Date & Time", "Created By", "Actions",
 ] as const;
 
 export function RsaHistoryTable({ items, onView }: { items: RsaPaymentRow[]; onView: (p: RsaPaymentRow) => void }) {
@@ -95,6 +95,7 @@ export function RsaHistoryTable({ items, onView }: { items: RsaPaymentRow[]; onV
             <tr key={p._id}>
               <td><strong className="num">{p.paymentNumber}</strong></td>
               <td>{p.trackupNumber}</td>
+              <td>{dash(p.pifNumber)}</td>
               <td>{PAYMENT_FOR_LABEL[p.paymentFor] ?? dash(p.paymentFor)}</td>
               <td>{dash(p.clientName)}</td>
               <td>{dash(p.vehicleNo)}</td>

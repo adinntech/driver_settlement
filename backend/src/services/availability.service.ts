@@ -104,6 +104,7 @@ export function projectFromTracking(tv: any, proj: any, budget?: any) {
     projectType: proj.projectType as string,
     projectName: road ? `${client} Roadshow` : `${client} Signage${d.jobSheetNumber ? ` – ${d.jobSheetNumber}` : ""}`,
     clientName: client,
+    vehicleType: (tv.vehicleType ?? null) as string | null, // requested by RSOP (read-only)
     trackupNumber: tv.trackupNumber as string,
     pifNumber: tv.pifNumber as string,
     startDate: (road ? d.startDate : d.fromDate) ?? null,
@@ -122,7 +123,7 @@ export const APPROVED_BUDGET = { approvalStatus: "APPROVED", $expr: { $eq: ["$ap
 export const isApprovedCurrent = (b: any) => !!b && b.approvalStatus === "APPROVED" && b.approvedVersion === b.currentVersion;
 
 /**
- * Resolves the project a vehicle is being allocated to. Trackup and PIF are one pair: either (or both) may be given,
+ * Resolves the project a vehicle is being allocated to. A PIF identifies one vehicle; a Trackup alone works only when it covers a single vehicle.
  * the other is filled in from the database, and a mismatching pair is rejected. The project must have an Approved
  * budget. Details come from the records, never from the client. RSOP / budget data is only read.
  */
@@ -130,17 +131,21 @@ export async function resolveApprovedProject(trackupIn: unknown, pifIn: unknown)
   const trackup = typeof trackupIn === "string" ? trackupIn.trim().toUpperCase() : "";
   const pif = typeof pifIn === "string" ? pifIn.trim().toUpperCase() : "";
   if (!trackup && !pif) return { error: "Enter a Trackup Number or PIF Number" };
-  const byT: any = trackup ? await TrackingVehicle.findOne({ trackupNumber: trackup }).lean() : null;
-  const byP: any = pif ? await TrackingVehicle.findOne({ pifNumber: pif }).lean() : null;
-  if (trackup && !byT) return { error: `Trackup number ${trackup} was not found in the tracking records` };
+  // A Trackup Number is shared by the vehicles of one type: the PIF Number identifies the vehicle.
+  const [byT, byP]: any[] = await Promise.all([
+    trackup ? TrackingVehicle.find({ trackupNumber: trackup }).limit(101).lean() : [],
+    pif ? TrackingVehicle.findOne({ pifNumber: pif }).lean() : null,
+  ]);
+  if (trackup && !byT.length) return { error: `Trackup number ${trackup} was not found in the tracking records` };
   if (pif && !byP) return { error: `PIF number ${pif} was not found in the tracking records` };
-  if (byT && byP && String(byT._id) !== String(byP._id)) return { error: `Trackup number ${trackup} and PIF number ${pif} do not belong to the same project vehicle` };
-  const tv = byT ?? byP;
+  if (trackup && byP && byP.trackupNumber !== trackup) return { error: `Trackup number ${trackup} and PIF number ${pif} do not belong to the same project vehicle` };
+  if (!byP && byT.length > 1) return { error: `Trackup number ${trackup} covers several vehicles; select the vehicle by its PIF Number` };
+  const tv = byP ?? byT[0];
   const [proj, budget]: any[] = await Promise.all([TrackingProject.findById(tv.project).lean(), Budget.findOne({ vehicle: tv._id }).lean()]);
   if (!proj) return { error: `Project for trackup number ${tv.trackupNumber} was not found` };
   if (!isApprovedCurrent(budget)) {
     const st = budget ? (budget.approvalStatus ?? "DRAFT") : "not created";
-    return { error: `Only approved projects can be allocated: the budget for ${tv.trackupNumber} is ${String(st).toLowerCase()}` };
+    return { error: `Only approved projects can be allocated: the budget for ${tv.pifNumber} (${tv.trackupNumber}) is ${String(st).toLowerCase()}` };
   }
   return { tv, proj, budget };
 }
@@ -164,13 +169,13 @@ export async function linkProject(input: any): Promise<{ input: any; error?: str
   return { input: { ...input, project: { ...linked, location: p.location || linked.location, remarks: p.remarks ?? null } } };
 }
 
-/** Another vehicle already holds this trackup number as "In Use"? Friendly pre-check; the unique index is the real guard. */
-export async function allocationConflict(trackupNumber: string | null | undefined, exceptId?: string): Promise<string | null> {
-  if (!trackupNumber) return null;
-  const q: any = { "availability.status": "IN_USE", "availability.project.trackupNumber": trackupNumber };
+/** Another vehicle already holds this project vehicle as "In Use"? Friendly pre-check; the unique index is the real guard. */
+export async function allocationConflict(pifNumber: string | null | undefined, exceptId?: string): Promise<string | null> {
+  if (!pifNumber) return null;
+  const q: any = { "availability.status": "IN_USE", "availability.project.pifNumber": pifNumber };
   if (exceptId) q._id = { $ne: exceptId };
   const other: any = await Vehicle.findOne(q).select("vehicleNo").lean();
-  return other ? `Trackup number ${trackupNumber} is already allocated to vehicle ${other.vehicleNo ?? "(draft)"}` : null;
+  return other ? `PIF number ${pifNumber} is already allocated to vehicle ${other.vehicleNo ?? "(draft)"}` : null;
 }
 
 const PROJECT_WORDS: Record<string, string> = { roadshow: "ROADSHOW", road: "ROADSHOW", signage: "SIGNAGE", sign: "SIGNAGE" };
@@ -182,14 +187,14 @@ async function toChoices(budgets: any[]) {
   const projs: any[] = await TrackingProject.find({ _id: { $in: [...new Set(budgets.map((b) => String(b.project)))] } }).lean();
   const tvBy = new Map(tvs.map((t) => [String(t._id), t]));
   const pBy = new Map(projs.map((p) => [String(p._id), p]));
-  const busy: any[] = await Vehicle.find({ "availability.status": "IN_USE", "availability.project.trackupNumber": { $in: tvs.map((t) => t.trackupNumber) } })
-    .select("vehicleNo availability.project.trackupNumber").lean();
-  const busyBy = new Map(busy.map((v) => [v.availability.project.trackupNumber as string, (v.vehicleNo as string) ?? "(draft)"]));
+  const busy: any[] = await Vehicle.find({ "availability.status": "IN_USE", "availability.project.pifNumber": { $in: tvs.map((t) => t.pifNumber) } })
+    .select("vehicleNo availability.project.pifNumber").lean();
+  const busyBy = new Map(busy.map((v) => [v.availability.project.pifNumber as string, (v.vehicleNo as string) ?? "(draft)"]));
   return budgets
     .filter((b) => tvBy.has(String(b.vehicle)) && pBy.has(String(b.project)))
     .map((b) => {
       const tv = tvBy.get(String(b.vehicle));
-      return { ...projectFromTracking(tv, pBy.get(String(b.project)), b), budgetNumber: b.budgetNumber as string, allocatedTo: busyBy.get(tv.trackupNumber) ?? null };
+      return { ...projectFromTracking(tv, pBy.get(String(b.project)), b), budgetNumber: b.budgetNumber as string, allocatedTo: busyBy.get(tv.pifNumber) ?? null };
     });
 }
 

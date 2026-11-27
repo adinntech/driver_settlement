@@ -21,13 +21,13 @@ export interface Vehicle {
   vehicleIndex: number;
   trackupNumber: string;
   pifNumber: string;
-  displayNumber: string;
   budgetStatus: "PENDING" | "CREATED";
+  vehicleType?: string | null; // requested type (tracking vehicles)
   approvalStatus?: "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | null;
   createdAt: string;
 }
 
-export type Details = Record<string, string | number | string[] | undefined>;
+export type Details = Record<string, string | number | string[] | { code: string; name: string; quantity: number }[] | undefined>;
 
 export interface Project {
   _id: string;
@@ -137,8 +137,8 @@ export interface BudgetContext {
   km?: KmAllowance | null;
   trackupNumber: string;
   pifNumber: string;
-  displayNumber: string;
   vehicleIndex: number;
+  vehicleType?: string | null;
 }
 
 export interface BudgetVersion {
@@ -254,12 +254,14 @@ export interface AllotmentProject {
   projectType: string; projectName: string; clientName: string; trackupNumber: string; pifNumber: string; billNumber: string | null;
   startDate: string | null; endDate: string | null; location: string | null;
   totalAllowedKm?: number | null; extraKmAllotted?: number | null; // RoadShow KM allotment (read-only)
+  vehicleType?: string | null;
   vehicleCount: number | null; budgetAmount: number | null; approvedAt: string | null; budgetStatus: string; allotment: AllotmentRef | null;
 }
 export interface Allotment {
   _id: string; vehicle: string; vehicleNo: string; vehicleMake?: string; vehicleModel?: string;
   trackupNumber: string; pifNumber: string; billNumber?: string | null; clientName: string; projectType: string; projectName: string;
   projectStart?: string | null; projectEnd?: string | null;
+  requestedVehicleType?: string | null;
   allottedAt: string; expectedReleaseAt?: string | null; nextAvailableAt: string | null; remarks?: string | null;
   status: "ACTIVE" | "RELEASED" | "CHANGED"; releasedAt?: string; releaseReason?: string; source?: string;
   previousAllotment?: string; changedFromVehicleNo?: string; changeReason?: string; changeRemarks?: string; changeAttachments: Attachment[]; changedAt?: string;

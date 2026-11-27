@@ -95,7 +95,7 @@ test("Change Driver dialog: current driver read-only, replacement search, Travel
   for (const v of ['data-section="current-driver"', "Replacement driver", "Travel Amount Deduction", 'aria-label="Travel Amount Deduction"', 'inputMode="decimal"', 'placeholder="0"', "Change Reason", "Supporting Attachment", "Additional Remarks"]) assert.ok(html.includes(v), v);
   assert.ok(/Change Reason<span class="req"> \*<\/span>/.test(html));
   assert.ok(!/Travel Amount Deduction<span class="req">/.test(html) && !/Supporting Attachment<span class="req">/.test(html)); // both optional
-  assert.ok(html.includes("no budget or salary is changed"));
+  assert.ok(html.includes("Previous Salary Deduction on their next Final Settlement"));
   assert.ok(!html.includes("Bank Details")); // appears once a replacement is selected
 });
 

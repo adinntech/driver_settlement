@@ -36,7 +36,7 @@ test("vehicle + driver: a driver must be chosen from the suggestions; the payloa
   // vehicle only: byte-for-byte the request it was before driver assignment existed (a stale driver id is never sent)
   const only = toAllotPayload(okForm({ mode: "VEHICLE_ONLY", driverId: d2._id }), "T-1");
   assert.ok(!("driverId" in only));
-  assert.deepEqual(Object.keys(only).sort(), ["allottedDate", "allottedTime", "expectedReleaseDate", "expectedReleaseTime", "nextAvailableDate", "nextAvailableTime", "remarks", "trackupNumber", "vehicleId"]);
+  assert.deepEqual(Object.keys(only).sort(), ["allottedDate", "allottedTime", "expectedReleaseDate", "expectedReleaseTime", "nextAvailableDate", "nextAvailableTime", "pifNumber", "remarks", "vehicleId"]);
   assert.ok(validateAllotForm(okForm({ mode: "VEHICLE_DRIVER", driverId: d2._id, vehicleId: "" }), NOW).includes("Select a vehicle")); // vehicle rules still apply
 });
 
@@ -101,7 +101,7 @@ const current = { driverId: "d".repeat(24), driverNumber: "DR-4821", driverName:
 
 test("assign driver dialog: vehicle and project read-only, available-driver autocomplete, confirm action", () => {
   const html = renderToStaticMarkup(<AssignDriverModal target={target} onClose={noop} onDone={noop} />);
-  for (const v of ["Assign Driver · TN01AA0001", "TN01AA0001", "T-1 · Pepsi Signage", "Available Now only", 'aria-label="Driver Number"', 'aria-label="Driver Name"']) assert.ok(html.includes(v), v);
+  for (const v of ["Assign Driver · TN01AA0001", "TN01AA0001", "T-1 · PIF-1 · Pepsi Signage", "Available Now only", 'aria-label="Driver Number"', 'aria-label="Driver Name"']) assert.ok(html.includes(v), v);
 });
 
 test("change driver dialog: shows the current driver, mandatory reason, optional attachment and remarks", () => {

@@ -33,17 +33,19 @@ async function actor(role: RoleKey) {
 export async function seedSettlements(add: (kind: string, created: boolean) => void): Promise<void> {
   const [rbp, rsom, rso, rsa] = await Promise.all([actor("RBP"), actor("RSOM"), actor("RSO"), actor("RSA")]);
   if (!rbp || !rsom || !rsa) return;
-  const eligible = (await listEligibleProjects({ limit: 100 })).items.sort((x: any, y: any) => String(x.trackupNumber).localeCompare(String(y.trackupNumber)));
+  const eligible = (await listEligibleProjects({ limit: 100 })).items.sort((x: any, y: any) => String(x.trackupNumber).localeCompare(String(y.trackupNumber)) || String(x.pifNumber).localeCompare(String(y.pifNumber)));
 
   for (const [i, plan] of PLANS.entries()) {
     const row: any = eligible[i];
     if (!row) break;
     const ctx = await settlementContext(row.trackingVehicle);
+    // legacy records have their own Trackup Number (keys unchanged); a shared one needs the PIF to stay unique
+    const ref = eligible.filter((x: any) => x.trackupNumber === row.trackupNumber).length > 1 ? `${ctx.trackupNumber}-${ctx.pifNumber}` : ctx.trackupNumber;
     const from = ctx.campaign.fromDate;
     if (!from) continue;
 
     for (const [j, dp] of plan.daily.entries()) {
-      const key = `devseed-settle-${ctx.trackupNumber}-daily${j + 1}`.replace(/[^A-Za-z0-9_-]/g, "-");
+      const key = `devseed-settle-${ref}-daily${j + 1}`.replace(/[^A-Za-z0-9_-]/g, "-");
       const had = await SettlementPayment.exists({ idempotencyKey: key });
       const fromDate = addDays(from, dp.offset);
       const { payment } = await submitSettlement("DAILY", row.trackingVehicle, {
@@ -57,7 +59,7 @@ export async function seedSettlements(add: (kind: string, created: boolean) => v
     }
 
     if (plan.final) {
-      const key = `devseed-settle-${ctx.trackupNumber}-final`.replace(/[^A-Za-z0-9_-]/g, "-");
+      const key = `devseed-settle-${ref}-final`.replace(/[^A-Za-z0-9_-]/g, "-");
       const had = await SettlementPayment.exists({ idempotencyKey: key });
       if (!had && ctx.existingFinal) continue; // a final settlement for this driver was already entered by hand: never add a second one
       const p = ctx.prefill as any;
@@ -70,15 +72,16 @@ export async function seedSettlements(add: (kind: string, created: boolean) => v
         estimatedKmPerDay: String(p.estimatedKmPerDay || 80), fixedMileage: String(mileage), openingKm: "48210", closingKm: String(48210 + km), dieselCost: "94.72",
         ioclLitres: String(Math.round((km / mileage) * 1.04 * 100) / 100), ioclKms: String(km - 20), estimatedBudget: String(p.estimatedBudget || 0), estimatedKm: String(p.estimatedKm || km),
         estimatedFuel: String(p.estimatedFuel || Math.round((km / mileage) * 100) / 100), perDaySalary: String(p.perDaySalary || 800), perDayFood: String(p.perDayFood || 250),
-        haltDayPay: String(p.haltDayPay || 300), travelPay: "1200", onRoadDays: String(onRoad), onRoadSundays: total - onRoad >= 2 ? "1" : "0", haltDays: total - onRoad >= 2 ? "1" : "0",
-        overtimeHours: "4", overtimeRate: "75", suspenseAmount: String(Math.min(Number(p.suspenseAmount) || 0, 2000)),
+        travelPay: "1200", onRoadDays: String(onRoad), onRoadSundays: total - onRoad >= 2 ? "1" : "0",
+        suspenseAmount: String(Math.min(Number(p.suspenseAmount) || 0, 2000)),
         expenses: [
           { category: "TOLL", description: "Mumbai-Pune expressway", quantity: "4", cost: "320" },
           { category: "PERMIT", description: "State entry permit", quantity: "1", cost: "1500" },
           { category: "SERVICE", description: "Brake pad replacement", quantity: "1", cost: "2400", approved: "2000" },
           { category: "OTHERS", description: "Parking at venue", quantity: String(onRoad), cost: "50" },
         ],
-        deductions: { mileageShort: "350", driverChangeTravel: String(p.driverChangeTravel || 0), vehicleDamage: i === 0 ? "500" : "0", previousSalary: "0", other: "0" },
+        driverChangeAmount: String(p.driverChangeAmount || 0),
+        deductions: { mileageShort: "350", vehicleDamage: i === 0 ? "500" : "0", previousSalary: String(p.driverChangeAmount || 0), other: "0" },
         idempotencyKey: key,
       }, rbp.username);
       add("finalSettlements", !had);

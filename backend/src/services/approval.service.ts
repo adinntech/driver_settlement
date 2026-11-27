@@ -125,7 +125,7 @@ export async function approveBudget(budgetId: string, version: unknown, username
     type: "BUDGET_APPROVED",
     title: "Budget approved",
     message:
-      `Your budget for ${vehicle.trackupNumber} has been approved by RSOM. Client: ${project.clientName} · ` +
+      `Your budget for ${vehicle.trackupNumber} (${vehicle.pifNumber}) has been approved by RSOM. Client: ${project.clientName} · ` +
       `Approved amount ${inr(budget.total)} · Version V${version} · ${ist(now)}`,
     link: `/rbp/budget?vehicle=${vehicle._id}`,
     meta: { budgetId, version, total: budget.total, trackupNumber: vehicle.trackupNumber },
@@ -181,7 +181,7 @@ export async function rejectBudget(budgetId: string, input: RejectInput, usernam
     type: "BUDGET_REJECTED",
     title: "Budget rejected",
     message:
-      `Your budget for ${vehicle.trackupNumber} has been rejected by RSOM. Please review the rejection details. ` +
+      `Your budget for ${vehicle.trackupNumber} (${vehicle.pifNumber}) has been rejected by RSOM. Please review the rejection details. ` +
       `Client: ${project.clientName} · Amount ${inr(budget.total)} · Fields: ${v.fields.map((f) => f.field).join(", ")} · ` +
       `${v.reason ? `Reason: ${v.reason} · ` : ""}Version V${version} · ${ist(now)}`,
     link: `/rbp/budget?vehicle=${vehicle._id}`,
@@ -221,7 +221,7 @@ export async function listApprovals(q: ListQuery) {
     const roadshow = p?.projectType === "ROADSHOW";
     return {
       budgetId: String(b._id), budgetNumber: b.budgetNumber, status: statusOf(b),
-      trackupNumber: v?.trackupNumber, pifNumber: v?.pifNumber, displayNumber: v?.displayNumber, vehicleIndex: v?.vehicleIndex,
+      trackupNumber: v?.trackupNumber, pifNumber: v?.pifNumber, vehicleIndex: v?.vehicleIndex, vehicleType: v?.vehicleType ?? null,
       projectType: p?.projectType, client: p?.clientName,
       campaignFrom: roadshow ? d.startDate : d.fromDate, campaignTo: roadshow ? d.endDate : d.toDate,
       version: b.currentVersion, total: b.total, submittedBy: b.submittedBy, submittedAt: b.submittedAt,

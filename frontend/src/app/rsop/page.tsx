@@ -13,6 +13,7 @@ import StatCard from "@/components/ui/StatCard";
 import { useDebounce } from "@/hooks/useDebounce";
 import type { Project, Stats, Vehicle } from "@/types/domain";
 import { formatDate, formatDateTime, labelize } from "@/utils/format";
+import { sumVehicleTypes, vehicleTypesText } from "@/utils/vehicleTypes";
 import { groupByProjectCode, type ProjectGroup } from "@/utils/projectCode";
 
 export default function RsopDashboard() {
@@ -93,7 +94,7 @@ function Dashboard() {
       <div className="card">
         <div className="filters">
           <input
-            placeholder="Search Project Code / Trackup / PIF / Display / Client"
+            placeholder="Search Project Code / Trackup / PIF / Client"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             aria-label="Search"
@@ -183,7 +184,7 @@ function GroupRows({ g, open, onToggle, onView }: { g: ProjectGroup; open: boole
         <td><span className={`type type-${g.projectType.toLowerCase()}`}>{g.projectType === "ROADSHOW" ? "Roadshow" : "Signage"}</span></td>
         <td>{g.clientName}</td>
         <td className="ds-nowrap">{formatDate(g.startDate)}<br /><small className="muted">to {formatDate(g.endDate)}</small></td>
-        <td><strong>{g.vehicleCount}</strong>{g.requests.length > 1 && <><br /><small className="muted">{g.requests.length} requests</small></>}</td>
+        <td><strong>{g.vehicleCount}</strong><br /><small className="muted">{vehicleTypesText(sumVehicleTypes(g.requests.map((r) => r.details.vehicleTypes)))}</small>{g.requests.length > 1 && <><br /><small className="muted">{g.requests.length} requests</small></>}</td>
         <td>{formatDateTime(g.lastCreatedAt)}</td>
         <td><small className="muted">{g.budgetsCreated} / {g.vehicleCount} created</small></td>
       </tr>
@@ -195,8 +196,8 @@ function GroupRows({ g, open, onToggle, onView }: { g: ProjectGroup; open: boole
                 <tr>
                   <th>Trackup Number</th>
                   <th>Vehicle</th>
+                  <th>Vehicle Type</th>
                   <th>PIF</th>
-                  <th>Display</th>
                   <th>Created (IST)</th>
                   <th>Created By</th>
                   <th>Budget</th>
@@ -228,16 +229,11 @@ function Row({ p, v, position, total, onView }: { p: Project; v: Vehicle; positi
       <td title={`Vehicle ${v.vehicleIndex} of ${p.vehicleCount} in its request`}>
         {position} / {total}
       </td>
+      <td>{v.vehicleType ?? "—"}</td>
       <td>
         <span className="num">
           {v.pifNumber}
           <CopyButton value={v.pifNumber} label="PIF Number" />
-        </span>
-      </td>
-      <td>
-        <span className="num">
-          {v.displayNumber}
-          <CopyButton value={v.displayNumber} label="Display Number" />
         </span>
       </td>
       <td>{formatDateTime(v.createdAt)}</td>
@@ -257,7 +253,7 @@ function Row({ p, v, position, total, onView }: { p: Project; v: Vehicle; positi
 export function DetailsView({ project }: { project: Project }) {
   const dateKey = /date$/i;
   const fmt = (k: string, v: unknown) =>
-    Array.isArray(v) ? v.join(", ") : dateKey.test(k) && typeof v === "string" ? formatDate(v) : String(v);
+    k === "vehicleTypes" ? vehicleTypesText(v) : Array.isArray(v) ? v.join(", ") : dateKey.test(k) && typeof v === "string" ? formatDate(v) : String(v);
   const entries = Object.entries(project.details).filter(([, v]) => v !== undefined && v !== "");
   return (
     <>
@@ -284,15 +280,16 @@ export function DetailsView({ project }: { project: Project }) {
         <thead>
           <tr>
             <th>#</th>
+            <th>Vehicle Type</th>
             <th>Trackup</th>
             <th>PIF</th>
-            <th>Display</th>
           </tr>
         </thead>
         <tbody>
           {project.vehicles.map((v) => (
             <tr key={v._id}>
               <td>{v.vehicleIndex}</td>
+              <td>{v.vehicleType ?? "—"}</td>
               <td>
                 <span className="num">
                   {v.trackupNumber}
@@ -303,12 +300,6 @@ export function DetailsView({ project }: { project: Project }) {
                 <span className="num">
                   {v.pifNumber}
                   <CopyButton value={v.pifNumber} label="PIF Number" />
-                </span>
-              </td>
-              <td>
-                <span className="num">
-                  {v.displayNumber}
-                  <CopyButton value={v.displayNumber} label="Display Number" />
                 </span>
               </td>
             </tr>

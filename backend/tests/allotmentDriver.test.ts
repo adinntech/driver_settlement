@@ -9,6 +9,7 @@ process.env.RSOM_USERNAME = "RSOM";
 process.env.RSOM_PASSWORD = "pass3";
 process.env.STORAGE_TYPE = "local";
 
+import { perVehicleTrackups } from "./legacyNumbers.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Server } from "node:http";
@@ -86,9 +87,9 @@ const pool: any[] = [];
 const projects: any[] = [];
 for (let k = 0; k < 4; k++) {
   const t = await T();
-  const r = await call("/tracking", "POST", { projectType: "SIGNAGE", details: { projectCode: "12000001", client: "Delta Foods", jobSheetNumber: "ZZAD-" + k, location: "Salem", date: d(0), fromDate: d(0), toDate: d(20), numberOfVehicles: 20 } }, t.rsop);
+  const r = await call("/tracking", "POST", { projectType: "SIGNAGE", details: { projectCode: "12000001", client: "Delta Foods", jobSheetNumber: "ZZAD-" + k, location: "Salem", date: d(0), fromDate: d(0), toDate: d(20), numberOfVehicles: 20, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 20 }] } }, t.rsop);
   assert.equal(r.status, 201, JSON.stringify(r.body));
-  const proj = r.body.data;
+  const proj = await perVehicleTrackups<any>(r.body.data);
   projects.push(proj);
   pool.push(...proj.vehicles);
   for (const tv of proj.vehicles) await Budget.create({ budgetNumber: budgetNo(), vehicle: tv._id, project: proj._id, data: {}, total: 1000, currentVersion: 1, approvalStatus: "APPROVED", approvedVersion: 1, createdBy: "RBP", updatedBy: "RBP" });
@@ -98,7 +99,7 @@ let pn = 0;
 const nextTrk = () => proj.vehicles[pn++].trackupNumber as string;
 const sched = (over: Record<string, unknown> = {}) => ({ expectedReleaseDate: d(3), expectedReleaseTime: "20:00", nextAvailableDate: d(4), nextAvailableTime: "09:00", ...over });
 const allot = async (vehicleId: string, driverId?: string | null, over: Record<string, unknown> = {}) =>
-  call("/vehicle-allotments", "POST", { vehicleId, trackupNumber: nextTrk(), ...sched(), ...(driverId === undefined ? {} : { driverId }), ...over }, await rbp());
+  call("/vehicle-allotments", "POST", { vehicleId, pifNumber: proj.vehicles[pn++].pifNumber, ...sched(), ...(driverId === undefined ? {} : { driverId }), ...over }, await rbp());
 const drv = async (id: string) => (await Driver.findById(id).lean()) as any;
 const veh = async (id: string) => (await Vehicle.findById(id).lean()) as any;
 const alt = async (id: string) => (await VehicleAllotment.findById(id).lean()) as any;

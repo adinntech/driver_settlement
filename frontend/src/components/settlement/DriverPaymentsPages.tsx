@@ -8,8 +8,9 @@ import { downloadFile } from "@/services/api";
 import AppShell from "@/components/AppShell";
 import { DailyPaymentForm, FinalSettlementForm, ProjectPicker } from "@/components/settlement/PaymentForms";
 import { PaymentQueue } from "@/components/settlement/PaymentQueue";
+import BulkEntryModal from "@/components/settlement/BulkEntryModal";
 import { EmptyState } from "@/components/ui/Ui";
-import { onRoadBase, paymentsBase } from "@/utils/settlement";
+import { exportQuery, onRoadBase, paymentsBase, type QueueFilters } from "@/utils/settlement";
 
 /**
  * The shared Driver Payments module. RBP and RSA open the same pages over the same records (one `settlementpayments`
@@ -23,13 +24,16 @@ export function DriverPaymentsList({ role }: { role: EntryRole }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [tick, setTick] = useState(0);
-  // RSA's accounts export (moved here from the former Settlement Payments page): approved daily + final payments awaiting payment.
-  // Same endpoint, columns and filters as before; the server records each export on the rows, so the list is reloaded.
-  const exportApproved = async () => {
+  const [bulk, setBulk] = useState(false);
+  const [filters, setFilters] = useState<QueueFilters | null>(null); // what the table below is showing
+  // RSA's two Excel exports: every approved payment (the accounts file), or whatever the table is filtered to. The server
+  // records the export on the approved rows, so the list is reloaded.
+  const exportExcel = async (kind: "approved" | "filtered") => {
     setBusy(true);
     try {
-      await downloadFile("/settlements/export/approved", "approved-payments.xlsx");
-      toast("Approved payments exported");
+      const query = kind === "filtered" && filters ? `?${exportQuery(filters)}` : "";
+      await downloadFile(`/settlements/export/${kind}${query}`, `${kind}-payments.xlsx`);
+      toast(kind === "approved" ? "Approved payments exported" : "Filtered payments exported");
       setTick((t) => t + 1);
     } catch (e) {
       toast((e as Error).message, "error");
@@ -50,10 +54,19 @@ export function DriverPaymentsList({ role }: { role: EntryRole }) {
         <div className="inline ds-gap">
           <Link href={onRoadBase(role)} className="btn btn-outline">On Road Vehicles</Link>
           <Link href={`${base}/new?type=final`} className="btn btn-primary">+ Final Driver Settlement</Link>
-          {role === "RSA" && <button type="button" className="btn btn-outline" disabled={busy} onClick={exportApproved}>{busy ? "Exporting…" : "Export Approved (Excel)"}</button>}
+          {role === "RSA" && <button type="button" className="btn btn-primary" onClick={() => setBulk(true)}>Bulk Entry</button>}
+          {role === "RSA" && (
+            <>
+              <button type="button" className="btn btn-outline" disabled={busy} onClick={() => exportExcel("approved")}
+                title="All approved Daily and Final payments awaiting payment, ignoring the table filters">Export Approved (Excel)</button>
+              <button type="button" className="btn btn-outline btn-export-filtered" disabled={busy || !filters} onClick={() => exportExcel("filtered")}
+                title="Only the payments matching the table's current category, status, search and dates (all pages)">Export Filtered (Excel)</button>
+            </>
+          )}
         </div>
       </div>
-      <PaymentQueue mode="rbp" reloadKey={tick} />
+      <PaymentQueue mode="rbp" reloadKey={tick} onFilters={setFilters} />
+      {bulk && <BulkEntryModal onClose={(attempted) => { setBulk(false); if (attempted) setTick((t) => t + 1); }} />}
     </AppShell>
   );
 }

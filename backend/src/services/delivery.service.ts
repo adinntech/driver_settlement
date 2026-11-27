@@ -162,7 +162,7 @@ export async function deliverVehicle(id: string, input: unknown, username: strin
   }
   await notifyRole("RSA", {
     type: "VEHICLE_DELIVERED", title: "Vehicle delivered",
-    message: `Vehicle delivery completed successfully for ${c.trackupNumber}. ${c.clientName ?? "—"} · Vehicle ${c.vehicleNo} · Driver ${c.driverName} · Delivered by ${username} on ${ist(now)}`,
+    message: `Vehicle delivery completed successfully for ${c.trackupNumber} (${c.pifNumber}). ${c.clientName ?? "—"} · Vehicle ${c.vehicleNo} · Driver ${c.driverName} · Delivered by ${username} on ${ist(now)}`,
     link: rsaLink(c._id), meta: { trackupNumber: c.trackupNumber, clientName: c.clientName, vehicleNo: c.vehicleNo, driverName: c.driverName, deliveredBy: username, deliveredAt: now, version: c.currentVersion },
     dedupeKey: `VEHICLE_DELIVERED:${c._id}:${c.currentVersion}`,
   });

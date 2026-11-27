@@ -22,6 +22,7 @@ const allotmentSchema = new Schema(
     budgetVersion: Number,
     trackupNumber: { type: String, required: true },
     pifNumber: { type: String, required: true },
+    requestedVehicleType: String, // vehicle type RSOP asked for (snapshot)
     billNumber: String, // taken from the tracking record when it has one
     clientName: String,
     projectType: String,

@@ -1,24 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ENTRY_MODES, actionsFor, cleanReference, emptyQueueFilters, modeLabel, validatePaymentEntry, finalFormFrom, finalPayload, finalTotals, queueQuery, validateFinalForm, type FinalForm, type SettlementContext } from "../src/utils/settlement";
+import { ENTRY_MODES, actionsFor, cleanReference, emptyQueueFilters, modeLabel, validatePaymentEntry, finalFormFrom, finalPayload, finalTotals, queueQuery, exportQuery, validateFinalForm, type FinalForm, type SettlementContext } from "../src/utils/settlement";
 
 const ctx = {
   trackingVehicle: "a".repeat(24), trackupNumber: "TRK-1", pifNumber: "PIF-1", clientName: "Client", projectType: "ROADSHOW", vehicleNo: "MH12AB1234", driverNumber: "DR-1", driverName: "Ravi",
   approvedBudgetAmount: 50000, budgetVersion: 1, campaign: { fromDate: "2026-11-01", toDate: "2026-11-30", totalDays: 30, location: "Pune", jsNumber: "JS-9", reportingDate: "2026-11-01" },
   bank: { accountName: null, bankName: null, ifscCode: null, accountMasked: null }, existingFinal: null,
-  prefill: { jsNumber: "JS-9", location: "Pune", fixedMileage: 8, perDaySalary: 800, perDayFood: 250, haltDayPay: 300, driverChangeTravel: 750, suspenseAmount: 1000 },
+  prefill: { jsNumber: "JS-9", location: "Pune", fixedMileage: 8, perDaySalary: 800, perDayFood: 250, haltDayPay: 300, driverChangeAmount: 750, suspenseAmount: 1000 },
 } as unknown as SettlementContext;
 
 const form = (patch: Partial<FinalForm["n"]> = {}, rest: Partial<FinalForm> = {}): FinalForm => {
   const f = finalFormFrom(ctx);
-  return { ...f, ...rest, n: { ...f.n, openingKm: "10000", closingKm: "10800", dieselCost: "95.50", ioclLitres: "110", onRoadDays: "20", onRoadSundays: "3", haltDays: "2", travelPay: "1500", ...patch } };
+  return { ...f, ...rest, n: { ...f.n, openingKm: "10000", closingKm: "10800", dieselCost: "95.50", ioclLitres: "110", onRoadDays: "20", onRoadSundays: "3", travelPay: "1500", ...patch } };
 };
 
 test("final form is prefilled from the project context", () => {
   const f = finalFormFrom(ctx);
   assert.equal(f.jsNumber, "JS-9");
   assert.equal(f.n.perDaySalary, "800");
-  assert.equal(f.deductions.driverChangeTravel, "750");
+  assert.equal(f.deductions.previousSalary, "750");
   assert.equal(f.n.suspenseAmount, "1000");
 });
 
@@ -28,7 +28,7 @@ test("final totals mirror the server calculation (paise)", () => {
   assert.equal(t.resultKm, 800);
   assert.equal(t.variationLitres, 10);
   assert.equal(t.mileageShortSuggested, 95500);
-  const earnings = (20 * 800 + 3 * 800 + 23 * 250 + 2 * 300 + 1500) * 100;
+  const earnings = (20 * 800 + 3 * 800 + 23 * 250 + 1500) * 100;
   assert.equal(t.earningsTotal, earnings);
   assert.equal(t.claimed, 180000);
   assert.equal(t.approved, 160000);
@@ -102,4 +102,20 @@ test("payment Entry popup: Cash / Cheque / DD / ePayment, mandatory reference, b
   assert.equal(cleanReference(" UTR 12/ab_-<x> "), "UTR12/ab_-x");
   assert.equal(modeLabel("EPAYMENT"), "ePayment");
   assert.equal(modeLabel("NEFT"), "NEFT", "older completed records keep their mode");
+});
+test("Export Approved sends the table's filters, without sort or paging", () => {
+  assert.equal(exportQuery({ ...emptyQueueFilters("DAILY", "APPROVED"), q: " KFC ", from: "2026-11-01", to: "2026-11-30" }), "category=DAILY&status=APPROVED&q=KFC&from=2026-11-01&to=2026-11-30");
+  assert.equal(exportQuery(emptyQueueFilters()), "");
+});
+
+test("driver change deduction: prefilled in Previous Salary Deduction, a minimum, never listed separately", () => {
+  const f = form();
+  assert.equal("driverChangeTravel" in f.deductions, false);
+  assert.equal(finalTotals(f).totalDeduction, 75000);
+  assert.match(validateFinalForm({ ...f, deductions: { ...f.deductions, previousSalary: "749" } }, 30).join(), /at least 750/);
+  assert.deepEqual(validateFinalForm({ ...f, deductions: { ...f.deductions, previousSalary: "900" } }, 30), []);
+  assert.equal((finalPayload(f, "key12345") as Record<string, unknown>).driverChangeAmount, "750");
+  // correcting a saved entry keeps the manual part and refreshes the owed part
+  const again = finalFormFrom(ctx, { fuel: {}, estimate: {}, rates: {}, days: {}, deductions: { previousSalary: 400 }, driverChangeAmount: 300 });
+  assert.equal(again.deductions.previousSalary, "850");
 });

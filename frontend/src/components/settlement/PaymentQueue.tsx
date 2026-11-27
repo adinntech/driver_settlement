@@ -4,7 +4,7 @@ import TableWrap from "@/components/ui/TableWrap";
 import Select from "@/components/ui/Select";
 import DateInput from "@/components/ui/DateInput";
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { RsaPager } from "@/components/RsaHistory";
 import { EmptyState, ErrorState, Modal, Skeleton } from "@/components/ui/Ui";
 import { useAuth } from "@/context/AuthContext";
@@ -20,6 +20,8 @@ import {
   type SettlementRow, type SettlementStatus,
 } from "@/utils/settlement";
 import { PaymentEntryForm, PaymentEntryModal } from "@/components/settlement/PaymentEntry";
+import BulkApproveModal from "@/components/settlement/BulkApproveModal";
+import { canBulkApprove } from "@/utils/bulkApproval";
 
 const d = (v: unknown) => (v === null || v === undefined || v === "" ? "-" : String(v));
 
@@ -83,7 +85,7 @@ const COLS: { key: string; label: string; sort?: string }[] = [
  *  queue      - pending + approved (RSOM / RSO / RSA)       rbp - every status, RBP's own view
  *  completed  - the Payment Completed table (RSA)
  */
-export function PaymentQueue({ mode, defaultCategory = "", toolbar, reloadKey = 0 }: { mode: "queue" | "rbp" | "completed"; defaultCategory?: "" | PaymentCategory; toolbar?: ReactNode; reloadKey?: number }) {
+export function PaymentQueue({ mode, defaultCategory = "", toolbar, reloadKey = 0, onFilters }: { mode: "queue" | "rbp" | "completed"; defaultCategory?: "" | PaymentCategory; toolbar?: ReactNode; reloadKey?: number; onFilters?: (applied: QueueFilters) => void }) {
   // filters, page and page size survive Back / sidebar navigation within the tab
   const [f, setF] = useSessionState<QueueFilters>(`queue:${mode}:${defaultCategory}`, emptyQueueFilters(defaultCategory, mode === "completed" ? "COMPLETED" : ""));
   const [paging, setPaging] = useSessionState(`queue:${mode}:${defaultCategory}:paging`, { page: 1, limit: 10 });
@@ -98,9 +100,21 @@ export function PaymentQueue({ mode, defaultCategory = "", toolbar, reloadKey = 
   const canEnter = (p: SettlementRow) => mode === "rbp" && user?.role === "RSA" && p.status === "APPROVED";
   const dq = useDebounce(f.q);
   const list = useApi<SettlementPage>(`/settlements?${queueQuery({ ...f, q: dq }, page, limit)}${mode === "rbp" ? "&scope=all" : ""}&_=${reloadKey}-${tick}`);
+  // Bulk Approve (RSOM): only pending daily rows on screen can be selected; changing filters, sort or page clears the selection.
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [approving, setApproving] = useState<SettlementRow[] | null>(null);
+  const eligible = mode === "queue" ? (list.data?.items ?? []).filter((p) => canBulkApprove(user?.role, p)) : [];
+  const selected = eligible.filter((p) => picked.has(p._id));
+  const allPicked = eligible.length > 0 && selected.length === eligible.length;
+  const bulk = mode === "queue" && user?.role === "RSOM";
+  const clearPicked = () => setPicked(new Set());
+  const toggle = (id: string) => setPicked((s) => { const next = new Set(s); if (!next.delete(id)) next.add(id); return next; });
+  // report the filters the table is showing (the search once its debounce has settled)
+  useEffect(() => { onFilters?.({ ...f, q: dq }); }, [f, dq, onFilters]);
   const change = (next: QueueFilters) => {
     setF(next);
     setPage(1);
+    clearPicked();
   };
   const sortBy = (key?: string) => key && change({ ...f, sort: key, dir: f.sort === key && f.dir === "desc" ? "asc" : "desc" });
   const active = !!(f.q || f.from || f.to || (mode !== "completed" && f.status) || f.category !== defaultCategory);
@@ -112,13 +126,16 @@ export function PaymentQueue({ mode, defaultCategory = "", toolbar, reloadKey = 
       )}
       <div className="card ds-card">
         <div className="ds-toolbar">
-          <div className="ds-seg" role="tablist" aria-label="Category">
-            {(["", "DAILY", "FINAL"] as const).map((c) => (
-              <button key={c || "all"} type="button" role="tab" aria-selected={f.category === c} className={f.category === c ? "on" : ""} onClick={() => change({ ...f, category: c })}>
-                {c ? `${CATEGORY_SHORT[c]}` : "All"}
-              </button>
-            ))}
-          </div>
+          {/* RSOM has daily payments only (the server limits the list too), so there is nothing to switch */}
+          {user?.role !== "RSOM" && (
+            <div className="ds-seg" role="tablist" aria-label="Category">
+              {(["", "DAILY", "FINAL"] as const).map((c) => (
+                <button key={c || "all"} type="button" role="tab" aria-selected={f.category === c} className={f.category === c ? "on" : ""} onClick={() => change({ ...f, category: c })}>
+                  {c ? `${CATEGORY_SHORT[c]}` : "All"}
+                </button>
+              ))}
+            </div>
+          )}
           {mode !== "completed" && (
             <Select aria-label="Status" value={f.status} onChange={(e) => change({ ...f, status: e.target.value })}>
               {STATUS_OPTIONS[mode].map((o) => <option key={o.v} value={o.v}>{o.l === "All" ? "All status" : o.l}</option>)}
@@ -138,10 +155,23 @@ export function PaymentQueue({ mode, defaultCategory = "", toolbar, reloadKey = 
           <EmptyState title={active ? "No payments match your filters" : mode === "completed" ? "No completed payments yet" : "No payments yet"} hint={active ? "Try a different search or clear the filters." : undefined} />
         ) : (
           <>
+            {selected.length > 0 && (
+              <div className="inline ds-gap">
+                <span>{selected.length} payment{selected.length > 1 ? "s" : ""} selected</span>
+                <button type="button" className="btn btn-primary btn-sm" onClick={() => setApproving(selected)}>Bulk Approve</button>
+              </div>
+            )}
             <TableWrap className={list.refreshing ? " is-refreshing" : ""} aria-busy={list.refreshing}>
               <table className="table ds-table">
                 <thead>
                   <tr>
+                    {bulk && (
+                      <th>
+                        <input type="checkbox" aria-label="Select all pending payments" disabled={!eligible.length} checked={allPicked}
+                          ref={(el) => { if (el) el.indeterminate = selected.length > 0 && !allPicked; }}
+                          onChange={() => setPicked(new Set(allPicked ? [] : eligible.map((p) => p._id)))} />
+                      </th>
+                    )}
                     {/* completed: the payment details replace Period / Submitted (both stay in View) so they fit without scrolling */}
                     {(mode === "completed" ? [COLS[0], COLS[2], { key: "drv", label: "Driver / Vehicle", sort: "driverName" }, COLS[6], { key: "ref", label: "Reference No." }, { key: "paid", label: "Paid On · Mode / Bank" }, COLS[9]] : COLS).map((c) => (
                       <th key={c.key} aria-sort={"sort" in c && c.sort && f.sort === c.sort ? (f.dir === "asc" ? "ascending" : "descending") : undefined}>
@@ -158,9 +188,10 @@ export function PaymentQueue({ mode, defaultCategory = "", toolbar, reloadKey = 
                 <tbody>
                   {list.data.items.map((p) => (
                     <tr key={p._id}>
+                      {bulk && <td>{canBulkApprove(user?.role, p) && <input type="checkbox" aria-label={`Select ${p.paymentNumber}`} checked={picked.has(p._id)} onChange={() => toggle(p._id)} />}</td>}
                       <td><strong className="num">{p.paymentNumber}</strong>{p.version > 1 && <small className="muted"> v{p.version}</small>}{mode === "completed" && <div className="ds-cat-under"><CategoryTag c={p.category} /></div>}</td>
                       {mode !== "completed" && <td><CategoryTag c={p.category} /></td>}
-                      <td><div>{d(p.clientName)}</div><small className="muted">{p.trackupNumber}</small></td>
+                      <td><div>{d(p.clientName)}</div><small className="muted">{[p.trackupNumber, p.pifNumber].filter(Boolean).join(" · ")}</small></td>
                       {mode === "completed" ? (
                         <td><div>{d(p.driverName)}</div><small className="muted">{d(p.driverNumber)} · {d(p.vehicleNo)}</small></td>
                       ) : (
@@ -192,11 +223,12 @@ export function PaymentQueue({ mode, defaultCategory = "", toolbar, reloadKey = 
                 </tbody>
               </table>
             </TableWrap>
-            <RsaPager total={list.data.total} page={page} limit={limit} onPage={setPage} onLimit={(n) => { setLimit(n); setPage(1); }} />
+            <RsaPager total={list.data.total} page={page} limit={limit} onPage={(n) => { setPage(n); clearPicked(); }} onLimit={(n) => { setLimit(n); setPage(1); clearPicked(); }} />
           </>
         )}
       </div>
       {openId && <PaymentDetailModal id={openId} onClose={() => setOpenId(null)} onChanged={() => setTick((t) => t + 1)} />}
+      {approving && <BulkApproveModal rows={approving} onClose={(attempted) => { setApproving(null); if (attempted) { clearPicked(); setTick((t) => t + 1); } }} />}
       {entryRow && <PaymentEntryModal p={entryRow} onClose={() => setEntryRow(null)} onSaved={() => { setEntryRow(null); setTick((t) => t + 1); }} />}
     </>
   );
@@ -248,7 +280,7 @@ export function PaymentDetailModal({ id, onClose, onChanged }: { id: string; onC
           <section className="ds-sec">
             <h4>Project, vehicle &amp; driver</h4>
             <KV items={[
-              ["Trackup No", p.trackupNumber], ["JS No", p.jsNumber], ["Client", p.clientName], ["Project Type", p.projectType === "ROADSHOW" ? "RoadShow" : "Signage"],
+              ["Trackup No", p.trackupNumber], ["PIF No", p.pifNumber], ["JS No", p.jsNumber], ["Client", p.clientName], ["Project Type", p.projectType === "ROADSHOW" ? "RoadShow" : "Signage"],
               ["Vehicle No", p.vehicleNo], ["Driver", `${d(p.driverName)} (${d(p.driverNumber)})`], ["Period", `${formatDate(p.fromDate)} to ${formatDate(p.toDate)}`],
               ["Bank", p.bank ? `${d(p.bank.bankName)} · ${d(p.bank.accountMasked)} · ${d(p.bank.ifscCode)}` : "-"],
             ]} />
@@ -334,6 +366,7 @@ function FinalBreakdown({ data }: { data: Record<string, any> }) {
         <KV items={[
           ["Campaign", `${formatDate(data.campaignFrom)} to ${formatDate(data.campaignTo)}`], ["Total Days", data.totalDays], ["Location", data.location], ["Reporting Date", formatDate(data.reportingDate)],
           ["Fixed Mileage", `${data.fuel.fixedMileage} km/l`], ["Opening / Closing KM", `${data.fuel.openingKm} / ${data.fuel.closingKm}`], ["Result", `${data.fuel.resultKm} km`],
+          ...(data.rates?.travelKm ? [["Travel KM x Rate", `${data.rates.travelKm} km x ${formatInr(data.rates.travelRate)} = ${formatInr(data.rates.travelPay)}`] as [string, string]] : []),
           ["Fuel Cost", `${formatInr(data.fuel.dieselCost)} / l`], ["IOCL (litres / KMs)", `${data.fuel.ioclLitres} / ${data.fuel.ioclKms}`], ["Variation in Litres", data.fuel.variationLitres],
           ["Estimated Budget", formatInr(data.estimate.estimatedBudget)], ["Estimated KM / Fuel", `${data.estimate.estimatedKm} km / ${data.estimate.estimatedFuel} l`],
           // KM allowance saved with the settlement (RoadShow; absent on settlements saved before it was recorded)
@@ -359,7 +392,7 @@ function FinalBreakdown({ data }: { data: Record<string, any> }) {
       <section className="ds-sec">
         <h4>Deductions &amp; net</h4>
         <KV items={[
-          ["Mileage Short", formatInr(data.deductions.mileageShort)], ["Driver Change Travel", formatInr(data.deductions.driverChangeTravel)], ["Vehicle Damage", formatInr(data.deductions.vehicleDamage)],
+          ["Mileage Short", formatInr(data.deductions.mileageShort)], ...(data.deductions.driverChangeTravel !== undefined ? [["Driver Change Travel", formatInr(data.deductions.driverChangeTravel)] as [string, string]] : []), ["Vehicle Damage", formatInr(data.deductions.vehicleDamage)],
           ["Previous Salary", formatInr(data.deductions.previousSalary)], ["Other", `${formatInr(data.deductions.other)}${data.otherDeductionRemark ? ` (${data.otherDeductionRemark})` : ""}`],
         ]} />
         <div className="ds-totals"><span>Gross <b>{formatInr(data.gross)}</b></span><span>Total Deduction <b>{formatInr(data.totalDeduction)}</b></span><span>Suspense <b>{formatInr(data.suspenseAmount)}</b></span><span className="ds-grand">Net Amount <b>{formatInr(data.netAmount)}</b></span></div>

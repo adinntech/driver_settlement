@@ -5,6 +5,7 @@ import { BudgetEvent } from "../models/Approval.js";
 import { Driver } from "../models/Driver.js";
 import { DriverAdvance } from "../models/DriverAdvance.js";
 import { Counter, RsaPayment } from "../models/RsaPayment.js";
+import { SettlementPayment } from "../models/SettlementPayment.js";
 import { TrackingProject } from "../models/TrackingProject.js";
 import { TrackingVehicle } from "../models/TrackingVehicle.js";
 import { VehicleAllotment } from "../models/VehicleAllotment.js";
@@ -25,7 +26,7 @@ const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const isDup = (e: unknown) => (e as { code?: number })?.code === 11000;
 const oid = (id: string) => new mongoose.Types.ObjectId(id);
 
-export interface EligibleQuery { q?: string; projectType?: string; paymentStatus?: string; from?: string; to?: string; page?: number; limit?: number }
+export interface EligibleQuery { forFinal?: boolean; q?: string; projectType?: string; paymentStatus?: string; from?: string; to?: string; page?: number; limit?: number }
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
@@ -65,12 +66,27 @@ function eligiblePipeline(first: any[] = []): any[] {
 }
 
 const shape = (r: any) => ({
-  trackingVehicle: String(r.trackingVehicle), allotment: String(r._id), trackupNumber: r.trackupNumber, pifNumber: r.pifNumber, displayNumber: r.tv?.displayNumber ?? null,
-  projectType: r.proj?.projectType ?? r.projectType, clientName: r.proj?.clientName ?? r.clientName, projectName: r.projectName ?? null, vehicleNo: r.vehicleNo ?? null,
+  trackingVehicle: String(r.trackingVehicle), allotment: String(r._id), trackupNumber: r.trackupNumber, pifNumber: r.pifNumber, 
+  projectType: r.proj?.projectType ?? r.projectType, clientName: r.proj?.clientName ?? r.clientName, projectName: r.projectName ?? null, vehicleNo: r.vehicleNo ?? null, requestedVehicleType: r.tv?.vehicleType ?? null,
   driverNumber: r.driverNumber ?? null, driverName: r.driverName ?? null, campaignFromDate: r.campaignFromDate ?? null, campaignToDate: r.campaignToDate ?? null,
   approvedBudgetAmount: r.budget?.total ?? null, budgetVersion: r.budget?.approvedVersion ?? null, vehicleAllottedAt: r.allottedAt ?? null, driverAssignedAt: r.driverAssignedAt ?? null,
   allotmentStatus: r.status, paymentCount: r.paymentCount, paymentStatus: r.paymentCount > 0 ? "ENTERED" : "PENDING", lastPaymentAt: r.lastPaymentAt ?? null,
 });
+
+/**
+ * Leaves out project vehicles whose current driver already has a Final Settlement there, in any status (a rejected one is corrected
+ * and resubmitted, never entered again). The same driver and van on another project vehicle stay eligible. Final picker only.
+ */
+const withoutSettled = [
+  {
+    $lookup: {
+      from: SettlementPayment.collection.name, let: { tv: "$trackingVehicle", driver: "$driver" },
+      pipeline: [{ $match: { category: "FINAL", $expr: { $and: [{ $eq: ["$trackingVehicle", "$$tv"] }, { $eq: ["$driver", "$$driver"] }] } } }, { $limit: 1 }, { $project: { _id: 1 } }],
+      as: "settled",
+    },
+  },
+  { $match: { settled: { $size: 0 } } },
+];
 
 export async function listEligibleProjects(q: EligibleQuery) {
   const limit = Math.min(Math.max(q.limit ?? 10, 1), 100);
@@ -78,7 +94,7 @@ export async function listEligibleProjects(q: EligibleQuery) {
   const and: any[] = [];
   if (q.q?.trim()) {
     const rx = new RegExp(esc(q.q.trim()), "i");
-    and.push({ $or: [{ trackupNumber: rx }, { pifNumber: rx }, { "tv.displayNumber": rx }, { "proj.clientName": rx }, { vehicleNo: rx }, { driverName: rx }, { driverNumber: rx }, { billNumber: rx }, { projectName: rx }] });
+    and.push({ $or: [{ trackupNumber: rx }, { pifNumber: rx }, { "proj.clientName": rx }, { vehicleNo: rx }, { driverName: rx }, { driverNumber: rx }, { billNumber: rx }, { projectName: rx }] });
   }
   if (q.projectType && ["ROADSHOW", "SIGNAGE"].includes(q.projectType)) and.push({ "proj.projectType": q.projectType });
   if (q.paymentStatus === "ENTERED") and.push({ paymentCount: { $gt: 0 } });
@@ -88,6 +104,7 @@ export async function listEligibleProjects(q: EligibleQuery) {
   if (q.to && YMD.test(q.to)) and.push({ campaignFromDate: { $lte: q.to } });
   const pipeline = [
     ...eligiblePipeline(),
+    ...(q.forFinal ? withoutSettled : []),
     ...(and.length ? [{ $match: { $and: and } }] : []),
     { $sort: { allottedAt: -1, _id: -1 } },
     { $facet: { items: [{ $skip: (page - 1) * limit }, { $limit: limit }], total: [{ $count: "n" }] } },
@@ -135,7 +152,7 @@ async function nextPaymentNumber(now: Date): Promise<string> {
 
 const modeOf = (p: any): string => (p.cashInHand ? "Cash in Hand" : [...new Set((p.dieselEntries ?? []).map((d: any) => d.mode).filter(Boolean))].join(", ") || "—");
 const paymentView = (p: any) => ({
-  _id: String(p._id), paymentNumber: p.paymentNumber, trackingVehicle: String(p.trackingVehicle), trackupNumber: p.trackupNumber, pifNumber: p.pifNumber, displayNumber: p.displayNumber ?? null,
+  _id: String(p._id), paymentNumber: p.paymentNumber, trackingVehicle: String(p.trackingVehicle), trackupNumber: p.trackupNumber, pifNumber: p.pifNumber, 
   billNumber: p.billNumber ?? null, clientName: p.clientName ?? null, projectType: p.projectType ?? null, vehicleNo: p.vehicleNo ?? null, driverNumber: p.driverNumber ?? null, driverName: p.driverName ?? null,
   paymentFor: p.paymentFor, campaignFromDate: p.campaignFromDate ?? null, campaignToDate: p.campaignToDate ?? null, entryDateTime: p.entryDateTime, cashInHand: !!p.cashInHand,
   dieselEntries: (p.dieselEntries ?? []).map((d: any) => ({ amount: d.amount, mode: d.mode ?? null, reference: d.reference ?? null, entryAt: d.entryAt })),
@@ -163,7 +180,7 @@ export async function createPayment(tvId: string, input: unknown, username: stri
   const t = calculatePayable(v.data);
   const doc = {
     paymentNumber: await nextPaymentNumber(now), project: ctx._raw.project, trackingVehicle: tvId, allotment: ctx._raw.allotment, trackupNumber: ctx.trackupNumber, pifNumber: ctx.pifNumber,
-    displayNumber: ctx.displayNumber, billNumber: ctx.billNumber, clientName: ctx.clientName, projectType: ctx.projectType, vehicle: ctx._raw.vehicle, vehicleNo: ctx.vehicle.vehicleNo,
+    billNumber: ctx.billNumber, clientName: ctx.clientName, projectType: ctx.projectType, vehicle: ctx._raw.vehicle, vehicleNo: ctx.vehicle.vehicleNo,
     driver: ctx._raw.driver, driverNumber: ctx.driver.driverNumber, driverName: ctx.driver.driverName, paymentFor: ctx.projectType, campaignFromDate: ctx.campaignFromDate, campaignToDate: ctx.campaignToDate,
     entryDateTime: now, cashInHand: v.data.cashInHand,
     dieselEntries: v.data.diesel.map((d) => ({ amount: rupees(d.amountPaise), mode: d.mode ?? undefined, reference: d.reference ?? undefined, entryAt: now })),

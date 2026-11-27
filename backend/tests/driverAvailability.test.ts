@@ -9,6 +9,7 @@ process.env.RSOM_USERNAME = "RSOM";
 process.env.RSOM_PASSWORD = "pass3";
 process.env.STORAGE_TYPE = "local";
 
+import { perVehicleTrackups } from "./legacyNumbers.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Server } from "node:http";
@@ -69,10 +70,10 @@ const budgetNo = (() => { let n = 0; return () => `BUD-D-${++n}`; })();
   const t = await T();
   const r = await call("/tracking", "POST", {
     projectType: "SIGNAGE",
-    details: { projectCode: "14000001", client: "Pepsi India", jobSheetNumber: "ZZDRV-77", location: "Coimbatore", date: d(0), fromDate: d(0), toDate: d(9), numberOfVehicles: 6 },
+    details: { projectCode: "14000001", client: "Pepsi India", jobSheetNumber: "ZZDRV-77", location: "Coimbatore", date: d(0), fromDate: d(0), toDate: d(9), numberOfVehicles: 6, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 6 }] },
   }, t.rsop);
   assert.equal(r.status, 201, JSON.stringify(r.body));
-  proj = r.body.data;
+  proj = await perVehicleTrackups<any>(r.body.data);
   const mkB = (i: number, state: Record<string, unknown>) =>
     Budget.create({ budgetNumber: budgetNo(), vehicle: proj.vehicles[i]._id, project: proj._id, data: {}, total: 0, currentVersion: 1, createdBy: "RBP", updatedBy: "RBP", ...state });
   for (let i = 0; i < 4; i++) await mkB(i, { approvalStatus: "APPROVED", approvedVersion: 1 });

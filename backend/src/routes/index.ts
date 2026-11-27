@@ -11,6 +11,7 @@ import driverRoutes from "./driver.routes.js";
 import rsaRoutes from "./rsa.routes.js";
 import settlementRoutes from "./settlement.routes.js";
 import tollRoutes from "./toll.routes.js";
+import ioclRoutes from "./iocl.routes.js";
 import { onRoadRoutes, rsaClearanceRoutes } from "./clearance.routes.js";
 
 const router = Router();
@@ -28,5 +29,6 @@ router.use("/rsa-clearances", rsaClearanceRoutes);
 router.use("/on-road-vehicles", onRoadRoutes);
 router.use("/settlements", settlementRoutes);
 router.use("/tolls", tollRoutes);
+router.use("/iocl", ioclRoutes);
 
 export default router;

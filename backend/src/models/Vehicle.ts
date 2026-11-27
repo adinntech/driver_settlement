@@ -105,10 +105,10 @@ vehicleSchema.index({ fcExpiry: 1 });
 vehicleSchema.index({ "availability.status": 1, "availability.nextAvailableAt": 1 });
 vehicleSchema.index({ "availability.project.trackingProject": 1 });
 vehicleSchema.index({ "availability.project.clientName": 1 });
-// One project vehicle (trackup number) can be allocated to only one vehicle at a time; race-safe.
+// One project vehicle (PIF number) can be allocated to only one vehicle at a time; race-safe.
 vehicleSchema.index(
-  { "availability.project.trackupNumber": 1 },
-  { unique: true, partialFilterExpression: { "availability.status": "IN_USE", "availability.project.trackupNumber": { $type: "string" } } },
+  { "availability.project.pifNumber": 1 },
+  { unique: true, partialFilterExpression: { "availability.status": "IN_USE", "availability.project.pifNumber": { $type: "string" } } },
 );
 
 export const HISTORY_ACTIONS = [

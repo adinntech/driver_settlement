@@ -20,6 +20,7 @@ interface Row {
   trackupNumber: string;
   pifNumber: string;
   projectType: "ROADSHOW" | "SIGNAGE";
+  vehicleType?: string | null;
   client: string;
   vehicleIndex: number;
   campaignFrom: string;
@@ -140,7 +141,7 @@ function Dashboard() {
                       <td><span className="num">{r.pifNumber}<CopyButton value={r.pifNumber} label="PIF Number" /></span></td>
                       <td><span className={`type type-${r.projectType.toLowerCase()}`}>{r.projectType === "ROADSHOW" ? "Roadshow" : "Signage"}</span></td>
                       <td>{r.client}</td>
-                      <td>{r.vehicleIndex}</td>
+                      <td>{r.vehicleIndex}{r.vehicleType && <><br /><small className="muted">{r.vehicleType}</small></>}</td>
                       <td>{formatDate(r.campaignFrom)} → {formatDate(r.campaignTo)}</td>
                       <td>V{r.version}</td>
                       <td><strong>{formatInr(r.total)}</strong></td>

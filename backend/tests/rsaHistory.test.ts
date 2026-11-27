@@ -11,6 +11,7 @@ process.env.RSA_USERNAME = "RSA";
 process.env.RSA_PASSWORD = "pass4";
 process.env.STORAGE_TYPE = "local";
 
+import { perVehicleTrackups } from "./legacyNumbers.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Server } from "node:http";
@@ -88,13 +89,13 @@ const mkBudget = (tv: any, proj: any, state: Record<string, unknown> = { approva
 const mkProject = async (body: unknown) => {
   const r = await call("/tracking", "POST", body, (await T()).rsop);
   assert.equal(r.status, 201, JSON.stringify(r.body));
-  return r.body.data as any;
+  return perVehicleTrackups<any>(r.body.data);
 };
 const sched = { expectedReleaseDate: d(3), expectedReleaseTime: "20:00", nextAvailableDate: d(4), nextAvailableTime: "09:00" };
 /** Allots a vehicle (and optionally a driver) to a project vehicle through the real allotment API. */
 const allotTo = async (tv: any, driver?: any) => {
   const v = await mkVehicle();
-  const r = await call("/vehicle-allotments", "POST", { vehicleId: v._id, trackupNumber: tv.trackupNumber, ...sched, ...(driver ? { driverId: driver._id } : {}) }, (await T()).rbp);
+  const r = await call("/vehicle-allotments", "POST", { vehicleId: v._id, pifNumber: tv.pifNumber, ...sched, ...(driver ? { driverId: driver._id } : {}) }, (await T()).rbp);
   assert.equal(r.status, 201, JSON.stringify(r.body));
   return { vehicle: v, allotment: r.body.data };
 };
@@ -102,8 +103,8 @@ const allotTo = async (tv: any, driver?: any) => {
 let sig: any; // signage project, 10 vehicles
 let road: any; // roadshow project, 2 vehicles
 {
-  sig = await mkProject({ projectType: "SIGNAGE", details: { projectCode: "15000001", client: "Kensign Lifestyles", jobSheetNumber: "ZZRSA-1", location: "Coimbatore", date: d(0), fromDate: d(0), toDate: d(9), numberOfVehicles: 10 } });
-  road = await mkProject({ projectType: "ROADSHOW", details: { projectCode: "15000002", billingName: "Ken Roadshow Pvt", stateCode: "33", startDate: d(0), endDate: d(8), reportingDate: d(3), sundayHalt: "NO", numberOfVans: 2, reportingLocations: ["Chennai", "Trichy"] } });
+  sig = await mkProject({ projectType: "SIGNAGE", details: { projectCode: "15000001", client: "Kensign Lifestyles", jobSheetNumber: "ZZRSA-1", location: "Coimbatore", date: d(0), fromDate: d(0), toDate: d(9), numberOfVehicles: 10, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 10 }] } });
+  road = await mkProject({ projectType: "ROADSHOW", details: { projectCode: "15000002", billingName: "Ken Roadshow Pvt", stateCode: "33", startDate: d(0), endDate: d(8), reportingDate: d(3), sundayHalt: "NO", numberOfVans: 2, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 2 }], reportingLocations: ["Chennai", "Trichy"] } });
 }
 // fixtures: a signage project and a roadshow project, each with approved budget + vehicle + driver
 const A = sig.vehicles[0];

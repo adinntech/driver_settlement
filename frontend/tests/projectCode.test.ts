@@ -15,7 +15,7 @@ test("Project Code input: exactly 8 digits", () => {
 let n = 0;
 // (types/domain.ts declares two `Vehicle` interfaces that TypeScript merges; only the tracking fields matter here)
 const veh = (i: number, budget: "PENDING" | "CREATED" = "PENDING") => ({
-  _id: `v${++n}`, project: "", vehicleIndex: i, trackupNumber: `T${n}`, pifNumber: `P${n}`, displayNumber: `D${n}`, budgetStatus: budget, createdAt: "2026-11-01T00:00:00Z",
+  _id: `v${++n}`, project: "", vehicleIndex: i, trackupNumber: `T${n}`, pifNumber: `P${n}`, budgetStatus: budget, createdAt: "2026-11-01T00:00:00Z",
 }) as unknown as Vehicle;
 const proj = (id: string, type: Project["projectType"], code: string | undefined, created: string, vehicles: Vehicle[], dates: [string, string] = ["2026-12-01", "2026-12-10"]): Project => ({
   _id: id, projectType: type, clientName: "KFC", projectCode: code, vehicleCount: vehicles.length, createdByName: "RSOP", createdAt: created, vehicles,

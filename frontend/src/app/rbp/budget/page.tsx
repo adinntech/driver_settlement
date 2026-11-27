@@ -70,6 +70,7 @@ function BudgetView() {
         <dl className="kv">
           <KV k="Client / Billing Name" v={c.client} />
           <KV k="Project Type" v={c.projectType === "ROADSHOW" ? "Roadshow" : "Signage"} />
+          {c.vehicleType && <KV k="Vehicle Type" v={c.vehicleType} />}
           <KV k="Location" v={c.location} />
           <KV k="Campaign Period" v={`${formatDate(c.campaignFrom)} → ${formatDate(c.campaignTo)}`} />
           {c.projectType === "ROADSHOW" && <KV k="Reporting Date" v={formatDate(c.reportingDate)} />}
@@ -85,7 +86,6 @@ function BudgetView() {
           {[
             ["Trackup Number", c.trackupNumber],
             ["PIF Number", c.pifNumber],
-            ["Display Number", c.displayNumber],
           ].map(([k, v]) => (
             <div key={k}>
               <dt>{k}</dt>

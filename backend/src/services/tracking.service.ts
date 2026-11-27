@@ -2,7 +2,9 @@ import mongoose from "mongoose";
 import { TrackingProject } from "../models/TrackingProject.js";
 import { TrackingVehicle } from "../models/TrackingVehicle.js";
 import { validateTracking, type TrackingValidationOptions } from "../validators/tracking.validator.js";
-import { allocateOne, type NumberStore } from "./numberAllocator.js";
+import type { VehicleTypeQty } from "../utils/vehicleTypes.js";
+import { allocatePif, sharedTrackup } from "./numberAllocator.js";
+import { TrackupGroup } from "../models/TrackupGroup.js";
 import { Budget } from "../models/Budget.js";
 import { AppError } from "../utils/AppError.js";
 
@@ -40,6 +42,16 @@ export async function assertProjectCodeFits(projectType: string, projectCode: st
   }
 }
 
+/** One Trackup Number per vehicle type within a project; later requests under the same Project Code reuse it. */
+const trackupFor = (key: string) =>
+  sharedTrackup({
+    find: async () => ((await TrackupGroup.findById(key).lean()) as { trackupNumber: string } | null)?.trackupNumber ?? null,
+    used: async (trackupNumber) => !!(await TrackingVehicle.exists({ trackupNumber })),
+    claim: async (trackupNumber) => {
+      await TrackupGroup.create({ _id: key, trackupNumber });
+    },
+  });
+
 export async function createTracking(
   actor: Actor,
   body: { projectType?: unknown; details?: unknown; requestId?: unknown },
@@ -74,22 +86,23 @@ export async function createTracking(
     }
     throw e;
   }
-  const store: NumberStore = {
-    exists: async (s) =>
-      !!(await TrackingVehicle.exists({
-        $or: [
-          { trackupNumber: s.trackupNumber },
-          { pifNumber: s.pifNumber },
-          { displayNumber: s.displayNumber },
-        ],
-      })),
-    insert: async (s, idx) => {
-      await TrackingVehicle.create({ project: project._id, vehicleIndex: idx, ...s });
-    },
-  };
-
+  // one entry per vehicle, in list order, so every vehicle of the request gets its type
+  const types = (v.details.vehicleTypes as VehicleTypeQty[]).flatMap((t) => Array<VehicleTypeQty>(t.quantity).fill(t));
   try {
-    for (let i = 1; i <= v.vehicleCount; i++) await allocateOne(store, i);
+    const trackups = new Map<string, string>();
+    for (const [i, type] of types.entries()) {
+      let trackupNumber = trackups.get(type.code);
+      if (!trackupNumber) {
+        trackupNumber = await trackupFor(`${String(body.projectType)}:${v.projectCode}:${type.code}`);
+        trackups.set(type.code, trackupNumber);
+      }
+      await allocatePif({
+        exists: async (pifNumber) => !!(await TrackingVehicle.exists({ pifNumber })),
+        insert: async (pifNumber) => {
+          await TrackingVehicle.create({ project: project._id, vehicleIndex: i + 1, vehicleTypeCode: type.code, vehicleType: type.name, trackupNumber, pifNumber });
+        },
+      });
+    }
   } catch (e) {
     // No transactions on standalone MongoDB: compensate so no half-created project remains.
     await TrackingVehicle.deleteMany({ project: project._id });
@@ -102,7 +115,7 @@ export async function createTracking(
 export async function loadProject(id: string) {
   const project = await TrackingProject.findById(id).lean();
   if (!project) throw new AppError("Tracking request not found", 404);
-  const vehicles = await TrackingVehicle.find({ project: id }).sort({ vehicleIndex: 1 }).lean();
+  const vehicles = await TrackingVehicle.find({ project: id }).sort({ vehicleIndex: 1 }).select("-displayNumber").lean();
   return { ...project, vehicles };
 }
 
@@ -127,13 +140,14 @@ export async function listTracking(f: ListFilters) {
   if (f.q) {
     const rx = new RegExp(escapeRegex(f.q), "i");
     const vehicleHits = await TrackingVehicle.find({
-      $or: [{ trackupNumber: rx }, { pifNumber: rx }, { displayNumber: rx }],
+      $or: [{ trackupNumber: rx }, { pifNumber: rx }],
     }).distinct("project");
     pf.$or = [{ clientName: rx }, { projectCode: rx }, { _id: { $in: vehicleHits } }];
   }
   const projects = await TrackingProject.find(pf).sort({ createdAt: -1 }).lean();
   const vehicles = await TrackingVehicle.find({ project: { $in: projects.map((p) => p._id) } })
     .sort({ vehicleIndex: 1 })
+    .select("-displayNumber")
     .lean();
   // Approval status per vehicle (null = no budget yet; budgets saved before approvals existed count as DRAFT).
   const budgets = await Budget.find({ vehicle: { $in: vehicles.map((v) => v._id) } })
@@ -155,7 +169,12 @@ export async function trackingStats() {
     TrackingProject.countDocuments({ projectType: "SIGNAGE" }),
     TrackingVehicle.countDocuments({ budgetStatus: "PENDING" }),
     TrackingVehicle.countDocuments({ budgetStatus: "CREATED" }),
-    TrackingVehicle.find().sort({ createdAt: -1 }).limit(5).select("trackupNumber createdAt").lean(),
+    // the five latest Trackup Numbers (vehicles share them)
+    TrackingVehicle.aggregate([
+      { $group: { _id: "$trackupNumber", id: { $first: "$_id" }, createdAt: { $max: "$createdAt" } } },
+      { $sort: { createdAt: -1 } }, { $limit: 5 },
+      { $project: { _id: "$id", trackupNumber: "$_id", createdAt: 1 } },
+    ]),
   ]);
   return { total, roadshow, signage, pendingBudget: pending, budgetCreated: created, recent };
 }

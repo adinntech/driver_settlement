@@ -34,6 +34,7 @@ export const NAV: Record<RoleKey, { href: string; label: string }[]> = {
     { href: "/rsa/on-road-vehicles", label: "On Road Vehicles" },
     { href: "/rsa/driver-payments", label: "Driver Payments" },
     { href: "/rsa/settlements/completed", label: "Payment Completed" },
+    { href: "/rsa/iocl-data", label: "IOCL Data" },
   ],
   RSO: [
     { href: "/rso", label: "Final Settlement Approvals" },

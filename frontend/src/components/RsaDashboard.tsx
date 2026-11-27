@@ -8,7 +8,7 @@ import { formatDate, formatDateTime, formatInr } from "@/utils/format";
 import { PAYMENT_FOR_LABEL, PAYMENT_STATUS_LABEL, dash, type RsaProjectRow } from "@/utils/rsa";
 
 export const RSA_COLUMNS = [
-  "Trackup No (JS)", "PIF No", "Display No", "Type", "Client / Billing Name", "Vehicle No", "Driver No", "Driver Name", "Campaign From", "Campaign To",
+  "Trackup No (JS)", "PIF No", "Type", "Client / Billing Name", "Vehicle No", "Driver No", "Driver Name", "Campaign From", "Campaign To",
   "Approved Budget", "Payment Status", "Last Payment", "",
 ] as const;
 
@@ -57,7 +57,6 @@ export function RsaProjectTable({ items, actionLabel = "Payment Entry" }: { item
             <tr key={r.trackingVehicle}>
               <td><strong className="num">{r.trackupNumber}</strong></td>
               <td>{r.pifNumber}</td>
-              <td>{dash(r.displayNumber)}</td>
               <td>{PAYMENT_FOR_LABEL[r.projectType] ?? r.projectType}</td>
               <td>{r.clientName}</td>
               <td>{dash(r.vehicleNo)}</td>

@@ -18,7 +18,7 @@ import { earlierOf, keepInRange, laterOf } from "@/utils/dates";
 import { amountPaise, money, newSubmissionKey, rowId, sanitizeAmount, type RsaProjectRow } from "@/utils/rsa";
 import { allowanceText, kmText, kmUsage } from "@/utils/kmAllowance";
 import {
-  DEDUCTION_KEYS, campaignDays, onRoadBase, paymentsBase, finalFormFrom, finalPayload, finalTotals, validateFinalForm, type FinalForm, type FinalNumberKey, type SettlementContext, type SettlementDetail, type SettlementOptions,
+  DEDUCTION_KEYS, campaignDays, travelPayPaise, onRoadBase, paymentsBase, finalFormFrom, finalPayload, finalTotals, validateFinalForm, type FinalForm, type FinalNumberKey, type SettlementContext, type SettlementDetail, type SettlementOptions,
 } from "@/utils/settlement";
 
 const d = (v: unknown) => (v === null || v === undefined || v === "" ? "-" : String(v));
@@ -30,7 +30,7 @@ export function ProjectPicker({ kind }: { kind: "daily" | "final" }) {
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
   const dq = useDebounce(q);
-  const list = useApi<{ items: RsaProjectRow[]; total: number; page: number; limit: number }>(`/settlements/projects?q=${encodeURIComponent(dq)}&page=${page}&limit=10`);
+  const list = useApi<{ items: RsaProjectRow[]; total: number; page: number; limit: number }>(`/settlements/projects?q=${encodeURIComponent(dq)}&page=${page}&limit=10${kind === "final" ? "&kind=final" : ""}`);
   const pages = list.data ? Math.max(1, Math.ceil(list.data.total / 10)) : 1;
   return (
     <div className="card ds-card">
@@ -38,7 +38,7 @@ export function ProjectPicker({ kind }: { kind: "daily" | "final" }) {
         <input className="ds-search" placeholder="Search trackup / PIF no, client, vehicle, driver" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} aria-label="Search projects" />
       </div>
       {list.loading ? <Skeleton rows={5} /> : list.error ? <ErrorState message={list.error} onRetry={list.reload} /> : !list.data?.items.length ? (
-        <EmptyState title="No eligible projects" hint="A project appears here once RSOM approves its budget and a vehicle and driver are allotted." />
+        <EmptyState title="No eligible projects" hint={`A project appears here once RSOM approves its budget and a vehicle and driver are allotted.${kind === "final" ? " Vehicles whose driver already has a final settlement are not listed." : ""}`} />
       ) : (
         <>
           <TableWrap>
@@ -377,6 +377,7 @@ function DailyInner({ ctx, existing, expenseOptions }: { ctx: SettlementContext;
           <div className="vp-job">
             <div className="vp-job-lines">
               <div>JobSheet No: <b>{ctx.campaign.jsNumber ?? ctx.trackupNumber}</b></div>
+              <div>PIF No: <b>{ctx.pifNumber}</b></div>
               <div>Vehicle No: <b>{ctx.vehicleNo}</b></div>
               <div>Client Name: <b>{ctx.clientName}</b></div>
               <div>Driver Name: <b>{ctx.driverName}</b></div>
@@ -441,14 +442,27 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
   const [comment, setComment] = useState("");
   const [errors, setErrors] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [panel, setPanel] = useState<null | "suspense" | "closing" | "onroad">(null);
+  const [panel, setPanel] = useState<null | "suspense" | "closing" | "onroad" | "travel">(null);
   const [draft, setDraft] = useState({ category: "", description: "", quantity: "1", cost: "" });
   const [draftErr, setDraftErr] = useState("");
   const [entryDate] = useState(() => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10));
   const key = useRef(newSubmissionKey());
   const t = useMemo(() => finalTotals(f), [f]);
   const km = ctx.campaign.km ? kmUsage(ctx.campaign.km, t.resultKm) : null; // the server recalculates and saves the same figures
-  const days = useMemo(() => campaignDays(ctx), [ctx]);
+  // the settlement's own campaign period (the project's dates until changed here)
+  const period = (from: string, to: string) => campaignDays({ campaign: { ...ctx.campaign, fromDate: from, toDate: to } });
+  const days = period(f.campaignFrom, f.campaignTo);
+  const periodChanged = f.campaignFrom !== (ctx.campaign.fromDate ?? "") || f.campaignTo !== (ctx.campaign.toDate ?? "");
+  const setPeriod = (campaignFrom: string, campaignTo: string) => {
+    const next = period(campaignFrom, campaignTo);
+    setF({
+      ...f, campaignFrom, campaignTo,
+      n: next ? { ...f.n, onRoadDays: String(next.onRoadDays || ""), onRoadSundays: String(next.onRoadSundays || "") } : f.n,
+    });
+  };
+  const travelUsed = !!(amountPaise(f.n.travelKm) || amountPaise(f.n.travelRate));
+  // once KM / rate are touched the amount is theirs alone: a previously typed amount is dropped
+  const setTravel = (k: "travelKm" | "travelRate", v: string) => setF({ ...f, n: { ...f.n, travelPay: "", [k]: v } });
   const pv = (s: string) => amountPaise(s) ?? 0;
   const setN = (k: FinalNumberKey, v: string) => setF({ ...f, n: { ...f.n, [k]: v } });
   const setD = (k: (typeof DEDUCTION_KEYS)[number], v: string) => setF({ ...f, deductions: { ...f.deductions, [k]: v } });
@@ -477,7 +491,7 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
   };
 
   const submit = async () => {
-    const e = validateFinalForm(f, days?.calendar ?? null, { fromDate: ctx.campaign.fromDate, toDate: ctx.campaign.toDate });
+    const e = validateFinalForm(f, days?.calendar ?? null);
     setErrors(e);
     if (e.length) return;
     setBusy(true);
@@ -500,56 +514,81 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
   const perDayTotal = pv(f.n.perDaySalary) + pv(f.n.perDayFood);
 
   return (
-    <div className="dsf">
-      <div className="dsf-title"><span>DRIVER SALARY AND EXPENSES</span><Link className="dsf-back" href={base} onClick={(e) => { if (!confirmLeave()) e.preventDefault(); }}>← Back to driver payments</Link></div>
+    <div className="dsf fsf">
+      <header className="dsf-title fsf-head">
+        <div>
+          <span>DRIVER SALARY AND EXPENSES</span>
+          <small>{[f.jsNumber || ctx.trackupNumber, ctx.pifNumber, ctx.clientName, ctx.vehicleNo, existing?.paymentNumber].filter(Boolean).join("  ·  ")}</small>
+        </div>
+        <Link className="dsf-back" href={base} onClick={(e) => { if (!confirmLeave()) e.preventDefault(); }}>← Back to driver payments</Link>
+      </header>
       {blocked && <div className="alert">A final settlement ({ctx.existingFinal!.paymentNumber}, {ctx.existingFinal!.status.toLowerCase()}) already exists for this driver on this vehicle. Only one final settlement is allowed.</div>}
       {existing && <div className="alert">Correcting {existing.paymentNumber} (rejected: {existing.rejectionReason}). Saving creates version {existing.version + 1}.</div>}
 
-      {/* ---------------- header: RoadShow detail | Driver detail | bank */}
-      <div className="dsf-head">
-        <div className="dsf-col">
-          <div className="dsf-sec">{isRoadshow ? "RoadShow Detail" : "Signage Detail"}</div>
-          <div className="dsf-row"><label>JS.No</label><span className="dsf-val">{f.jsNumber || ctx.trackupNumber}</span><label className="dsf-inl">Date</label>{ro(formatDate(entryDate), "dsf-w-date")}</div>
-          <div className="dsf-row"><label>Client</label><span className="dsf-val">{ctx.clientName}</span></div>
-          <div className="dsf-row"><label>Campaign Period</label>
-            <span className="dsf-period"><b>From:</b>{ro(formatDate(ctx.campaign.fromDate), "dsf-w-date")}<b>To:</b>{ro(formatDate(ctx.campaign.toDate), "dsf-w-date")}</span>
+      <div className="fsf-top">
+        <section className="fsf-card">
+          <h2>{isRoadshow ? "RoadShow Detail" : "Signage Detail"}</h2>
+          <div className="fsf-grid">
+            <div className="fsf-field"><span className="fsf-label">JS.No</span><span className="fsf-value">{f.jsNumber || ctx.trackupNumber}</span></div>
+            <div className="fsf-field"><span className="fsf-label">PIF No</span><span className="fsf-value">{ctx.pifNumber}</span></div>
+            <div className="fsf-field"><span className="fsf-label">Date</span>{ro(formatDate(entryDate), "dsf-w-date")}</div>
+            <div className="fsf-field"><span className="fsf-label">Client</span><span className="fsf-value">{ctx.clientName}</span></div>
+            <div className="fsf-field fsf-span2"><span className="fsf-label">Campaign Period</span><span className="dsf-period">
+              <b>From:</b><DateInput className="dsf-in dsf-w-date" aria-label="Campaign Start Date" value={f.campaignFrom} max={f.campaignTo || undefined} onChange={(e) => setPeriod(e.target.value, f.campaignTo)} />
+              <b>To:</b><DateInput className="dsf-in dsf-w-date" aria-label="Campaign End Date" value={f.campaignTo} min={f.campaignFrom || undefined} onChange={(e) => setPeriod(f.campaignFrom, e.target.value)} />
+            </span></div>
+            <div className="fsf-field"><span className="fsf-label">Estimated KM Per Day</span>{num("estimatedKmPerDay")}</div>
+            <div className="fsf-field"><span className="fsf-label">Reporting Date</span><input className="dsf-in dsf-ro dsf-w-date" aria-label="Reporting Date" value={formatDate(f.reportingDate)} readOnly tabIndex={-1} /></div>
+            <div className="fsf-field"><span className="fsf-label">Location</span><input className="dsf-in" aria-label="Location" value={f.location} maxLength={120} onChange={(e) => setF({ ...f, location: e.target.value })} /></div>
+            <div className="fsf-field"><span className="fsf-label">Fixed Milage</span>{num("fixedMileage")}</div>
+            <div className="fsf-field"><span className="fsf-label">Fuel Rate</span>{num("dieselCost")}</div>
           </div>
-          <div className="dsf-row"><label>Estimated KM Per Day</label>{num("estimatedKmPerDay")}<label className="dsf-inl">Reporting Date</label>
-            <DateInput className="dsf-in dsf-w-date" aria-label="Reporting Date" value={f.reportingDate} min={ctx.campaign.fromDate || undefined} max={ctx.campaign.toDate || undefined} onChange={(e) => setF({ ...f, reportingDate: e.target.value })} />
+        </section>
+        <section className="fsf-card">
+          <h2>Driver Detail</h2>
+          <div className="fsf-grid fsf-grid-2">
+            <div className="fsf-field"><span className="fsf-label">Vehicle No</span><span className="fsf-value">{ctx.vehicleNo}</span></div>
+            <div className="fsf-field"><span className="fsf-label">Total Days</span><span className="fsf-value">{d(periodChanged ? days?.calendar : ctx.campaign.totalDays)}</span></div>
+            <div className="fsf-field fsf-span2"><span className="fsf-label">Driver Name</span><span className="fsf-value">{ctx.driverNumber}/{ctx.driverName}</span></div>
+            <div className="fsf-field"><span className="fsf-label">Suspense Amt</span><span className="fsf-with-btn">{num("suspenseAmount")}<button type="button" className="dsf-btn dsf-btn-amber" title="View advances" onClick={() => setPanel("suspense")}>v</button></span></div>
           </div>
-          <div className="dsf-row"><label>Location</label><input className="dsf-in" aria-label="Location" value={f.location} maxLength={120} onChange={(e) => setF({ ...f, location: e.target.value })} />
-            <label className="dsf-inl">Fixed Milage</label>{num("fixedMileage", { w: "dsf-w-s" })}<label className="dsf-inl">Fuel Rate</label>{num("dieselCost", { w: "dsf-w-s" })}
-          </div>
-        </div>
-        <div className="dsf-col">
-          <div className="dsf-sec">Driver Detail</div>
-          <div className="dsf-row"><label>Vehicle No</label><span className="dsf-val">{ctx.vehicleNo}</span></div>
-          <div className="dsf-row"><label>Driver Name</label><span className="dsf-val">{ctx.driverNumber}/{ctx.driverName}</span></div>
-          <div className="dsf-row"><label>Total Days</label><span className="dsf-val">{d(ctx.campaign.totalDays)}</span></div>
-          <div className="dsf-row"><label>Travel Ded.</label><input className="dsf-in num-input dsf-w-s" inputMode="decimal" aria-label="Driver change travel deduction" value={f.deductions.driverChangeTravel} onChange={(e) => setD("driverChangeTravel", sanitizeAmount(e.target.value))} /></div>
-          <div className="dsf-row"><label>Suspense Amt</label>{num("suspenseAmount", { w: "dsf-w-s" })}<button type="button" className="dsf-btn dsf-btn-amber" title="View advances" onClick={() => setPanel("suspense")}>v</button></div>
-        </div>
-        <div className="dsf-col dsf-bank">
-          <b>AccountName</b><span>{d(ctx.bank.accountName ?? ctx.driverName)}</span>
-          <b>Account No</b><span>{d(ctx.bank.accountMasked)}</span>
-          <b>Bank</b><span>{d(ctx.bank.bankName)}</span>
-          <b>IFC Code</b><span>{d(ctx.bank.ifscCode)}</span>
-          <div className="dsf-row"><label>ClosingBalance</label>{ro(money(t.net))}</div>
-        </div>
+        </section>
+        <section className="fsf-card fsf-bank">
+          <h2>Bank Details</h2>
+          <dl>
+            <div><dt>AccountName</dt><dd>{d(ctx.bank.accountName ?? ctx.driverName)}</dd></div>
+            <div><dt>Account No</dt><dd>{d(ctx.bank.accountMasked)}</dd></div>
+            <div><dt>Bank</dt><dd>{d(ctx.bank.bankName)}</dd></div>
+            <div><dt>IFC Code</dt><dd>{d(ctx.bank.ifscCode)}</dd></div>
+          </dl>
+          <div className="fsf-field fsf-calc"><span className="fsf-label">ClosingBalance</span>{ro(money(t.net))}</div>
+        </section>
       </div>
 
-      {/* ---------------- salary row */}
-      <div className="dsf-row dsf-wide">
-        <label>Total Per Day Salary</label>{num("perDaySalary", { placeholder: "Per Day Salary" })}{num("perDayFood", { placeholder: "Per Day Food" })}{ro(money(perDayTotal))}
-        <label className="dsf-inl">Halt Day Pay</label>{num("haltDayPay")}
-        <label className="dsf-inl">Travel Pay(KMs)</label>{num("travelPay")}
-        <label className="dsf-inl">Travel Details</label>
-        <input className="dsf-in dsf-grow" aria-label="Travel details" maxLength={300} value={f.travelDetails} onChange={(e) => setF({ ...f, travelDetails: e.target.value })} placeholder="Route / tickets" />
+      <div className="fsf-pay">
+        <section className="fsf-card">
+          <h2>Total Per Day Salary</h2>
+          <div className="fsf-grid">
+            <div className="fsf-field"><span className="fsf-label">Per Day Salary</span>{num("perDaySalary", { placeholder: "Per Day Salary" })}</div>
+            <div className="fsf-field"><span className="fsf-label">Per Day Food</span>{num("perDayFood", { placeholder: "Per Day Food" })}</div>
+            <div className="fsf-field fsf-calc"><span className="fsf-label">Total Per Day Salary</span>{ro(money(perDayTotal))}</div>
+          </div>
+        </section>
+        <section className="fsf-card">
+          <h2>Travel</h2>
+          <div className="fsf-grid fsf-grid-travel">
+            <div className="fsf-field fsf-calc"><span className="fsf-label">Travel Pay(KMs)</span><input className="dsf-in num-input" readOnly aria-label="Travel Pay, open KM and rate entry" aria-haspopup="dialog" title="Click to enter Travel KM and rate per KM"
+          value={travelPayPaise(f.n) ? (travelPayPaise(f.n) / 100).toFixed(2) : ""} placeholder="KM x rate" style={{ cursor: "pointer" }}
+          onClick={() => setPanel("travel")} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setPanel("travel"); } }} />
+              <small>{travelUsed ? `${f.n.travelKm || 0} km × ₹${f.n.travelRate || 0} per km` : "Click to enter KM and rate"}</small></div>
+            <div className="fsf-field"><span className="fsf-label">Travel Details</span><input className="dsf-in dsf-grow" aria-label="Travel details" maxLength={300} value={f.travelDetails} onChange={(e) => setF({ ...f, travelDetails: e.target.value })} placeholder="Route / tickets" /></div>
+          </div>
+        </section>
       </div>
 
-      <div className="dsf-body">
-        {/* ---------------- left: KM, fuel, days */}
-        <div className="dsf-left">
+      <div className="fsf-body">
+        <section className="fsf-card dsf-left">
+          <h2>Mileage &amp; Days</h2>
           <div className="dsf-grid2">
             <label>Opening KM</label>{num("openingKm")}<label>Est.Budget Amt</label>{num("estimatedBudget")}
             <label>Closing KM</label>{num("closingKm")}<label>Estimated KM</label>{num("estimatedKm")}
@@ -574,14 +613,11 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
           <div className="dsf-days">
             <label>On Road Days</label>{num("onRoadDays", { w: "dsf-w-xs" })}{ro(money(earn("On Road Days Salary")))}
             <label>On Road Sunday</label>{num("onRoadSundays", { w: "dsf-w-xs" })}{ro(money(earn("On Road Sunday Salary")))}
-            <label>Halt Days</label>{num("haltDays", { w: "dsf-w-xs" })}{ro(money(earn("Halt Day Pay")))}
-            <label>Over Time</label>{num("overtimeHours", { w: "dsf-w-xs", placeholder: "Hrs" })}{num("overtimeRate", { placeholder: "Rate / hr" })}
           </div>
-          {days && <p className="dsf-hint">Campaign: {days.calendar} calendar days · {days.onRoadDays} weekdays · {days.calendar - days.onRoadDays} Sundays ({ctx.campaign.sundayHalt ? "Sunday halt" : "Sundays on road"}). Food {money(earn("Food (Per Day)"))} · Overtime {money(earn("Overtime"))}.</p>}
-        </div>
-
-        {/* ---------------- right: expense claims */}
-        <div className="dsf-right">
+          {days && <p className="dsf-hint">Campaign: {days.calendar} calendar days · {days.onRoadDays} weekdays · {days.calendar - days.onRoadDays} Sundays ({ctx.campaign.sundayHalt ? "not paid: Sunday halt" : "on road"}). Food {money(earn("Food (Per Day)"))}.</p>}
+        </section>
+        <section className="fsf-card fsf-claims-card">
+          <h2>Expense Claims</h2>
           <div className="dsf-entry">
             <Select className="dsf-in" aria-label="Expense category" value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })}>
               <option value="" />{opts.finalExpenseCategories.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
@@ -619,27 +655,28 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
             <label>Total Cliam Amount</label>{ro(money(t.claimed))}
             <label>Total Reject Amount</label>{ro(money(t.rejected))}
           </div>
-        </div>
+        </section>
       </div>
 
-      {/* ---------------- deductions + net */}
-      <div className="dsf-foot">
-        <div className="dsf-foot-left">
-          <div className="dsf-row"><label>Previous Salary Deduction</label><input className="dsf-in num-input" inputMode="decimal" aria-label="Previous salary deduction" value={f.deductions.previousSalary} onChange={(e) => setD("previousSalary", sanitizeAmount(e.target.value))} />
-            <label className="dsf-inl">Vehicle Damage Deduction</label><input className="dsf-in num-input" inputMode="decimal" aria-label="Vehicle damage deduction" value={f.deductions.vehicleDamage} onChange={(e) => setD("vehicleDamage", sanitizeAmount(e.target.value))} /></div>
-          <div className="dsf-row"><label>Reason for deduction</label><input className="dsf-in dsf-grow" aria-label="Reason for deduction" maxLength={200} value={f.otherRemark} onChange={(e) => setF({ ...f, otherRemark: e.target.value })} />
-            <input className="dsf-in num-input" inputMode="decimal" aria-label="Other deduction" placeholder="Other deduction" value={f.deductions.other} onChange={(e) => setD("other", sanitizeAmount(e.target.value))} /></div>
-          {existing && <div className="dsf-row"><label>Resubmission note</label><input className="dsf-in dsf-grow" maxLength={500} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="What was corrected" /></div>}
-        </div>
-        <div className="dsf-foot-right">
-          <label>Total Deduction Amount</label>{ro(money(t.totalDeduction))}
-          <label>Mileage Short Deduction</label>
-          <span className="dsf-stack">
+      <div className="fsf-foot">
+        <section className="fsf-card">
+          <h2>Deductions</h2>
+          <div className="fsf-grid">
+            <div className="fsf-field"><span className="fsf-label">Previous Salary Deduction</span><input className="dsf-in num-input" inputMode="decimal" aria-label="Previous salary deduction" value={f.deductions.previousSalary} onChange={(e) => setD("previousSalary", sanitizeAmount(e.target.value))} />{!!f.driverChangeAmount && <small>Minimum {money(pv(f.driverChangeAmount))} (driver change)</small>}</div>
+            <div className="fsf-field"><span className="fsf-label">Vehicle Damage Deduction</span><input className="dsf-in num-input" inputMode="decimal" aria-label="Vehicle damage deduction" value={f.deductions.vehicleDamage} onChange={(e) => setD("vehicleDamage", sanitizeAmount(e.target.value))} /></div>
+            <div className="fsf-field"><span className="fsf-label">Mileage Short Deduction</span><span className="dsf-stack">
             <input className="dsf-in num-input" inputMode="decimal" aria-label="Mileage short deduction" value={f.deductions.mileageShort} onChange={(e) => setD("mileageShort", sanitizeAmount(e.target.value))} />
             {t.mileageShortSuggested > 0 && <button type="button" className="dsf-link" onClick={() => setD("mileageShort", (t.mileageShortSuggested / 100).toFixed(2))}>Use {money(t.mileageShortSuggested)} ({t.variationLitres} l excess)</button>}
-          </span>
-          <label>Net Amount</label>{ro(money(t.net), t.net < 0 ? "dsf-neg" : undefined)}
-        </div>
+          </span></div>
+            <div className="fsf-field fsf-span2"><span className="fsf-label">Reason for deduction</span><input className="dsf-in dsf-grow" aria-label="Reason for deduction" maxLength={200} value={f.otherRemark} onChange={(e) => setF({ ...f, otherRemark: e.target.value })} /></div>
+            <div className="fsf-field"><span className="fsf-label">Other deduction</span><input className="dsf-in num-input" inputMode="decimal" aria-label="Other deduction" placeholder="Other deduction" value={f.deductions.other} onChange={(e) => setD("other", sanitizeAmount(e.target.value))} /></div>
+            {existing && <div className="fsf-field fsf-span-all"><span className="fsf-label">Resubmission note</span><input className="dsf-in" maxLength={500} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="What was corrected" /></div>}
+          </div>
+        </section>
+        <section className="fsf-card fsf-summary" aria-label="Settlement summary">
+          <div className="fsf-total"><span>Total Deduction Amount</span>{ro(money(t.totalDeduction))}</div>
+          <div className="fsf-total fsf-net"><span>Net Amount</span>{ro(money(t.net), t.net < 0 ? "dsf-neg" : undefined)}</div>
+        </section>
       </div>
 
       {errors.length > 0 && <div className="alert" role="alert">{errors.map((e) => <div key={e}>{e}</div>)}</div>}
@@ -651,6 +688,16 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
         <Link className="dsf-btn dsf-btn-plain" href={base} onClick={(e) => { if (!confirmLeave()) e.preventDefault(); }}>Close</Link>
       </div>
 
+      {panel === "travel" && (
+        <Modal title="Travel KM Payment" onClose={() => setPanel(null)}>
+          <label className="field"><span>Travel KM</span><input className="num-input" inputMode="decimal" autoFocus value={f.n.travelKm} onChange={(e) => setTravel("travelKm", sanitizeAmount(e.target.value))} /></label>
+          <label className="field"><span>Rate per KM (₹)</span><input className="num-input" inputMode="decimal" value={f.n.travelRate} onChange={(e) => setTravel("travelRate", sanitizeAmount(e.target.value))} /></label>
+          <p><strong>Travel Pay: {money(travelPayPaise(f.n))}</strong></p>
+          {!travelUsed && !!pv(f.n.travelPay) && <p className="muted">Entering KM and rate replaces the saved amount.</p>}
+          {travelUsed && !(pv(f.n.travelKm) && pv(f.n.travelRate)) && <p className="field-error" role="alert">Enter both the Travel KM and the rate per KM</p>}
+          <div className="actions-row"><button type="button" className="btn btn-primary" onClick={() => setPanel(null)}>Done</button></div>
+        </Modal>
+      )}
       {panel === "suspense" && (
         <Modal title="Suspense Amount (advances paid)" onClose={() => setPanel(null)}>
           <table className="table ds-mini"><thead><tr><th>Source</th><th>Date</th><th>Details</th><th className="ds-amt">Amount</th></tr></thead>
@@ -682,4 +729,4 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
       )}
     </div>
   );
-}
+}

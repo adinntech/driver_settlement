@@ -10,7 +10,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { Server } from "node:http";
 import mongoose from "mongoose";
-import type { NumberStore } from "../src/services/numberAllocator.js";
 
 // SAFETY: application modules are imported dynamically, only after MONGO_URI points at the throw-away test database. A static
 // import would run before the lines above (ES module imports are hoisted) and config would read the development database
@@ -18,8 +17,6 @@ import type { NumberStore } from "../src/services/numberAllocator.js";
 const { config: cfg } = await import("../src/config/index.js");
 cfg.mongoUri = process.env.MONGO_URI!;
 const { budgetTotal, computeBudget, diffBudget, validateBudget } = await import("../src/validators/budget.validator.js");
-const { generateDisplayNumber } = await import("../src/utils/numbers.js");
-const { allocateOne } = await import("../src/services/numberAllocator.js");
 const { normalizeIndianPhone } = await import("../src/utils/phone.js");
 const { addDaysYmd: shiftDay, todayIst: todayYmd } = await import("../src/utils/dates.js");
 /** Fixture dates relative to today: campaign start dates must be today or up to 7 days back. */
@@ -141,21 +138,6 @@ test("phone: +91 canonical form, rejects letters/specials/short/long, no duplica
     assert.equal(normalizeIndianPhone(bad), null, String(bad));
 });
 
-test("display number is 4 digits, 5 digits when requested, and allocator escalates when full", async () => {
-  assert.match(generateDisplayNumber(), /^\d{4}$/);
-  assert.match(generateDisplayNumber(true), /^\d{5}$/);
-  const used = new Set<string>();
-  const store: NumberStore = {
-    exists: async (s) => used.has(s.displayNumber),
-    insert: async (s) => {
-      used.add(s.displayNumber);
-    },
-  };
-  for (let n = 1000; n <= 9999; n++) used.add(String(n));
-  const set = await allocateOne(store, 1);
-  assert.match(set.displayNumber, /^\d{5}$/);
-});
-
 const { default: app } = await import("../src/app.js");
 const { connectDB } = await import("../src/db/connect.js");
 const { seedUsers } = await import("../src/services/auth.service.js");
@@ -189,13 +171,13 @@ const login = async (role: string, u: string, p: string) =>
   (await call("/auth/login", "POST", { role, username: u, password: p })).body.data.token as string;
 
 const roadshow = {
-  projectCode: "40000001", billingName: "Sapphire Foods (KFC)", stateCode: "33", numberOfVans: 2,
+  projectCode: "40000001", billingName: "Sapphire Foods (KFC)", stateCode: "33", numberOfVans: 2, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 2 }],
   startDate: day(0), endDate: day(1), reportingDate: day(0),
   sundayHalt: "NO", paSystem: "YES", reportingLocations: ["Madurai", "Salem"],
 };
 const signage = {
   projectCode: "40000002", date: day(-3), client: "DALMIA", jobSheetNumber: "22403", location: "RAMNAD",
-  numberOfVehicles: 1, fromDate: day(-1), toDate: day(4),
+  numberOfVehicles: 1, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 1 }], fromDate: day(-1), toDate: day(4),
 };
 
 test("roadshow contact number is stored as +91; invalid phone rejected by the API", async () => {
@@ -218,7 +200,6 @@ test("budget context keeps existing fields; adds jobSheet / PA system; reporting
   assert.equal(rc.budget, null);
   assert.equal(rc.context.client, "Sapphire Foods (KFC)");
   assert.equal(rc.context.projectType, "ROADSHOW");
-  assert.equal(rc.context.displayNumber, r.vehicles[0].displayNumber);
   assert.equal(rc.context.campaignFrom, day(0));
   assert.equal(rc.context.campaignTo, day(1));
   assert.equal(rc.context.reportingDate, day(0));

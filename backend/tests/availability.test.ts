@@ -9,6 +9,7 @@ process.env.RSOM_USERNAME = "RSOM";
 process.env.RSOM_PASSWORD = "pass3";
 process.env.STORAGE_TYPE = "local";
 
+import { perVehicleTrackups } from "./legacyNumbers.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Server } from "node:http";
@@ -204,16 +205,16 @@ const mkBudget = (tv: any, projectId: string, state: Record<string, unknown>) =>
   const t = await T();
   const r = await call("/tracking", "POST", {
     projectType: "SIGNAGE",
-    details: { projectCode: "13000001", client: "Pepsi India", jobSheetNumber: "ZZPEP-77", location: "Coimbatore", date: d(0), fromDate: d(0), toDate: d(9), numberOfVehicles: 14 },
+    details: { projectCode: "13000001", client: "Pepsi India", jobSheetNumber: "ZZPEP-77", location: "Coimbatore", date: d(0), fromDate: d(0), toDate: d(9), numberOfVehicles: 14, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 14 }] },
   }, t.rsop);
   assert.equal(r.status, 201, JSON.stringify(r.body));
-  proj = r.body.data;
+  proj = await perVehicleTrackups<any>(r.body.data);
   const rr = await call("/tracking", "POST", {
     projectType: "ROADSHOW",
-    details: { projectCode: "13000002", billingName: "KFC", stateCode: "33", startDate: d(0), endDate: d(6), reportingDate: d(2), sundayHalt: "NO", numberOfVans: 2, reportingLocations: ["Chennai", "Trichy"] },
+    details: { projectCode: "13000002", billingName: "KFC", stateCode: "33", startDate: d(0), endDate: d(6), reportingDate: d(2), sundayHalt: "NO", numberOfVans: 2, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 2 }], reportingLocations: ["Chennai", "Trichy"] },
   }, t.rsop);
   assert.equal(rr.status, 201, JSON.stringify(rr.body));
-  road = rr.body.data;
+  road = await perVehicleTrackups<any>(rr.body.data);
   const approved = { approvalStatus: "APPROVED", approvedVersion: 1 };
   for (let i = 0; i < 8; i++) await mkBudget(proj.vehicles[i], proj._id, approved); // 0..7: approved
   await mkBudget(proj.vehicles[8], proj._id, { approvalStatus: "PENDING", submittedVersion: 1 });
@@ -224,10 +225,10 @@ const mkBudget = (tv: any, projectId: string, state: Record<string, unknown>) =>
   // vehicles[13]: no budget at all
   for (const tv of road.vehicles) await mkBudget(tv, road._id, approved);
   const ar = await call("/tracking", "POST", {
-    projectType: "SIGNAGE", details: { projectCode: "13000003", client: "Auto Motors", jobSheetNumber: "ZZAUTO-1", location: "Salem", date: d(0), fromDate: d(0), toDate: d(9), numberOfVehicles: 12 },
+    projectType: "SIGNAGE", details: { projectCode: "13000003", client: "Auto Motors", jobSheetNumber: "ZZAUTO-1", location: "Salem", date: d(0), fromDate: d(0), toDate: d(9), numberOfVehicles: 12, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 12 }] },
   }, t.rsop);
   assert.equal(ar.status, 201, JSON.stringify(ar.body));
-  auto = ar.body.data;
+  auto = await perVehicleTrackups<any>(ar.body.data);
   for (const tv of auto.vehicles) await mkBudget(tv, auto._id, approved); // a pool of approved vehicles for the release tests
 }
 const trk: string[] = proj.vehicles.map((x: any) => x.trackupNumber);
@@ -427,7 +428,7 @@ test("a vehicle holds one allocation: same project vehicle on two vehicles is re
   const holder = (await call("/vehicles", "POST", full({ availability: use({ trackupNumber: trk[6] }) }), t.rbp)).body.data;
   const re = await call(`/vehicles/${holder._id}`, "PUT", { ...holder, availability: use({ trackupNumber: trk[7] }) }, t.rbp);
   assert.equal(re.status, 409);
-  assert.match(re.body.message, /already allocated to trackup/);
+  assert.match(re.body.message, /already allocated to PIF/);
   // ... but extending the same project is fine
   const ext = await call(`/vehicles/${holder._id}`, "PUT", { ...holder, availability: use({ trackupNumber: trk[6] }, { nextAvailableDate: d(8) }) }, t.rbp);
   assert.equal(ext.status, 200, JSON.stringify(ext.body));

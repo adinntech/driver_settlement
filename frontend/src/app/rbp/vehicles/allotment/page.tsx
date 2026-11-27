@@ -66,7 +66,7 @@ function Allotment() {
                 <thead>
                   <tr>
                     <th>Client / Billing</th><th>Type</th><th>Trackup No</th><th>PIF No</th><th>Bill No</th><th>Project</th><th>Period</th>
-                    <th>Vehicles</th><th>Approved Budget</th><th>Approved On</th><th>Budget</th><th>Allotted Vehicle</th><th>Driver</th><th />
+                    <th>Vehicles</th><th>Vehicle Type</th><th>Approved Budget</th><th>Approved On</th><th>Budget</th><th>Allotted Vehicle</th><th>Driver</th><th />
                   </tr>
                 </thead>
                 <tbody>
@@ -80,6 +80,7 @@ function Allotment() {
                       <td>{p.projectName}</td>
                       <td>{projectPeriod(p.startDate, p.endDate, formatDate)}</td>
                       <td>{p.vehicleCount ?? "—"}</td>
+                      <td>{p.vehicleType ?? "—"}</td>
                       <td>{formatInr(p.budgetAmount)}</td>
                       <td>{fmtInstant(p.approvedAt)}</td>
                       <td><span className="badge badge-av-green">Approved</span></td>
@@ -139,10 +140,10 @@ function Allotment() {
       {action?.kind === "change" && <ChangeModal project={action.project} onClose={() => setAction(null)} onDone={done} />}
       {action?.kind === "extend" && <ExtendModal project={action.project} onClose={() => setAction(null)} onDone={done} />}
       {action?.kind === "assignDriver" && action.project.allotment && (
-        <AssignDriverModal target={{ _id: action.project.allotment._id, vehicleNo: action.project.allotment.vehicleNo, trackupNumber: action.project.trackupNumber, projectName: action.project.projectName }} onClose={() => setAction(null)} onDone={done} />
+        <AssignDriverModal target={{ _id: action.project.allotment._id, vehicleNo: action.project.allotment.vehicleNo, trackupNumber: action.project.trackupNumber, pifNumber: action.project.pifNumber, projectName: action.project.projectName }} onClose={() => setAction(null)} onDone={done} />
       )}
       {action?.kind === "changeDriver" && action.project.allotment?.driver && (
-        <ChangeDriverModal target={{ _id: action.project.allotment._id, vehicleNo: action.project.allotment.vehicleNo, trackupNumber: action.project.trackupNumber, projectName: action.project.projectName }}
+        <ChangeDriverModal target={{ _id: action.project.allotment._id, vehicleNo: action.project.allotment.vehicleNo, trackupNumber: action.project.trackupNumber, pifNumber: action.project.pifNumber, projectName: action.project.projectName }}
           current={action.project.allotment.driver} onClose={() => setAction(null)} onDone={done} />
       )}
       {action?.kind === "release" && <ReleaseModal project={action.project} onClose={() => setAction(null)} onDone={done} />}

@@ -5,9 +5,9 @@ export interface ExpenseOption { key: string; label: string; descriptionRequired
 export interface RsaOptions { expenseOptions: ExpenseOption[]; dieselPaymentModes: string[]; paymentFor: { key: "ROADSHOW" | "SIGNAGE"; label: string }[] }
 
 export interface RsaProjectRow {
-  trackingVehicle: string; allotment: string; trackupNumber: string; pifNumber: string; displayNumber: string | null; projectType: "ROADSHOW" | "SIGNAGE"; clientName: string;
+  trackingVehicle: string; allotment: string; trackupNumber: string; pifNumber: string; projectType: "ROADSHOW" | "SIGNAGE"; clientName: string;
   projectName: string | null; vehicleNo: string | null; driverNumber: string | null; driverName: string | null; campaignFromDate: string | null; campaignToDate: string | null;
-  approvedBudgetAmount: number | null; budgetVersion: number | null; vehicleAllottedAt: string | null; driverAssignedAt: string | null; allotmentStatus: string;
+  approvedBudgetAmount: number | null; budgetVersion: number | null; requestedVehicleType?: string | null; vehicleAllottedAt: string | null; driverAssignedAt: string | null; allotmentStatus: string;
   paymentCount: number; paymentStatus: "PENDING" | "ENTERED"; lastPaymentAt: string | null;
 }
 export interface RsaContext extends RsaProjectRow {
@@ -21,7 +21,7 @@ export interface RsaPaymentRow {
   dieselEntries: { amount: number; mode: string | null; reference: string | null; entryAt: string }[];
   expenses: { optionKey: string; optionLabel: string; description: string | null; amount: number; deduct: boolean; isDefault: boolean }[];
   vehicleNo: string | null; driverNumber: string | null; driverName: string | null; clientName: string | null; campaignFromDate: string | null; campaignToDate: string | null;
-  pifNumber?: string | null; billNumber?: string | null; displayNumber?: string | null;
+  pifNumber?: string | null; billNumber?: string | null;
 }
 
 // ---- amounts: digits with up to 2 decimals; integer paise internally so currency never drifts

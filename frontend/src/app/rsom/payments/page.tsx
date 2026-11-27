@@ -3,7 +3,7 @@
 import AppShell from "@/components/AppShell";
 import { PaymentQueue } from "@/components/settlement/PaymentQueue";
 
-/** RSOM approves or rejects daily vehicle payments. Final settlements are visible here but are decided by RSO. */
+/** RSOM approves or rejects daily vehicle payments. Final settlements are not listed here: RSO decides them. */
 export default function RsomPayments() {
   return (
     <AppShell role="RSOM">
