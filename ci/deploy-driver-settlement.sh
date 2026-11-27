@@ -11,8 +11,8 @@ case $SVC in
   backend)  PORT=3017; URL=http://127.0.0.1:3017/api/health ;;
 esac
 export COMPOSE_IGNORE_ORPHANS=1
-exec 9>"/var/lock/deploy-driver-settlement-$SVC.lock"
-flock -n 9 || { echo "deploy already running"; exit 1; }
+exec 9>/var/lock/deploy-driver-settlement.lock   # shared: frontend and backend deploys run one at a time
+flock -w 600 9 || { echo "another driver-settlement deploy is still running"; exit 1; }
 cd "$DIR"
 [[ -f .env ]] || { echo ".env missing"; exit 1; }
 docker inspect -f '{{.State.Running}}' mongodb | grep -q true || { echo "mongodb not running"; exit 1; }
