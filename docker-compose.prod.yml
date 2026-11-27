@@ -32,6 +32,8 @@ services:
         NEXT_PUBLIC_BASE_PATH: ${NEXT_PUBLIC_BASE_PATH:-/driver-settlement}
     image: driver-settlement-frontend:latest
     container_name: driver-settlement-frontend
+    environment:
+      NEXT_PUBLIC_ENVIRONMENT: ${NEXT_PUBLIC_ENVIRONMENT:-live}
     restart: unless-stopped
     ports:
       - "127.0.0.1:3016:3000"

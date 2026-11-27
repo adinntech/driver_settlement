@@ -219,6 +219,12 @@
       "namedRegex": "^/rsa/driver\\-payments/new(?:/)?$"
     },
     {
+      "page": "/rsa/iocl-data",
+      "regex": "^/rsa/iocl\\-data(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rsa/iocl\\-data(?:/)?$"
+    },
+    {
       "page": "/rsa/new",
       "regex": "^/rsa/new(?:/)?$",
       "routeKeys": {},

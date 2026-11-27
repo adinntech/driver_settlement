@@ -1,7 +1,11 @@
 import type { NextConfig } from "next";
 
+// Must match BASE_PATH in src/utils/config.ts (config files cannot use the "@/" alias).
+const basePath =
+  process.env.NEXT_PUBLIC_BASE_PATH ?? (process.env.NEXT_PUBLIC_ENVIRONMENT === "live" ? "/driver-settlement" : "");
+
 const nextConfig: NextConfig = {
-  basePath: process.env.NEXT_PUBLIC_BASE_PATH || undefined,
+  basePath: basePath || undefined,
   /* config options here */
   cacheComponents: true,
   partialPrefetching: true,

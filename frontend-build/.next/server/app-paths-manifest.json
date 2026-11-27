@@ -28,6 +28,7 @@
   "/rsa/driver-payments/final/page": "app/rsa/driver-payments/final/page.js",
   "/rsa/driver-payments/new/page": "app/rsa/driver-payments/new/page.js",
   "/rsa/driver-payments/page": "app/rsa/driver-payments/page.js",
+  "/rsa/iocl-data/page": "app/rsa/iocl-data/page.js",
   "/rsa/new/page": "app/rsa/new/page.js",
   "/rsa/on-road-vehicles/page": "app/rsa/on-road-vehicles/page.js",
   "/rsa/page": "app/rsa/page.js",
