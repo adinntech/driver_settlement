@@ -1,0 +1,319 @@
+{
+  "version": 3,
+  "pages404": true,
+  "appType": "app",
+  "caseSensitive": false,
+  "basePath": "/driver-settlement",
+  "redirects": [
+    {
+      "source": "/driver-settlement/",
+      "destination": "/driver-settlement",
+      "basePath": false,
+      "internal": true,
+      "priority": true,
+      "statusCode": 308,
+      "regex": "^/driver-settlement/$"
+    },
+    {
+      "source": "/:path+/",
+      "destination": "/:path+",
+      "internal": true,
+      "priority": true,
+      "statusCode": 308,
+      "regex": "^(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))/$"
+    },
+    {
+      "source": "/driver-settlement/rbp/vehicles/drivers/:path*",
+      "destination": "/driver-settlement/rbp/drivers/:path*",
+      "statusCode": 308,
+      "regex": "^(?!/driver-settlement/_next)/driver-settlement/rbp/vehicles/drivers(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))?(?:/)?$"
+    }
+  ],
+  "headers": [],
+  "onMatchHeaders": [],
+  "rewrites": {
+    "beforeFiles": [],
+    "afterFiles": [],
+    "fallback": []
+  },
+  "dynamicRoutes": [],
+  "staticRoutes": [
+    {
+      "page": "/",
+      "regex": "^/(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/(?:/)?$"
+    },
+    {
+      "page": "/_global-error",
+      "regex": "^/_global\\-error(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_global\\-error(?:/)?$"
+    },
+    {
+      "page": "/_not-found",
+      "regex": "^/_not\\-found(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_not\\-found(?:/)?$"
+    },
+    {
+      "page": "/favicon.ico",
+      "regex": "^/favicon\\.ico(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/favicon\\.ico(?:/)?$"
+    },
+    {
+      "page": "/login",
+      "regex": "^/login(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/login(?:/)?$"
+    },
+    {
+      "page": "/rbp",
+      "regex": "^/rbp(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rbp(?:/)?$"
+    },
+    {
+      "page": "/rbp/budget",
+      "regex": "^/rbp/budget(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rbp/budget(?:/)?$"
+    },
+    {
+      "page": "/rbp/drivers",
+      "regex": "^/rbp/drivers(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rbp/drivers(?:/)?$"
+    },
+    {
+      "page": "/rbp/drivers/edit",
+      "regex": "^/rbp/drivers/edit(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rbp/drivers/edit(?:/)?$"
+    },
+    {
+      "page": "/rbp/drivers/view",
+      "regex": "^/rbp/drivers/view(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rbp/drivers/view(?:/)?$"
+    },
+    {
+      "page": "/rbp/on-road",
+      "regex": "^/rbp/on\\-road(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rbp/on\\-road(?:/)?$"
+    },
+    {
+      "page": "/rbp/on-road/deliver",
+      "regex": "^/rbp/on\\-road/deliver(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rbp/on\\-road/deliver(?:/)?$"
+    },
+    {
+      "page": "/rbp/on-road/view",
+      "regex": "^/rbp/on\\-road/view(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rbp/on\\-road/view(?:/)?$"
+    },
+    {
+      "page": "/rbp/on-road-vehicles",
+      "regex": "^/rbp/on\\-road\\-vehicles(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rbp/on\\-road\\-vehicles(?:/)?$"
+    },
+    {
+      "page": "/rbp/payments",
+      "regex": "^/rbp/payments(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rbp/payments(?:/)?$"
+    },
+    {
+      "page": "/rbp/payments/daily",
+      "regex": "^/rbp/payments/daily(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rbp/payments/daily(?:/)?$"
+    },
+    {
+      "page": "/rbp/payments/final",
+      "regex": "^/rbp/payments/final(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rbp/payments/final(?:/)?$"
+    },
+    {
+      "page": "/rbp/payments/new",
+      "regex": "^/rbp/payments/new(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rbp/payments/new(?:/)?$"
+    },
+    {
+      "page": "/rbp/vehicles",
+      "regex": "^/rbp/vehicles(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rbp/vehicles(?:/)?$"
+    },
+    {
+      "page": "/rbp/vehicles/allotment",
+      "regex": "^/rbp/vehicles/allotment(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rbp/vehicles/allotment(?:/)?$"
+    },
+    {
+      "page": "/rbp/vehicles/allotment-history",
+      "regex": "^/rbp/vehicles/allotment\\-history(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rbp/vehicles/allotment\\-history(?:/)?$"
+    },
+    {
+      "page": "/rbp/vehicles/edit",
+      "regex": "^/rbp/vehicles/edit(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rbp/vehicles/edit(?:/)?$"
+    },
+    {
+      "page": "/rbp/vehicles/view",
+      "regex": "^/rbp/vehicles/view(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rbp/vehicles/view(?:/)?$"
+    },
+    {
+      "page": "/rsa",
+      "regex": "^/rsa(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rsa(?:/)?$"
+    },
+    {
+      "page": "/rsa/clearance",
+      "regex": "^/rsa/clearance(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rsa/clearance(?:/)?$"
+    },
+    {
+      "page": "/rsa/clearance/review",
+      "regex": "^/rsa/clearance/review(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rsa/clearance/review(?:/)?$"
+    },
+    {
+      "page": "/rsa/driver-payments",
+      "regex": "^/rsa/driver\\-payments(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rsa/driver\\-payments(?:/)?$"
+    },
+    {
+      "page": "/rsa/driver-payments/daily",
+      "regex": "^/rsa/driver\\-payments/daily(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rsa/driver\\-payments/daily(?:/)?$"
+    },
+    {
+      "page": "/rsa/driver-payments/final",
+      "regex": "^/rsa/driver\\-payments/final(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rsa/driver\\-payments/final(?:/)?$"
+    },
+    {
+      "page": "/rsa/driver-payments/new",
+      "regex": "^/rsa/driver\\-payments/new(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rsa/driver\\-payments/new(?:/)?$"
+    },
+    {
+      "page": "/rsa/new",
+      "regex": "^/rsa/new(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rsa/new(?:/)?$"
+    },
+    {
+      "page": "/rsa/on-road-vehicles",
+      "regex": "^/rsa/on\\-road\\-vehicles(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rsa/on\\-road\\-vehicles(?:/)?$"
+    },
+    {
+      "page": "/rsa/payment",
+      "regex": "^/rsa/payment(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rsa/payment(?:/)?$"
+    },
+    {
+      "page": "/rsa/settlements",
+      "regex": "^/rsa/settlements(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rsa/settlements(?:/)?$"
+    },
+    {
+      "page": "/rsa/settlements/completed",
+      "regex": "^/rsa/settlements/completed(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rsa/settlements/completed(?:/)?$"
+    },
+    {
+      "page": "/rso",
+      "regex": "^/rso(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rso(?:/)?$"
+    },
+    {
+      "page": "/rso/reports",
+      "regex": "^/rso/reports(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rso/reports(?:/)?$"
+    },
+    {
+      "page": "/rsom",
+      "regex": "^/rsom(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rsom(?:/)?$"
+    },
+    {
+      "page": "/rsom/payments",
+      "regex": "^/rsom/payments(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rsom/payments(?:/)?$"
+    },
+    {
+      "page": "/rsom/review",
+      "regex": "^/rsom/review(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rsom/review(?:/)?$"
+    },
+    {
+      "page": "/rsop",
+      "regex": "^/rsop(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rsop(?:/)?$"
+    },
+    {
+      "page": "/rsop/new",
+      "regex": "^/rsop/new(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rsop/new(?:/)?$"
+    }
+  ],
+  "dataRoutes": [],
+  "rsc": {
+    "header": "rsc",
+    "varyHeader": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+    "prefetchHeader": "next-router-prefetch",
+    "didPostponeHeader": "x-nextjs-postponed",
+    "contentTypeHeader": "text/x-component",
+    "suffix": ".rsc",
+    "prefetchSegmentHeader": "next-router-segment-prefetch",
+    "prefetchSegmentSuffix": ".segment.rsc",
+    "prefetchSegmentDirSuffix": ".segments",
+    "clientParamParsing": true,
+    "dynamicRSCPrerender": true
+  },
+  "rewriteHeaders": {
+    "pathHeader": "x-nextjs-rewritten-path",
+    "queryHeader": "x-nextjs-rewritten-query"
+  },
+  "ppr": {
+    "chain": {
+      "headers": {
+        "next-resume": "1"
+      }
+    }
+  }
+}

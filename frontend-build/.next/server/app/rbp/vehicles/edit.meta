@@ -1,0 +1,46 @@
+{
+  "status": 200,
+  "headers": {
+    "link": "</driver-settlement/_next/static/media/07a39a8a4660cc7c-s.p.0r6juujl39pe6.woff2>; rel=preload; as=\"font\"; crossorigin=\"\"; type=\"font/woff2\", </driver-settlement/_next/static/media/605ce01b664af129-s.p.0wgildi0cnwt9.woff2>; rel=preload; as=\"font\"; crossorigin=\"\"; type=\"font/woff2\"",
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/rbp/layout,_N_T_/rbp/vehicles/layout,_N_T_/rbp/vehicles/edit/layout,_N_T_/rbp/vehicles/edit/page,_N_T_/rbp/vehicles/edit"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/rbp/vehicles/edit/__PAGE__"
+  ],
+  "prefetchHints": {
+    "hints": 49216,
+    "slots": {
+      "children": {
+        "hints": 49248,
+        "slots": {
+          "children": {
+            "hints": 49248,
+            "slots": {
+              "children": {
+                "hints": 49248,
+                "slots": {
+                  "children": {
+                    "hints": 49312,
+                    "slots": null
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "routeCache": {
+    "key": "/route-cache/APP_PAGE/cad75ab3dce585c005a7dd64c6040d7c1ebf5814c31752f75634dc454f9b2392/$/rbp/vehicles/edit",
+    "owner": {
+      "kind": "APP_PAGE",
+      "sourceRoute": "/rbp/vehicles/edit/page"
+    },
+    "isFallback": false
+  }
+}

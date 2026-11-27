@@ -1,0 +1,46 @@
+{
+  "status": 200,
+  "headers": {
+    "link": "</driver-settlement/_next/static/media/07a39a8a4660cc7c-s.p.0r6juujl39pe6.woff2>; rel=preload; as=\"font\"; crossorigin=\"\"; type=\"font/woff2\", </driver-settlement/_next/static/media/605ce01b664af129-s.p.0wgildi0cnwt9.woff2>; rel=preload; as=\"font\"; crossorigin=\"\"; type=\"font/woff2\"",
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/rsa/layout,_N_T_/rsa/settlements/layout,_N_T_/rsa/settlements/completed/layout,_N_T_/rsa/settlements/completed/page,_N_T_/rsa/settlements/completed"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/rsa/settlements/completed/__PAGE__"
+  ],
+  "prefetchHints": {
+    "hints": 49216,
+    "slots": {
+      "children": {
+        "hints": 49248,
+        "slots": {
+          "children": {
+            "hints": 49248,
+            "slots": {
+              "children": {
+                "hints": 49248,
+                "slots": {
+                  "children": {
+                    "hints": 49312,
+                    "slots": null
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "routeCache": {
+    "key": "/route-cache/APP_PAGE/5bd1bfd2dad5bd34e309a2f9b4e65128b48bd4492701b5bba36dababf944e96d/$/rsa/settlements/completed",
+    "owner": {
+      "kind": "APP_PAGE",
+      "sourceRoute": "/rsa/settlements/completed/page"
+    },
+    "isFallback": false
+  }
+}

@@ -1,0 +1,3 @@
+module.exports=[1883,a=>{"use strict";var b=a.i(87924),c=a.i(15149),d=a.i(37125);a.s(["default",0,function(){return(0,b.jsxs)(c.f,{role:"RSOM",children:[(0,b.jsx)("div",{className:"page-head",children:(0,b.jsxs)("div",{children:[(0,b.jsx)("h1",{children:"Daily Payment Approvals"}),(0,b.jsx)("p",{className:"muted",children:"Approve or reject daily vehicle payments submitted by RBP. Final driver settlements are approved by RSO."})]})}),(0,b.jsx)(d.f,{mode:"queue",defaultCategory:"DAILY"})]})}])}];
+
+//# sourceMappingURL=src_app_rsom_payments_page_tsx_19nb66-5wqdo6._.js.map

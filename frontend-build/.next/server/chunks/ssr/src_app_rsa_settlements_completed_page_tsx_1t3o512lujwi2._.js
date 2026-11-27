@@ -1,0 +1,3 @@
+module.exports=[73538,a=>{"use strict";var b=a.i(87924),c=a.i(15149),d=a.i(37125);a.s(["default",0,function(){return(0,b.jsxs)(c.f,{role:"RSA",children:[(0,b.jsx)("div",{className:"page-head",children:(0,b.jsxs)("div",{children:[(0,b.jsx)("h1",{children:"Payment Completed"}),(0,b.jsx)("p",{className:"muted",children:"Daily and final payments that accounts have paid, with their payment reference."})]})}),(0,b.jsx)(d.f,{mode:"completed"})]})}])}];
+
+//# sourceMappingURL=src_app_rsa_settlements_completed_page_tsx_1t3o512lujwi2._.js.map
