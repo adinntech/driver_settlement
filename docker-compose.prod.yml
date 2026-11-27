@@ -3,7 +3,9 @@
 name: driver-settlement
 services:
   backend:
-    build: ./backend
+    build:
+      context: ./backend-build
+      dockerfile: ../deploy/backend.Dockerfile
     image: driver-settlement-backend:latest
     container_name: driver-settlement-backend
     restart: unless-stopped

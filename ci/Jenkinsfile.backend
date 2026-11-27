@@ -1,14 +1,15 @@
-// Job: "driver settlement backend". Trigger on branch main; deploys only if backend/** changed.
-// Placeholders to confirm: github-driver-settlement and the SSH mechanism used by existing jobs.
+// Job: "driver settlement backend". Triggered by a push to main_build.
+// Flow: developer builds the backend locally from main, copies the build into backend-build/ on main_build, pushes.
+// Jenkins then deploys ONLY the backend container from the prebuilt files (no source build, no loop).
 pipeline {
   agent any
   options { disableConcurrentBuilds(); timestamps() }
   triggers { githubPush() }
   environment { DEPLOY_HOST = 'jenkins-deploy@172.17.0.1' }
   stages {
-    stage('Checkout main') {
+    stage('Checkout main_build') {
       steps {
-        checkout([$class: 'GitSCM', branches: [[name: '*/main']],
+        checkout([$class: 'GitSCM', branches: [[name: '*/main_build']],
           userRemoteConfigs: [[url: 'https://github.com/adinntech/driver_settlement.git', credentialsId: 'github-driver-settlement']]])
       }
     }
@@ -16,7 +17,7 @@ pipeline {
       steps {
         script {
           def diff = sh(returnStdout: true, script: 'git diff --name-only HEAD~1 HEAD || true').trim()
-          env.RUN = (diff == '' || diff.split('\n').any { it.startsWith('backend/') }) ? 'yes' : 'no'
+          env.RUN = (diff == '' || diff.split('\n').any { it.startsWith('backend-build/') || it.startsWith('deploy/') || it == 'docker-compose.prod.yml' }) ? 'yes' : 'no'
         }
       }
     }
