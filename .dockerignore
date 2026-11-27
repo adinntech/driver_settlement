@@ -1,0 +1,13 @@
+# Build context is the repository root. Real .env files (including the server's) never enter an image.
+.git
+**/node_modules
+**/.next
+**/dist
+**/coverage
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+**/*.tsbuildinfo
+backend/public
+backend/.cache

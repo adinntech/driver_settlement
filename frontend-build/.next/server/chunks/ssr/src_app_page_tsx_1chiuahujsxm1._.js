@@ -1,3 +1,0 @@
-module.exports=[40777,a=>{"use strict";var b=a.i(87924),c=a.i(50944),d=a.i(72131),e=a.i(56025),f=a.i(9534),g=a.i(99568);a.s(["default",0,function(){let{user:a,ready:h}=(0,e.useAuth)(),i=(0,c.useRouter)();return(0,d.useEffect)(()=>{h&&i.replace(a?(0,f._)(a.role):"/login")},[h,a,i]),(0,b.jsx)("div",{className:"boot",children:(0,b.jsx)(g.l,{rows:3})})}])}];
-
-//# sourceMappingURL=src_app_page_tsx_1chiuahujsxm1._.js.map

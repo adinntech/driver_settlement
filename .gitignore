@@ -1,1 +1,95 @@
+# =====================================================================================================================
+# Driver Settlement - root .gitignore
+# Stack: Node.js + TypeScript · backend = Express / Mongoose (tsx, tsc -> dist) · frontend = Next.js (React)
+# backend/.gitignore and frontend/.gitignore keep their own rules; this file covers the whole repository.
+# Source, config, lockfiles (package-lock.json), tests, seeds, .env.example and project assets stay tracked.
+# =====================================================================================================================
+
+# ---------------------------------------------------------------- dependencies
 node_modules/
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# ---------------------------------------------------------------- build output & caches
+# Next.js
+frontend/.next/
+frontend/out/
+frontend/build/
+next-env.d.ts
+# backend TypeScript build (npm run build -> dist/)
+backend/dist/
+*.tsbuildinfo
+# tool caches
+.eslintcache
+.turbo/
+.cache/
+.vercel/
+.swc/
+
+# ---------------------------------------------------------------- environment & secrets
+# real credentials live only in .env files; the documented templates stay tracked
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ---------------------------------------------------------------- logs & runtime data
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.pid
+*.pid.lock
+# uploaded files written by local storage (STORAGE_TYPE=local -> backend/public/driver_settlement)
+backend/public/driver_settlement/
+
+# ---------------------------------------------------------------- tests & coverage
+coverage/
+.nyc_output/
+*.lcov
+test-results/
+
+# ---------------------------------------------------------------- temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+
+# ---------------------------------------------------------------- QA audit: generated artifacts only
+# Reports, test results, bug tracker and screenshot / Excel / PDF evidence under QA-Audit/ stay trackable.
+QA-Audit/qa-frontend/
+QA-Audit/qa-storage/
+QA-Audit/evidence/downloads/
+QA-Audit/harness/state.json
+QA-Audit/QA-Recordings/
+
+# ---------------------------------------------------------------- IDE / editor
+.idea/
+*.iml
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+*.sublime-project
+*.sublime-workspace
+
+# ---------------------------------------------------------------- OS
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/

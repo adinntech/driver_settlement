@@ -1,5 +1,6 @@
 // Job: "driver-settlement" (Scripted Pipeline, one job for both services). Triggered by a push to main_build.
-// Deploys only the containers whose build, deploy/ or compose file changed since the last successful run.
+// main_build holds the source. The server builds each image with deploy/Dockerfile: tests (frontend + backend), then build.
+// Deploys only the services whose source (or the shared deploy files) changed since the last successful run.
 // Every deployed service reports to Google Chat (Secret text credential "google-chat-webhook"); reporting can never change the result.
 // Trigger and concurrency are NOT set here: configure them on the job. This script changes no job property.
 
@@ -9,6 +10,7 @@ timestamps {
       def failedStage = 'Checkout main_build'
       def checkedOut = false
       def selected = []
+      def attempted = []
       def deployedOk = []
       def failure = ''
       try {
@@ -28,25 +30,25 @@ timestamps {
             diff = sh(returnStdout: true, script: 'git diff --name-only "$BASE_COMMIT" HEAD || git diff --name-only HEAD~1 HEAD').trim()
           }
           def files = diff.split('\n')
-          def shared = files.any { it.startsWith('deploy/') || it == 'docker-compose.prod.yml' }
-          if (shared || files.any { it.startsWith('backend-build/') }) selected << 'backend'
-          if (shared || files.any { it.startsWith('frontend-build/') }) selected << 'frontend'
+          def shared = files.any { it.startsWith('deploy/') || it == 'docker-compose.prod.yml' || it == '.dockerignore' }
+          if (shared || files.any { it.startsWith('backend/') }) selected << 'backend'
+          if (shared || files.any { it.startsWith('frontend/') }) selected << 'frontend'
         }
         for (svc in selected) {
-          // a failure still fails the build, but does not stop the other service
-          catchError(buildResult: 'FAILURE', stageResult: 'FAILURE', catchInterruptions: false) {
-            stage("Deploy ${svc}") {
-              sshagent(credentials: ['jenkins-deploy-ssh']) {
-                // the output is also kept for the notification
-                withEnv(["SVC=${svc}"]) {
-                  sh '''#!/usr/bin/env bash
+          // the first failure (tests, build or health check) stops the run: nothing after it is deployed
+          stage("Test, build, deploy ${svc}") {
+            failedStage = "Test, build, deploy ${svc}"
+            attempted << svc
+            sshagent(credentials: ['jenkins-deploy-ssh']) {
+              // the output is also kept for the notification
+              withEnv(["SVC=${svc}"]) {
+                sh '''#!/usr/bin/env bash
 set -o pipefail
 ssh -o BatchMode=yes -o StrictHostKeyChecking=yes $DEPLOY_HOST sudo -n /opt/deploy/deploy-driver-settlement.sh "$SVC" 2>&1 | tee "deploy-$SVC.log"
 '''
-                }
               }
-              deployedOk << svc
             }
+            deployedOk << svc
           }
         }
         if (!selected) echo 'No frontend or backend changes: deployment skipped'
@@ -57,8 +59,8 @@ ssh -o BatchMode=yes -o StrictHostKeyChecking=yes $DEPLOY_HOST sudo -n /opt/depl
       } finally {
         try {
           def result = failure ?: currentBuild.currentResult
-          // nothing selected: one message (skipped, or the failure that happened before any deploy)
-          for (svc in (selected ?: ['none'])) {
+          // nothing attempted: one message (skipped, or the failure that happened before any deploy)
+          for (svc in (attempted ?: ['none'])) {
             def status = deployedOk.contains(svc) ? 'SUCCESS' : (svc == 'none' && result == 'SUCCESS') ? 'SKIPPED' : result
             // without a completed checkout the workspace still holds an earlier build: read nothing from it
             def logFile = "deploy-${svc}.log"
@@ -82,7 +84,7 @@ ssh -o BatchMode=yes -o StrictHostKeyChecking=yes $DEPLOY_HOST sudo -n /opt/depl
             }
             def text = chatMessage(serviceInfo(svc) + [
               status: status, build: env.BUILD_NUMBER, commit: commit, deployed: deployed, now: now, server: '168.144.123.41',
-              log: log, stage: svc == 'none' ? failedStage : "Deploy ${svc}",
+              log: log, stage: failedStage,
               causes: causes ?: 'unknown', duration: currentBuild.durationString.replace(' and counting', ''), console: env.BUILD_URL ? "${env.BUILD_URL}console" : '',
             ])
             writeFile(file: 'gchat-payload.json', text: groovy.json.JsonOutput.toJson([text: text]), encoding: 'UTF-8')

@@ -1,3 +1,0 @@
-module.exports=[47999,a=>{"use strict";var b=a.i(87924),c=a.i(38246),d=a.i(50944),e=a.i(72131),f=a.i(15149),g=a.i(97675),h=a.i(99568);function i(){let a=(0,d.useSearchParams)().get("id");return a?(0,b.jsxs)(b.Fragment,{children:[(0,b.jsx)("div",{className:"page-head",children:(0,b.jsxs)("div",{children:[(0,b.jsx)(c.default,{href:"/rbp/on-road",className:"muted",children:"← Back"}),(0,b.jsx)("h1",{children:"Deliver Vehicle"})]})}),(0,b.jsx)(g.U,{id:a})]}):(0,b.jsx)(h.D,{message:"No allocation selected."})}a.s(["default",0,function(){return(0,b.jsx)(f.f,{role:"RBP",children:(0,b.jsx)(e.Suspense,{fallback:(0,b.jsx)(h.l,{rows:8}),children:(0,b.jsx)(i,{})})})}])}];
-
-//# sourceMappingURL=src_app_rbp_on-road_deliver_page_tsx_0_4a6tkmd90ko._.js.map
