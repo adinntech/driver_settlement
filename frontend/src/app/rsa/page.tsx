@@ -1,7 +1,6 @@
 "use client";
 
 import { roadshowOn } from "@/utils/features";
-import Link from "next/link";
 import { useState } from "react";
 import AppShell from "@/components/AppShell";
 import {
@@ -15,7 +14,7 @@ import type { RsaPaymentRow } from "@/utils/rsa";
 
 interface Page { items: RsaPaymentRow[]; total: number; page: number; limit: number }
 
-/** RSA landing page: the saved payment history. The entry form is a separate page opened with "+ Enter Payment". */
+/** RSA landing page: the saved payment history. */
 export default function RsaHome() {
   return (
     <AppShell role="RSA">
@@ -41,7 +40,6 @@ function History() {
           <h1>Payment Entries</h1>
           <p className="muted">Saved payment entries of approved {roadshowOn() ? "Roadshow and Signage" : "Signage"} projects.</p>
         </div>
-        <Link href="/rsa/new" className="btn btn-primary">+ Enter Payment</Link>
       </div>
 
       {summary.data && <RsaSummaryCards s={summary.data} paymentFor={f.paymentFor} onPick={(v) => change({ ...f, paymentFor: v })} />}
