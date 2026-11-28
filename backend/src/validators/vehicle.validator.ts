@@ -1,6 +1,6 @@
 import { VEHICLE_TYPES, DOC_SECTIONS, type DocSection } from "../models/Vehicle.js";
 import { normalizeVehicleNo } from "../utils/vehicleNo.js";
-import { ALLOWED_MIME, KEY_PATTERN, type Attachment } from "../services/storage.service.js";
+import { ALLOWED_MIME, KEY_PATTERN, attachmentUrl, type Attachment } from "../services/storage.service.js";
 
 type Obj = Record<string, unknown>;
 
@@ -130,7 +130,7 @@ export function validateVehicle(input: unknown, draft: boolean, now = new Date()
             name.length > 0 && name.length <= 120 && typeof x.mimeType === "string" && ALLOWED_MIME.includes(x.mimeType) &&
             typeof x.size === "number" && x.size > 0 && x.size <= 10 * 1024 * 1024;
           if (!ok) return void errors.push(`${tag}: attachment is invalid, upload the file again`);
-          attachment = { storage: x.storage as Attachment["storage"], key: x.key as string, name, size: x.size as number, mimeType: x.mimeType as string };
+          attachment = { storage: x.storage as Attachment["storage"], key: x.key as string, name, size: x.size as number, mimeType: x.mimeType as string, url: attachmentUrl({ storage: x.storage as Attachment["storage"], key: x.key as string }) };
         }
         list.push({ nextRenewalDate: e.nextRenewalDate as string, attachment });
       });

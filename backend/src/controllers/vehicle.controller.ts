@@ -4,7 +4,7 @@ import {
   createVehicle, deleteDraft, getVehicle, listVehicles, updateVehicle, vehicleFilterOptions, vehicleHistory, vehicleSummary,
 } from "../services/vehicle.service.js";
 import { lookupApprovedProject, searchApprovedProjects } from "../services/availability.service.js";
-import { MAX_UPLOAD_BYTES, attachmentUrl, storeUpload } from "../services/storage.service.js";
+import { MAX_UPLOAD_BYTES, storeUpload, type MediaFolder } from "../services/storage.service.js";
 import { AppError } from "../utils/AppError.js";
 import { sendResponse } from "../utils/sendResponse.js";
 
@@ -85,7 +85,17 @@ export const receiveFile = (req: Request, res: Response, next: NextFunction) =>
     return next(new AppError("Invalid upload. Send one file in the \"file\" field", 400));
   });
 
+/** RBP uploads: ?category= picks the media folder (vehicle documents by default). */
+const RBP_FOLDERS: MediaFolder[] = ["vehicle-documents", "driver-licences", "allotment-changes"];
 export const uploadAttachment = wrap(async (req, res) => {
-  const a = await storeUpload(req.file);
-  res.status(201).json(sendResponse(true, "File uploaded successfully", { ...a, url: attachmentUrl(a) }));
+  const c = req.query.category;
+  if (c !== undefined && !RBP_FOLDERS.includes(c as MediaFolder)) throw new AppError(`Category must be one of ${RBP_FOLDERS.join(", ")}`, 400);
+  const a = await storeUpload(req.file, (c as MediaFolder | undefined) ?? "vehicle-documents");
+  res.status(201).json(sendResponse(true, "File uploaded successfully", a));
+});
+
+/** RSA clearance rejection evidence. */
+export const uploadRejectionAttachment = wrap(async (req, res) => {
+  const a = await storeUpload(req.file, "clearance-rejections");
+  res.status(201).json(sendResponse(true, "File uploaded successfully", a));
 });

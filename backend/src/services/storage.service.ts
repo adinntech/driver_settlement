@@ -7,7 +7,10 @@ import { AppError } from "../utils/AppError.js";
 
 /** Everything lives under this folder, both in the local public folder and in the cloud bucket. */
 export const STORAGE_ROOT = "driver_settlement";
-export const VEHICLE_FOLDER = `${STORAGE_ROOT}/vehicles`;
+export const VEHICLE_FOLDER = `${STORAGE_ROOT}/vehicles`; // legacy: every upload before media folders (keys stay valid)
+/** Media folders: driver_settlement/<folder>/<YYYY>/<MM>/<uuid>-<name> (IST month). */
+export const MEDIA_FOLDERS = ["vehicle-documents", "driver-licences", "allotment-changes", "clearance-rejections", "delivery-photos"] as const;
+export type MediaFolder = (typeof MEDIA_FOLDERS)[number];
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 export type StorageKind = "local" | "space";
@@ -18,6 +21,7 @@ export interface Attachment {
   name: string; // original file name, sanitised
   size: number;
   mimeType: string;
+  url?: string; // public URL saved with the record; responses still rebuild it from storage + key
 }
 
 export interface StorageDriver {
@@ -54,9 +58,13 @@ export function validateUpload(file: { originalname: string; mimetype: string; s
   return { name: sanitizeFileName(file.originalname), mimeType: t.mime };
 }
 
-export const KEY_PATTERN = new RegExp(`^${VEHICLE_FOLDER}/\\d{4}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-[A-Za-z0-9._-]{1,100}$`);
+const UUID_NAME = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-[A-Za-z0-9._-]{1,100}";
+export const KEY_PATTERN = new RegExp(`^(?:${VEHICLE_FOLDER}/\\d{4}|${STORAGE_ROOT}/(?:${MEDIA_FOLDERS.join("|")})/\\d{4}/(?:0[1-9]|1[0-2]))/${UUID_NAME}$`);
 
-export const makeKey = (name: string, now = new Date()): string => `${VEHICLE_FOLDER}/${now.getUTCFullYear()}/${randomUUID()}-${name}`;
+export const makeKey = (name: string, folder: MediaFolder, now = new Date()): string => {
+  const ist = new Date(now.getTime() + 330 * 60_000); // business months are IST
+  return `${STORAGE_ROOT}/${folder}/${ist.getUTCFullYear()}/${String(ist.getUTCMonth() + 1).padStart(2, "0")}/${randomUUID()}-${name}`;
+};
 
 // ---------------------------------------------------------------- drivers
 export function createLocalDriver(rootDir: string): StorageDriver {
@@ -98,11 +106,11 @@ export function getStorage(): StorageDriver {
   throw new AppError(`Unsupported STORAGE_TYPE "${type}" (use local or space)`, 500);
 }
 
-export async function storeUpload(file: Parameters<typeof validateUpload>[0], driver: StorageDriver = getStorage()): Promise<Attachment> {
+export async function storeUpload(file: Parameters<typeof validateUpload>[0], folder: MediaFolder, driver: StorageDriver = getStorage()): Promise<Attachment> {
   const v = validateUpload(file);
-  const key = makeKey(v.name);
+  const key = makeKey(v.name, folder);
   await driver.save(file!.buffer, key, v.mimeType);
-  return { storage: driver.kind, key, name: v.name, size: file!.size, mimeType: v.mimeType };
+  return { storage: driver.kind, key, name: v.name, size: file!.size, mimeType: v.mimeType, url: attachmentUrl({ storage: driver.kind, key }) };
 }
 
 /** Public URL of a stored file (local: served by this backend, space: CDN). */

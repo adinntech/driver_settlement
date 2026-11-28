@@ -41,7 +41,7 @@ export default function DriverFormView({
     if (bad) return onError?.(bad);
     setUploading(true);
     try {
-      set("attachment", await uploadAttachment(picked));
+      set("attachment", await uploadAttachment(picked, "/vehicles/attachments?category=driver-licences"));
     } catch (e) {
       onError?.((e as Error).message);
     } finally {

@@ -15,7 +15,8 @@
     "seed:mock": "tsx src/seed/mockData.cli.ts",
     "seed:suspense": "tsx src/seed/suspenseMock.cli.ts",
     "backup:now": "tsx src/jobs/backup.cli.ts",
-    "backup:restore": "tsx src/jobs/backupRestore.cli.ts"
+    "backup:restore": "tsx src/jobs/backupRestore.cli.ts",
+    "golive:wipe": "tsx src/jobs/goLiveWipe.cli.ts"
   },
   "author": "",
   "license": "ISC",

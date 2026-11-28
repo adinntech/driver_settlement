@@ -226,7 +226,7 @@ test("photo upload: formats, content, size, kind, role", async () => {
   assert.equal(ok.status, 201);
   assert.deepEqual(keys(ok.body), ["data", "message", "success"]);
   assert.equal(ok.body.data.kind, "SPEEDOMETER");
-  assert.match(ok.body.data.key, /^driver_settlement\/vehicles\/\d{4}\/[0-9a-f-]{36}-meter\.JPG$/i);
+  assert.match(ok.body.data.key, /^driver_settlement\/delivery-photos\/\d{4}\/\d{2}\/[0-9a-f-]{36}-meter\.JPG$/i);
   assert.ok(ok.body.data.url.includes("/files/"));
   assert.ok(fs.existsSync(path.join(storageDir, ok.body.data.key))); // stored through the existing storage service
   assert.equal((await upload(Y.cid, "evidence", PNG, "a.png", "image/png")).status, 201);
@@ -482,7 +482,7 @@ test("additional photos: several optional extra photos, bound to this delivery, 
   assert.deepEqual(ok.body.data.additionalPhotos.map((x: any) => x.name), ["side-left.jpg", "branding.png"]);
   const doc: any = await VehicleDelivery.findOne({ clearance: A.cid }).lean();
   assert.equal(doc.additionalPhotos.length, 2);
-  assert.ok(doc.additionalPhotos.every((x: any) => x.key && !("url" in x))); // metadata only; urls are computed on read
+  assert.ok(doc.additionalPhotos.every((x: any) => x.key && typeof x.url === "string")); // metadata and the stored public URL
   // the View screen (RBP) and the RSA review both return every photo with a url for the preview
   const view = (await rbp(`/${A.cid}`)).body.data;
   assert.ok(view.delivery.speedometerPhoto.url && view.delivery.evidencePhoto.url);

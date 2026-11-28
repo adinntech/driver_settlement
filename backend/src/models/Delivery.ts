@@ -9,7 +9,7 @@ export const PHOTO_KINDS = ["SPEEDOMETER", "EVIDENCE", "ADDITIONAL"] as const;
 export const MAX_ADDITIONAL_PHOTOS = 10;
 export type PhotoKind = (typeof PHOTO_KINDS)[number];
 
-const photo = new Schema({ storage: String, key: String, name: String, size: Number, mimeType: String }, { _id: false }); // file metadata only, never image data
+const photo = new Schema({ storage: String, key: String, name: String, size: Number, mimeType: String, url: String }, { _id: false }); // file metadata and public URL only, never image data
 
 /**
  * One completed delivery per approved clearance version. The unique (clearance, version) index is the duplicate-delivery lock.
