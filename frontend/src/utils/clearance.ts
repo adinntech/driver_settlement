@@ -32,6 +32,7 @@ export interface ClearanceFinancial {
 }
 export interface ClearanceHistoryRow { _id: string; version: number; action: string; username: string; role: string; at: string; details: Record<string, unknown> | null }
 export interface ClearanceDetail extends ClearanceRow {
+  unviewedRejection?: boolean; // RBP has not opened this rejection yet
   project: {
     trackupNumber: string; pifNumber: string; billNumber: string | null; projectType: string | null; projectName: string | null; clientName: string | null; projectFrom: string | null; projectTo: string | null;
     location: string | null; approvedBudgetAmount: number | null; requestedVehicleType?: string | null; budgetNumber: string | null; rsomStatus: string | null; rsomApprovedBy: string | null; rsomApprovedAt: string | null;

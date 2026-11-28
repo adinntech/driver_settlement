@@ -2026,3 +2026,21 @@ button.stat, button.ds-kpi { font: inherit; text-align: left; color: inherit; wi
 .modal-allot .modal-body > :nth-last-child(2) { margin-bottom: 20px; }
 .ui-time-pop .ui-opt.is-empty { display: none; }
 .modal-allot .allot-actions { border-radius: 0 0 12px 12px; }
+
+/* ---------- toasts: bottom right, above modals / popovers, clear of sticky action bars ---------- */
+.toasts { bottom: 88px; z-index: 1500; align-items: flex-end; max-height: min(65vh, 520px); overflow-y: auto; overflow-x: hidden; pointer-events: none; gap: 10px; padding: 2px; }
+.toast { pointer-events: auto; flex-shrink: 0; width: max-content; max-width: min(360px, calc(100vw - 32px)); animation: toast-in .25s var(--ease); }
+@keyframes toast-in { from { opacity: 0; transform: translateX(110%); } to { opacity: 1; transform: none; } }
+.toast-error { display: flex; align-items: flex-start; gap: 10px; width: min(360px, calc(100vw - 32px)); background: #fff5f5; color: var(--red-dark); border: 1px solid #fda29b; border-left: 4px solid var(--red); }
+.toast-icon { flex: none; margin-top: 1px; color: var(--red); }
+.toast-text { flex: 1; min-width: 0; overflow-wrap: anywhere; line-height: 1.4; }
+.toast-close { flex: none; border: 0; background: none; color: inherit; font-size: 1.2rem; line-height: 1; padding: 0 2px; cursor: pointer; }
+@media (max-width: 640px) {
+  .toasts { left: 8px; right: 8px; bottom: 84px; align-items: stretch; max-height: 45vh; }
+  .toast, .toast-error { width: auto; max-width: none; }
+}
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+
+.section-fold button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.section-fold button:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 6px; }
+.card > .section-fold:last-child { margin-bottom: 0; }

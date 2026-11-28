@@ -12,3 +12,11 @@ export async function markRejectionViewed(budgetId: string, version: number): Pr
   await request(`/budgets/${budgetId}/rejection-viewed`, "POST", { version });
   window.dispatchEvent(new Event(REJECTIONS_CHANGED));
 }
+
+/** The same for rejected vehicle & driver allocations (Vehicle Deliver menu). */
+export const ALLOCATION_REJECTIONS_CHANGED = "rbp-allocation-rejections-changed";
+
+export async function markAllocationRejectionViewed(clearanceId: string, version: number): Promise<void> {
+  await request(`/on-road-vehicles/${clearanceId}/rejection-viewed`, "POST", { version });
+  window.dispatchEvent(new Event(ALLOCATION_REJECTIONS_CHANGED));
+}

@@ -258,7 +258,11 @@ export function ClearanceHistory({ rows }: { rows: ClearanceHistoryRow[] }) {
       <h3>Approval History</h3>
       <TableWrap>
         <table className="table"><thead><tr><th>Version</th><th>Action</th><th>User</th><th>Date &amp; Time</th><th>Details</th></tr></thead>
-          <tbody>{rows.map((h) => (<tr key={h._id}><td>V{h.version}</td><td>{ACTION_LABEL[h.action] ?? h.action}</td><td>{h.username} ({h.role})</td><td>{formatDateTime(h.at)}</td><td><ReadMore>{historyText(h)}</ReadMore></td></tr>))}</tbody>
+          <tbody>{rows.map((h) => (<tr key={h._id}><td>V{h.version}</td><td>{ACTION_LABEL[h.action] ?? h.action}</td><td>{h.username} ({h.role})</td><td>{formatDateTime(h.at)}</td><td><ReadMore>{historyText(h)}</ReadMore>
+            {((h.details?.attachments ?? []) as { key: string; name: string; url?: string }[]).map((a) => (
+              <div key={a.key}>{a.url ? <a href={a.url} target="_blank" rel="noreferrer">{a.name}</a> : a.name}</div>
+            ))}
+          </td></tr>))}</tbody>
         </table>
       </TableWrap>
     </section>

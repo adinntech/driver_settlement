@@ -148,13 +148,13 @@ export async function postFile<T>(path: string, file: File, allowFailure = false
 }
 
 /** Uploads one file (multipart) and returns the stored attachment. Used for vehicle document attachments. */
-export async function uploadAttachment(file: File): Promise<import("@/types/domain").Attachment> {
+export async function uploadAttachment(file: File, path = "/vehicles/attachments" /* RBP; RSA has its own route */): Promise<import("@/types/domain").Attachment> {
   const token = tokenStore.get();
   const fd = new FormData();
   fd.append("file", file);
   let res: Response;
   try {
-    res = await fetch(`${API_BASE_URL}/vehicles/attachments`, {
+    res = await fetch(`${API_BASE_URL}${path}`, {
       method: "POST",
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: fd,

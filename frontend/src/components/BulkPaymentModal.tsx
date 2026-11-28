@@ -1,5 +1,6 @@
 "use client";
 
+import { useErrorState } from "@/context/ToastContext";
 import { verticalLabel } from "@/utils/vertical";
 import { useRef, useState } from "react";
 import DateInput, { todayIst } from "@/components/ui/DateInput";
@@ -18,7 +19,7 @@ export default function BulkPaymentModal({ vehicles, onClose }: { vehicles: Bulk
   const toast = useToast();
   const [date, setDate] = useState(todayIst());
   const [lines, setLines] = useState<Record<string, BulkLine>>({});
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useErrorState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<BulkResult[] | null>(null);
   const sending = useRef(false); // blocks a double click before the disabled state renders
@@ -96,7 +97,6 @@ export default function BulkPaymentModal({ vehicles, onClose }: { vehicles: Bulk
             </table>
           </TableWrap>
           <p><strong>Total: {formatInr(bulkTotal(entries))}</strong></p>
-          {error && <p className="field-error" role="alert">{error}</p>}
           <div className="actions-row">
             <button type="button" className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? "Submitting…" : "Submit Bulk Payment"}</button>
           </div>

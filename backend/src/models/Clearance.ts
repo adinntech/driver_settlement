@@ -42,6 +42,7 @@ const clearanceSchema = new Schema(
     financialStatus: { type: String, enum: FINANCIAL_STATUSES },
     rejectionReason: String,
     rejectionRemarks: String,
+    rejectionViewedVersion: Number, // the rejected version RBP has opened; a later rejection (higher version) is unread again
     // Vehicle delivery (separate from the RSA status above). Absent = YET_TO_DELIVER, so rows created before this feature stay valid.
     deliveryStatus: { type: String, enum: ["YET_TO_DELIVER", "DELIVERED"] },
     deliveredAt: Date,

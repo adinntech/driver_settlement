@@ -9,6 +9,7 @@ import type { RoleKey } from "@/types/domain";
 import { homeFor } from "@/utils/budgetDescribe";
 import NotificationBell from "@/components/NotificationBell";
 import RejectedBadge from "@/components/RejectedBadge";
+import { ALLOCATION_REJECTIONS_CHANGED } from "@/utils/rejectionViews";
 import { Skeleton } from "@/components/ui/Ui";
 import { useNetworkActivity } from "@/hooks/useApi";
 
@@ -93,6 +94,7 @@ export default function AppShell({ role, children }: { role: RoleKey; children: 
             >
               {n.label}
               {role === "RBP" && n.href === "/rbp" && <RejectedBadge />}
+              {role === "RBP" && n.href === "/rbp/on-road" && <RejectedBadge path="/on-road-vehicles/rejections/unviewed" event={ALLOCATION_REJECTIONS_CHANGED} what="rejected allocations" />}
             </Link>
           ))}
         </nav>

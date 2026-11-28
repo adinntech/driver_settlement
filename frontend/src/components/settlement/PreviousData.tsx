@@ -1,5 +1,6 @@
 "use client";
 
+import { ErrorToasts, useErrorState } from "@/context/ToastContext";
 import { useRef, useState, type ReactNode } from "react";
 import DateInput from "@/components/ui/DateInput";
 import Select from "@/components/ui/Select";
@@ -71,7 +72,7 @@ export function PreviousDataPanel({ who, total, onSuspense }: { who: Identity; t
   const list = useApi<PreviousEntry[]>(url(who));
   const [editing, setEditing] = useState<{ mode: "NEW" | "EDIT" | "CORRECT"; entry?: PreviousEntry } | null>(null);
   const [confirm, setConfirm] = useState<{ action: "SUBMIT" | "DELETE"; entry: PreviousEntry } | null>(null);
-  const [error, setError] = useState("");
+  const [, setError] = useErrorState<string>("");
   const [busy, setBusy] = useState(false);
   const entries = list.data ?? [];
   const changed = (s?: SuspenseRecords) => {
@@ -99,7 +100,7 @@ export function PreviousDataPanel({ who, total, onSuspense }: { who: Identity; t
     return <PreviousDataForm who={who} mode={editing.mode} entry={editing.entry} onCancel={() => setEditing(null)} onSaved={(s) => { setEditing(null); changed(s); }} />;
   return (
     <>
-      {(error || list.error) && <div className="alert" role="alert">{error || list.error}</div>}
+      <ErrorToasts errors={list.error} />
       <PreviousDataTable entries={entries} onAction={isRsa ? (a, entry) => (a === "EDIT" || a === "CORRECT" ? setEditing({ mode: a, entry }) : setConfirm({ action: a, entry })) : undefined} />
       {isRsa && hasSubmitted(entries, who.vehicleNo) && <p className="muted">Previous Data has already been submitted for this driver, vehicle and PIF. Use Correct to change it.</p>}
       {isRsa && !list.loading && !hasSubmitted(entries, who.vehicleNo) && (
@@ -134,7 +135,7 @@ export function PreviousDataForm({ who, mode, entry, onSaved, onCancel }: { who:
   });
   const [cashInHand, setCashInHand] = useState(!!old?.data.cashInHand);
   const [expenses, setExpenses] = useState<Expense[]>(() => (old?.data.expenses ?? []).map((x) => ({ optionKey: x.optionKey, description: x.description ?? "", amount: String(x.amount) })));
-  const [error, setError] = useState("");
+  const [, setError] = useErrorState<string>("");
   const [busy, setBusy] = useState(false);
   const key = useRef(newSubmissionKey()); // the same key on retry, so one entry is never saved twice
   const set = (k: keyof typeof f, v: string) => setF((s) => ({ ...s, [k]: v }));
@@ -178,7 +179,6 @@ export function PreviousDataForm({ who, mode, entry, onSaved, onCancel }: { who:
           <div key={k}><dt>{k}</dt><dd>{v}</dd></div>
         ))}
       </dl>
-      {error && <div className="alert" role="alert">{error}</div>}
       <div className="grid">
         {date("fromDate", "From Date *")}
         {date("toDate", "To Date *", f.fromDate || undefined)}

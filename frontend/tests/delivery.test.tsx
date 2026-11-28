@@ -70,15 +70,15 @@ test("delivery form validation: description + both photos are mandatory", () => 
   assert.equal(fileSizeText(2048), "2 KB");
 });
 
-test("photo picker: camera capture + device choose, empty state; evidence helper text", () => {
-  const html = renderToStaticMarkup(<PhotoPicker label="Driver & Vehicle Handover Photo" helper={EVIDENCE_HELPER} file={null} onChange={noop} camera />);
+test("photo picker: one Upload Photo action, then Re-upload; no camera or Remove buttons; evidence helper text", () => {
+  const html = renderToStaticMarkup(<PhotoPicker label="Driver & Vehicle Handover Photo" helper={EVIDENCE_HELPER} file={null} onChange={noop} />);
   assert.match(html, /Driver &amp; Vehicle Handover Photo \*/);
-  assert.match(html, /capture="environment"/); // mobile camera
-  assert.match(html, /accept="image\/\*"/);
-  assert.match(html, /Take Photo/);
-  assert.match(html, /Choose from Device/);
+  assert.equal((html.match(/<button/g) ?? []).length, 1);
+  assert.ok(html.includes(">Upload Photo<") && !/Take Photo|Retake|Remove|Choose from Device|capture=/.test(html));
   assert.match(html, /No photo selected/);
-  assert.ok(!html.includes("Remove")); // nothing to remove yet
+  const chosen = renderToStaticMarkup(<PhotoPicker label="Speedometer Photo" file={new File(["x"], "speedo.jpg", { type: "image/jpeg" })} onChange={noop} />);
+  assert.equal((chosen.match(/<button/g) ?? []).length, 1);
+  assert.ok(chosen.includes(">Re-upload Photo<") && chosen.includes("speedo.jpg") && !chosen.includes("Remove"));
   assert.match(html, /standing in front of or seated inside the allocated vehicle/);
   assert.match(html, /both the driver and vehicle are clearly visible/);
 });

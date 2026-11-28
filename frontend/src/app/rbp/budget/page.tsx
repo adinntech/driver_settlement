@@ -11,11 +11,11 @@ import AppShell from "@/components/AppShell";
 import CopyButton from "@/components/ui/CopyButton";
 import { DecimalInput, IntInput } from "@/components/ui/Inputs";
 import { ConfirmDialog, ErrorState, Modal, Skeleton } from "@/components/ui/Ui";
-import { useToast } from "@/context/ToastContext";
+import { useErrorState, useToast } from "@/context/ToastContext";
 import { useApi } from "@/hooks/useApi";
 import { ApiError, request } from "@/services/api";
 import type { Activity, Budget, BudgetContext, BudgetEvent, BudgetVersion } from "@/types/domain";
-import { ActivitySummary, ApprovalHistory, VersionHistory } from "@/components/HistorySections";
+import { ActivitySummary, ApprovalHistory, ApprovalHistorySection, VersionHistory } from "@/components/HistorySections";
 import {
   addCharge, removeCharge, updateCharge, addToll, autoDays, computeValues, haltFoodApplies, draftFromData, removeToll, toPayload, updateToll, validateDraft,
   type Draft, type Unit,
@@ -150,10 +150,9 @@ function BudgetView() {
 /** Mandatory before a submitted budget can be corrected ahead of RSOM review; the reason is saved with the new version and shown to RSOM. */
 function RevisionReasonModal({ version, onClose, onConfirm }: { version: number; onClose: () => void; onConfirm: (reason: string) => void }) {
   const [reason, setReason] = useState("");
-  const [error, setError] = useState("");
+  const [, setError] = useErrorState<string>("");
   return (
     <Modal title={`Edit submitted budget · V${version}`} onClose={onClose}>
-      {error && <div className="alert" role="alert">{error}</div>}
       <label className="field">
         <span>Reason for revision *</span>
         <textarea rows={3} maxLength={1000} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="What are you correcting?" />
@@ -249,7 +248,7 @@ function BudgetForm({
   const toast = useToast();
   const [f, setF] = useState<Draft>(() => draftFromData(budget?.data, { campaignFrom: context.campaignFrom, campaignTo: context.campaignTo, sundayHalt: context.sundayHalt }));
   const [daysManual, setDaysManual] = useState(false);
-  const [errors, setErrors] = useState<string[]>([]);
+  const [, setErrors] = useErrorState<string[]>([]);
   /** Which action the confirm dialog is for: SAVE keeps a draft, SUBMIT saves and sends the version to RSOM. */
   const [confirm, setConfirm] = useState<"SAVE" | "SUBMIT" | null>(null);
   const [comment, setComment] = useState("");
@@ -365,13 +364,6 @@ function BudgetForm({
         <div>Report Location: <strong>{context.location || "—"}</strong></div>
       </div>
       <h3 className="sub">{budget ? `Edit budget (will save as V${budget.currentVersion + 1})` : "Budget"}</h3>
-      {errors.length > 0 && (
-        <div className="alert" role="alert">
-          {errors.map((e) => (
-            <div key={e}>{e}</div>
-          ))}
-        </div>
-      )}
 
       <RejectedCtx.Provider value={rejected}>
       <div className="b-cols">
@@ -603,8 +595,9 @@ function HistorySection({ budget }: { budget: Budget }) {
         )}
       </div>
       <div className="card">
-        <h3 className="sub">Approval history</h3>
-        {events.loading ? <Skeleton rows={3} /> : events.error || !events.data ? <ErrorState message={events.error ?? "Failed"} onRetry={events.reload} /> : <ApprovalHistory events={events.data} />}
+        <ApprovalHistorySection key={budget._id}>
+          {events.loading ? <Skeleton rows={3} /> : events.error || !events.data ? <ErrorState message={events.error ?? "Failed"} onRetry={events.reload} /> : <ApprovalHistory events={events.data} />}
+        </ApprovalHistorySection>
       </div>
     </>
   );

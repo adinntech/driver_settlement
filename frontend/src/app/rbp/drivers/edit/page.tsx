@@ -6,7 +6,7 @@ import { Suspense, useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
 import DriverFormView from "@/components/DriverFormView";
 import { ErrorState, Skeleton } from "@/components/ui/Ui";
-import { useToast } from "@/context/ToastContext";
+import { useErrorState, useToast } from "@/context/ToastContext";
 import { useApi } from "@/hooks/useApi";
 import { request } from "@/services/api";
 import type { Driver } from "@/types/domain";
@@ -34,7 +34,7 @@ function DriverEditor({ driver }: { driver: Driver | null }) {
   const router = useRouter();
   const toast = useToast();
   const [f, setF] = useState<DriverFormState>(() => (driver ? fromDriver(driver) : emptyDriverForm()));
-  const [errors, setErrors] = useState<string[]>([]);
+  const [, setErrors] = useErrorState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const inflight = useRef(false); // blocks double submits
 
@@ -67,11 +67,6 @@ function DriverEditor({ driver }: { driver: Driver | null }) {
           <p className="muted">{driver ? `${driver.driverNumber} · ${driver.driverName}` : "A unique Driver Number is generated when you save."}</p>
         </div>
       </div>
-      {errors.length > 0 && (
-        <div className="alert" role="alert">
-          {errors.map((m) => <div key={m}>{m}</div>)}
-        </div>
-      )}
       <DriverFormView
         value={f} onChange={setF} driverNumber={driver?.driverNumber ?? null} isEdit={!!driver} busy={busy}
         onSave={save} onClose={() => router.push("/rbp/drivers")} onError={(m) => setErrors([m])}

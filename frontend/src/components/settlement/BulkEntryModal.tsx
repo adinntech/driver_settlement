@@ -1,5 +1,6 @@
 "use client";
 
+import { useErrorState } from "@/context/ToastContext";
 import { verticalLabel } from "@/utils/vertical";
 import { useRef, useState } from "react";
 import DateInput, { todayIst } from "@/components/ui/DateInput";
@@ -37,7 +38,7 @@ function Entry({ date, onBusy, onClose }: { date: string; onBusy: (v: boolean) =
   const list = useApi<SettlementPage>(`/settlements?scope=all&status=APPROVED&approvedOn=${date}&limit=100&sort=paymentNumber&dir=asc`);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [entries, setEntries] = useState<BulkEntries>({});
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useErrorState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<(Result & { paymentNumber: string })[] | null>(null);
   const setEntry = (id: string, entry: RowEntry) => { setEntries((all) => ({ ...all, [id]: entry })); setError(null); };
@@ -98,7 +99,6 @@ function Entry({ date, onBusy, onClose }: { date: string; onBusy: (v: boolean) =
       </fieldset>
       </div>
       {/* outside the scroll area, so it never moves; the error sits here to stay in view */}
-      {error && <p className="field-error be-error" role="alert">{error}</p>}
       <div className="be-foot">
         <span>{selected.length} selected · Total <b>{formatInr(bulkEntryTotal(selected))}</b></span>
         <button type="button" className="btn btn-outline" disabled={busy} onClick={onClose}>Cancel</button>

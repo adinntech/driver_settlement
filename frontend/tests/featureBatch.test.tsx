@@ -76,8 +76,8 @@ test("delivery: optional additional photos (max 10, same file rules); picker ren
   assert.deepEqual(validateDeliveryForm("Handed over to driver", jpg, jpg, [jpg, { ...jpg, name: "b.png", type: "image/png" }]), []);
   assert.ok(validateDeliveryForm("Handed over to driver", jpg, jpg, [{ name: "x.pdf", type: "application/pdf", size: 10 }]).some((e) => /Additional photo 1 must be a JPG/.test(e)));
   assert.ok(validateDeliveryForm("Handed over to driver", jpg, jpg, Array(MAX_ADDITIONAL_PHOTOS + 1).fill(jpg)).some((e) => /max 10/.test(e)));
-  const empty = renderToStaticMarkup(<MultiPhotoPicker files={[]} onChange={noop} camera />);
-  assert.ok(empty.includes("Additional Photos (optional)") && empty.includes("No additional photos.") && empty.includes("0/10") && empty.includes("multiple"));
+  const empty = renderToStaticMarkup(<MultiPhotoPicker files={[]} onChange={noop} />);
+  assert.ok(empty.includes("Additional Photos (optional)") && empty.includes("No additional photos.") && empty.includes("0/10") && empty.includes("multiple") && empty.includes(">Upload Photo<") && !/Take Photo|Remove/.test(empty));
   const view = src("components/ClearanceDetailView.tsx");
   assert.ok(view.includes("additionalPhotos ?? []") && view.includes("Additional Photo ${i + 1}"));
 });

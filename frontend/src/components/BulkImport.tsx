@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import TableWrap from "@/components/ui/TableWrap";
 import { Modal } from "@/components/ui/Ui";
-import { useToast } from "@/context/ToastContext";
+import { useErrorState, useToast } from "@/context/ToastContext";
 import { downloadFile, postFile } from "@/services/api";
 
 export type ImportKind = "vehicles" | "drivers";
@@ -44,7 +44,7 @@ export function BulkImportDialog({ kind, onClose, onImported }: { kind: ImportKi
   const [check, setCheck] = useState<ImportCheck | null>(null);
   const [done, setDone] = useState<ImportDone | null>(null);
   const [busy, setBusy] = useState<"" | "template" | "check" | "import">("");
-  const [error, setError] = useState("");
+  const [, setError] = useErrorState<string>("");
   const [one, many] = NOUN[kind];
 
   const template = async () => {
@@ -111,7 +111,6 @@ export function BulkImportDialog({ kind, onClose, onImported }: { kind: ImportKi
           onChange={(e) => { const f = e.target.files?.[0] ?? null; e.target.value = ""; void choose(f); }} />
       </div>
       {busy === "check" && <p className="muted" role="status">Checking rows…</p>}
-      {error && <div className="alert" role="alert">{error}</div>}
 
       {check && !done && (
         <div data-section="import-check">

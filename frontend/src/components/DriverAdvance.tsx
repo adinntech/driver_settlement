@@ -3,7 +3,7 @@
 import TableWrap from "@/components/ui/TableWrap";
 import { useRef, useState } from "react";
 import { Modal, EmptyState, ErrorState, Skeleton } from "@/components/ui/Ui";
-import { useToast } from "@/context/ToastContext";
+import { useErrorState, useToast } from "@/context/ToastContext";
 import { useApi } from "@/hooks/useApi";
 import { request } from "@/services/api";
 import type { Driver, DriverAdvanceRow } from "@/types/domain";
@@ -19,15 +19,14 @@ const KV = ({ k, v }: { k: string; v: React.ReactNode }) => (
 
 /** Advance calculation form. Working days is the only input; salary, eligible amount and advance are read-only and always derived. */
 export function AdvanceForm({
-  salary, days, onDays, onSubmit, busy, error,
-}: { salary: number | null | undefined; days: string; onDays: (v: string) => void; onSubmit: () => void; busy?: boolean; error?: string | null }) {
+  salary, days, onDays, onSubmit, busy,
+}: { salary: number | null | undefined; days: string; onDays: (v: string) => void; onSubmit: () => void; busy?: boolean }) {
   const problem = validateAdvance(days, salary);
   const p = advancePreview(days, salary);
   const salaryMissing = !salary || salary <= 0;
   return (
     <div className="card" data-section="advance-form">
       <h3 className="sub">Advance Amount</h3>
-      {error && <div className="alert" role="alert">{error}</div>}
       {salaryMissing && <div className="alert" role="alert" data-note="no-salary">Driver salary is unavailable; set the driver&apos;s salary in Driver Management first.</div>}
       <div className="rm-form adv-form">
         <label>Overall Working Days<span className="req"> *</span></label>
@@ -150,7 +149,7 @@ export default function DriverAdvancePanel({ driver }: { driver: Driver }) {
   const [days, setDays] = useState("");
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useErrorState<string | null>(null);
   const [page, setPage] = useState(1);
   const [view, setView] = useState<DriverAdvanceRow | null>(null);
   const key = useRef(newSubmissionKey()); // same key for every click / retry of one form session
@@ -186,7 +185,7 @@ export default function DriverAdvancePanel({ driver }: { driver: Driver }) {
         <button className={`btn ${open ? "btn-outline" : "btn-primary"}`} onClick={() => { setOpen(!open); setError(null); }} aria-expanded={open}>Advance Amount</button>
       </div>
       {open && (
-        <AdvanceForm salary={driver.salary} days={days} onDays={setDays} busy={busy} error={error}
+        <AdvanceForm salary={driver.salary} days={days} onDays={setDays} busy={busy}
           onSubmit={() => { if (!validateAdvance(days, driver.salary)) { setError(null); setConfirm(true); } }} />
       )}
       {confirm && <AdvanceConfirm driver={driver} days={days} salary={driver.salary} busy={busy} onBack={() => setConfirm(false)} onConfirm={submit} />}

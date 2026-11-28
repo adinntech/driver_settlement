@@ -4,7 +4,7 @@ import ReadMore from "@/components/ui/ReadMore";
 import TableWrap from "@/components/ui/TableWrap";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import AppShell from "@/components/AppShell";
 import { ClearanceHistory, ClearanceStatusBadge, DetailSections, FinancialPanel } from "@/components/Clearance";
 import { RbpActions, ReviewActions } from "@/components/ClearanceActions";
@@ -14,6 +14,7 @@ import { useApi } from "@/hooks/useApi";
 import type { ClearanceDetail } from "@/utils/clearance";
 import { DELIVERY_LABEL } from "@/utils/delivery";
 import { formatDateTime } from "@/utils/format";
+import { markAllocationRejectionViewed } from "@/utils/rejectionViews";
 
 /** Shared detail page: RSA review (with Approve / Reject) or RBP view (with rejection details and resubmission). */
 export default function ClearanceDetailPage({ mode }: { mode: "RSA" | "RBP" }) {
@@ -31,6 +32,11 @@ function Screen({ mode }: { mode: "RSA" | "RBP" }) {
   const base = mode === "RSA" ? "/rsa-clearances" : "/on-road-vehicles";
   const q = useApi<ClearanceDetail>(id ? `${base}/${id}` : null);
   const back = mode === "RSA" ? "/rsa/clearance" : "/rbp/on-road";
+  // RBP opening a rejected allocation marks that rejection (only that one) as viewed
+  const unseen = mode === "RBP" && q.data?._id === id && q.data?.unviewedRejection ? q.data.version : null;
+  useEffect(() => {
+    if (id && unseen) markAllocationRejectionViewed(id, unseen).catch(() => {});
+  }, [id, unseen]);
   if (!id) return <ErrorState message="No allocation selected." />;
   if (q.loading) return <Skeleton rows={8} />;
   if (q.error || !q.data) return <ErrorState message={q.error ?? "Allocation not found"} onRetry={q.reload} />;

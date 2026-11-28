@@ -1,5 +1,6 @@
 "use client";
 
+import { useErrorState } from "@/context/ToastContext";
 import Select from "@/components/ui/Select";
 import DateInput from "@/components/ui/DateInput";
 import { useRef, useState } from "react";
@@ -33,7 +34,7 @@ export default function RenewalModal({ initialType, initial, onSave, onClose }: 
   const [date, setDate] = useState(initial?.nextRenewalDate ?? "");
   const [file, setFile] = useState<File | null>(null);
   const [saved] = useState<Attachment | null>(initial?.attachment ?? null);
-  const [error, setError] = useState("");
+  const [, setError] = useErrorState<string>("");
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const inflight = useRef(false);
@@ -64,7 +65,6 @@ export default function RenewalModal({ initialType, initial, onSave, onClose }: 
   const shown = file?.name ?? saved?.name ?? "";
   return (
     <Modal title="Vehicle Detail" onClose={busy ? () => {} : onClose}>
-      {error && <div className="alert" role="alert">{error}</div>}
       <div className="rm-form">
         <label htmlFor="rn-type">Renewal Type</label>
         <Select id="rn-type" value={type} onChange={(e) => setType(e.target.value as DocKey)} disabled={busy}>

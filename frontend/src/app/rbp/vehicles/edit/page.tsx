@@ -10,7 +10,7 @@ import RenewalModal from "@/components/RenewalModal";
 import VehicleAvailability from "@/components/VehicleAvailability";
 import VehicleDocSection from "@/components/VehicleDocSection";
 import { ConfirmDialog, ErrorState, Skeleton } from "@/components/ui/Ui";
-import { useToast } from "@/context/ToastContext";
+import { useErrorState, useToast } from "@/context/ToastContext";
 import { useApi } from "@/hooks/useApi";
 import { request } from "@/services/api";
 import type { Vehicle } from "@/types/domain";
@@ -53,7 +53,7 @@ function VehicleForm({ vehicle }: { vehicle: Vehicle | null }) {
   // new vehicle: Available Now from the current time; an older record without availability starts unchosen (never silently "Available")
   const [av, setAv] = useState<AvForm>(() => (vehicle ? fromAvailability(vehicle.availability) : emptyAvailability()));
   const [status, setStatus] = useState<string>(vehicle?.status ?? "DRAFT");
-  const [errors, setErrors] = useState<string[]>([]);
+  const [, setErrors] = useErrorState<string[]>([]);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [popup, setPopup] = useState<{ k: DocKey; id?: string } | null>(null);
@@ -101,11 +101,6 @@ function VehicleForm({ vehicle }: { vehicle: Vehicle | null }) {
         <span className={`badge badge-v-${(vehicle?.status ?? "DRAFT").toLowerCase()}`}>{vehicle ? vehicle.status : "NEW"}</span>
       </div>
 
-      {errors.length > 0 && (
-        <div className="alert" role="alert">
-          {errors.map((e) => <div key={e}>{e}</div>)}
-        </div>
-      )}
 
       <div className="card form-card fade-in">
         <h3 className="sub">Vehicle details</h3>
