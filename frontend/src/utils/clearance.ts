@@ -43,7 +43,7 @@ export interface ClearanceDetail extends ClearanceRow {
   driver: {
     _id: string; driverNumber: string; driverName: string; driverType: string | null; mobileNumber: string | null; licenceNumber: string | null; licenceType: string | null; licenceExpiryDate: string | null;
     availabilityStatus: string | null; assignedAt: string | null; assignedBy: string | null; remarks: string | null;
-    bank: { accountName: string | null; bankName: string | null; accountNumberMasked: string | null; ifscCode: string | null; accountNumber?: string | null /* RSA review only */ };
+    bank: { accountName: string | null; bankName: string | null; accountNumberMasked: string | null; ifscCode: string | null };
   };
   financial: ClearanceFinancial;
   rejection: { reason: string | null; remarks: string | null; rejectedBy: string | null; rejectedAt: string | null } | null;

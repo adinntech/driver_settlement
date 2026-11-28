@@ -234,7 +234,7 @@ export function DetailSections({ d }: { d: ClearanceDetail }) {
           <KV k="Driver Number" v={dr.driverNumber} /><KV k="Driver Name" v={dr.driverName} /><KV k="Driver Type" v={dr.driverType ? DRIVER_TYPE[dr.driverType] ?? dr.driverType : null} />
           <KV k="Mobile Number" v={dr.mobileNumber} /><KV k="Driving Licence" v={[dr.licenceNumber, dr.licenceType].filter(Boolean).join(" · ") || null} /><KV k="Licence Expiry" v={formatDate(dr.licenceExpiryDate)} />
           <KV k="Driver Availability Status" v={dr.availabilityStatus} /><KV k="Driver Assigned Date & Time" v={formatDateTime(dr.assignedAt)} /><KV k="Driver Remarks" v={dr.remarks && <ReadMore>{dr.remarks}</ReadMore>} />
-          <KV k="Bank" v={[dr.bank.bankName, dr.bank.accountNumber ?? dr.bank.accountNumberMasked, dr.bank.ifscCode].filter(Boolean).join(" · ") || null} />
+          <KV k="Bank" v={[dr.bank.bankName, dr.bank.accountNumberMasked, dr.bank.ifscCode].filter(Boolean).join(" · ") || null} />
         </dl>
       </section>
     </>

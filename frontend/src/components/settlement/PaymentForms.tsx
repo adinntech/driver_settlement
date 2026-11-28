@@ -445,7 +445,7 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
   const base = paymentsBase(useAuth().user?.role);
   const toast = useToast();
   const [f, setF] = useState<FinalForm>(() => finalFormFrom(ctx, existing?.data ?? null));
-  const [initialForm] = useState(() => JSON.stringify(finalFormFrom(ctx, existing?.data ?? null)));
+  const [initialForm, setInitialForm] = useState(() => JSON.stringify(finalFormFrom(ctx, existing?.data ?? null)));
   const [comment, setComment] = useState("");
   const [errors, setErrors] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -524,6 +524,10 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
   const onSuspense = (next: SuspenseRecords) => {
     setUpdatedSuspense(next);
     setF((cur) => ({ ...cur, n: { ...cur.n, suspenseAmount: String(next.total) } }));
+    setInitialForm((saved) => { // already saved on the server: it must not count as an unsaved change of this form
+      const was = JSON.parse(saved) as FinalForm;
+      return JSON.stringify({ ...was, n: { ...was.n, suspenseAmount: String(next.total) } });
+    });
   };
   const perDayTotal = pv(f.n.perDaySalary) + pv(f.n.perDayFood);
 

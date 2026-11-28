@@ -260,10 +260,8 @@ test("review details: project, vehicle, driver (bank masked), live driver advanc
   assert.ok(x.vehicle.allottedAt && x.vehicle.expectedReleaseAt && x.vehicle.nextAvailableAt);
   assert.equal(x.driver.driverNumber, drvA.driverNumber);
   assert.equal(x.driver.bank.accountNumberMasked.endsWith("9012"), true);
-  assert.match(x.driver.bank.accountNumber, /^\d+9012$/); // the RSA review shows the complete number
-  const road = (await rbp(`/${x._id}`)).body.data;
-  assert.equal(road.driver.bank.accountNumber, undefined); // only the RSA review gets the full number
-  assert.ok(!JSON.stringify(road).includes("123456789012"));
+  assert.equal(x.driver.bank.accountNumber, undefined);
+  assert.ok(!JSON.stringify(x).includes("123456789012")); // the full account number never leaves the server
   assert.deepEqual([x.financial.status, x.financial.outstanding, x.canApprove], ["NO_ADVANCE", 0, true]);
   const b = (await rsa(`/${String((await clr(B))._id)}`)).body.data;
   assert.deepEqual([b.financial.status, b.financial.outstanding, b.financial.totalAdvance, b.canApprove], ["UNAVAILABLE", null, 5000, false]);

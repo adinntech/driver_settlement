@@ -39,22 +39,25 @@ export function PreviousDataTable({ entries, onAction }: { entries: PreviousEntr
     </>
   );
   return (
+    <div style={{ overflowX: "auto" }}>
     <table className="table ds-mini" data-section="previous-data">
-      <thead><tr><th>Previous Data</th><th>Period</th><th>Payment Date</th><th>Reference No. / UTR</th><th>Source Details</th><th>Entered By</th><th className="ds-amt">Amount</th><th /></tr></thead>
+      <thead><tr><th>Previous Data</th><th>Period</th><th>Payment Date</th><th>Reference No. / UTR</th><th>Source Details</th><th>Entered By</th><th className="ds-amt">Amount</th></tr></thead>
       <tbody>
         {entries.flatMap((e) => e.revisions.map((r, i) => (
           <tr key={r._id} className={i ? "muted" : undefined}>
-            <td>{i ? <small>Earlier revision {r.revision} (not counted)</small> : <span className="badge badge-created">{r.status === "DRAFT" ? "Draft (not counted)" : r.revision > 1 ? `Historical · revision ${r.revision}` : "Historical"}</span>}</td>
-            {line(r)}
-            <td className="ds-nowrap">
+            <td>{i ? <small>Earlier revision {r.revision} (not counted)</small> : <span className="badge badge-created">{r.status === "DRAFT" ? "Draft (not counted)" : r.revision > 1 ? `Historical · revision ${r.revision}` : "Historical"}</span>}
+              <div className="actions-row" style={{ justifyContent: "flex-start", marginTop: 6 }}>
               {!i && onAction && (r.status === "DRAFT"
                 ? ((locked(r) ? ["DELETE"] : ["EDIT", "SUBMIT", "DELETE"]) as Action[]).map((a) => <button key={a} type="button" className="btn btn-outline btn-sm" onClick={() => onAction(a, e)}>{a === "EDIT" ? "Edit" : a === "SUBMIT" ? "Submit" : "Delete"}</button>)
                 : <button type="button" className="btn btn-outline btn-sm" onClick={() => onAction("CORRECT", e)}>Correct</button>)}
+              </div>
             </td>
+            {line(r)}
           </tr>
         )))}
       </tbody>
     </table>
+    </div>
   );
 }
 
