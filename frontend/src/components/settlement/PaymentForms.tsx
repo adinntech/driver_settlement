@@ -1,5 +1,6 @@
 "use client";
 
+import { salaryLabel } from "@/utils/driverForm";
 import ReadMore from "@/components/ui/ReadMore";
 import VerticalSelect from "@/components/ui/VerticalSelect";
 import { verticalLabel } from "@/utils/vertical";
@@ -116,7 +117,7 @@ function DriverPanel({ tv, onClose }: { tv: string; onClose: () => void }) {
         <>
           <dl className="ds-kv">
             <Row k="Driver" v={`${r.data.driverName} (${r.data.driverNumber})`} /><Row k="Type" v={r.data.driverType} /><Row k="Mobile" v={r.data.mobileNumber} />
-            <Row k="Per Day Salary" v={formatInr(r.data.perDaySalary)} /><Row k="Bank" v={r.data.bank.bankName} /><Row k="Account" v={r.data.bank.accountNumberMasked} /><Row k="IFSC" v={r.data.bank.ifscCode} />
+            <Row k={salaryLabel(r.data.driverType)} v={formatInr(r.data.perDaySalary)} /><Row k="Bank" v={r.data.bank.bankName} /><Row k="Account" v={r.data.bank.accountNumberMasked} /><Row k="IFSC" v={r.data.bank.ifscCode} />
             <Row k="Allotted" v={formatDateTime(r.data.allotment.driverAssignedAt)} />
           </dl>
           <h4 className="ds-h4">Advances</h4>

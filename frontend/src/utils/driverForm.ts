@@ -84,3 +84,6 @@ export function fromDriver(d: Partial<Driver>): DriverFormState {
 }
 
 export const fmtLicenceExpiry = (v?: string | null): string => (v ? formatDate(v) : "—");
+
+/** What a driver's saved salary figure is called when shown: monthly for company drivers, per day for acting drivers. */
+export const salaryLabel = (driverType: string | null | undefined) => (driverType === "COMPANY_DRIVER" ? "Monthly Salary" : "Per Day Salary");

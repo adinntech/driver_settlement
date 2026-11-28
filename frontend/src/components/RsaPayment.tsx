@@ -1,5 +1,6 @@
 "use client";
 
+import { salaryLabel } from "@/utils/driverForm";
 import TableWrap from "@/components/ui/TableWrap";
 import Select from "@/components/ui/Select";
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
@@ -319,7 +320,7 @@ export function DriverBody({ d }: { d: DriverView }) {
         <KV k="Driver Name" v={d.driverName} />
         <KV k="Driver Type" v={d.driverType === "ACTING_DRIVER" ? "Acting Driver" : "Company Driver"} />
         <KV k="Mobile Number" v={d.mobileNumber} />
-        <KV k="Per Day Salary" v={d.perDaySalary > 0 ? money(Math.round(d.perDaySalary * 100)) : null} />
+        <KV k={salaryLabel(d.driverType)} v={d.perDaySalary > 0 ? money(Math.round(d.perDaySalary * 100)) : null} />
         <KV k="Availability" v={d.availability?.status ? AV[d.availability.status] ?? d.availability.status : null} />
       </dl>
       <h4 className="sub">Bank details</h4>
