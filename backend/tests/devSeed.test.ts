@@ -117,7 +117,7 @@ test("seeding twice creates the data once, and never touches existing users or r
     allotments: await VehicleAllotment.countDocuments(), payments: await mongoose.connection.collection("rsapayments").countDocuments(),
     clearances: await mongoose.connection.collection("clearances").countDocuments(), budgets: await mongoose.connection.collection("budgets").countDocuments(),
     notifications: await mongoose.connection.collection("notifications").countDocuments(), events: await mongoose.connection.collection("clearanceevents").countDocuments(),
-    files: fs.readdirSync(path.join(storageDir, "driver_settlement", "vehicles", String(new Date().getUTCFullYear()))).length,
+    files: (fs.readdirSync(path.join(storageDir, "driver_settlement"), { recursive: true }) as string[]).filter((f) => /\.(jpe?g|png|webp|pdf)$/i.test(f)).length, // every media folder
   });
   const afterFirst = await counts();
   const second = await seedDevData();
