@@ -1,5 +1,5 @@
 import { istNowAt, istParts, joinAt, realDate, realTime } from "./availability.validator.js";
-import { ALLOWED_MIME, KEY_PATTERN, type Attachment } from "../services/storage.service.js";
+import { ALLOWED_MIME, KEY_PATTERN, attachmentUrl, type Attachment } from "../services/storage.service.js";
 
 type Obj = Record<string, unknown>;
 const blank = (v: unknown) => v === undefined || v === null || (typeof v === "string" && v.trim() === "");
@@ -73,7 +73,7 @@ export function parseAttachments(raw: unknown, errors: string[]): Attachment[] {
       name.length > 0 && name.length <= 120 && typeof x.mimeType === "string" && ALLOWED_MIME.includes(x.mimeType) &&
       typeof x.size === "number" && x.size > 0 && x.size <= 10 * 1024 * 1024;
     if (!ok) return void errors.push(`Attachment ${i + 1} is invalid, upload the file again`);
-    out.push({ storage: x.storage as Attachment["storage"], key: x.key as string, name, size: x.size as number, mimeType: x.mimeType as string });
+    out.push({ storage: x.storage as Attachment["storage"], key: x.key as string, name, size: x.size as number, mimeType: x.mimeType as string, url: attachmentUrl({ storage: x.storage as Attachment["storage"], key: x.key as string }) }); // URL from the server, never the browser
   });
   return out;
 }

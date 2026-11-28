@@ -394,10 +394,12 @@ test("storage: file names, validation, keys, local driver and cloud (space) driv
   const png = Buffer.concat([Buffer.from([0x89]), Buffer.from("PNG\r\n"), Buffer.alloc(8)]);
   assert.equal(st.validateUpload({ originalname: "x.PNG", mimetype: "image/png", size: png.length, buffer: png }).mimeType, "image/png");
 
-  const key = st.makeKey("a.pdf");
+  const key = st.makeKey("a.pdf", "vehicle-documents", new Date("2026-01-31T19:00:00Z")); // 1 Feb 00:30 IST
   assert.match(key, st.KEY_PATTERN);
-  assert.ok(key.startsWith("driver_settlement/vehicles/"));
-  assert.notEqual(key, st.makeKey("a.pdf")); // never overwrites an earlier upload
+  assert.ok(key.startsWith("driver_settlement/vehicle-documents/2026/02/"));
+  assert.notEqual(key, st.makeKey("a.pdf", "vehicle-documents")); // never overwrites an earlier upload
+  assert.match("driver_settlement/vehicles/2026/123e4567-e89b-12d3-a456-426614174000-a.pdf", st.KEY_PATTERN); // older uploads stay valid
+  assert.doesNotMatch("driver_settlement/other/2026/02/123e4567-e89b-12d3-a456-426614174000-a.pdf", st.KEY_PATTERN);
 
   // local driver: writes under the root only
   const root = path.join(tmpdir(), `ds-driver-${process.pid}`);
@@ -410,10 +412,12 @@ test("storage: file names, validation, keys, local driver and cloud (space) driv
   // cloud driver: bucket + driver_settlement folder, public-read, content type
   const sent: any[] = [];
   const space = st.createSpaceDriver({ send: async (c: any) => { sent.push(c.input); return {}; } }, "my-bucket");
-  const att = await st.storeUpload(f(), space);
+  const att = await st.storeUpload(f(), "delivery-photos", space);
   assert.equal(att.storage, "space");
+  assert.ok(att.key.startsWith("driver_settlement/delivery-photos/"));
+  assert.equal(att.url, st.attachmentUrl(att)); // URL saved with the record
   assert.equal(sent[0].Bucket, "my-bucket");
-  assert.ok(sent[0].Key.startsWith("driver_settlement/vehicles/"));
+  assert.ok(sent[0].Key.startsWith("driver_settlement/delivery-photos/"));
   assert.equal(sent[0].ContentType, "application/pdf");
   assert.equal(sent[0].ACL, "public-read");
 
@@ -453,7 +457,7 @@ test("upload API: RBP only, validates type / content / size, stores under driver
   const a = ok.body.data;
   assert.equal(a.storage, "local");
   assert.equal(a.name, "RC_copy.pdf");
-  assert.ok(a.key.startsWith("driver_settlement/vehicles/"));
+  assert.ok(a.key.startsWith("driver_settlement/vehicle-documents/"));
   assert.ok(existsSync(path.join(process.env.STORAGE_LOCAL_DIR!, a.key))); // physically in the backend public folder
   const served = await fetch(a.url.replace("http://localhost:5000", base.replace("/api", "")));
   assert.equal(served.status, 200);

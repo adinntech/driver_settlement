@@ -200,7 +200,7 @@ export function ChangeModal({ project, onClose, onDone }: { project: AllotmentPr
       const bad = fileError(file);
       if (bad) { problems.push(`${file.name}: ${bad}`); continue; }
       try {
-        const up = await uploadAttachment(file);
+        const up = await uploadAttachment(file, "/vehicles/attachments?category=allotment-changes");
         setF((s) => ({ ...s, attachments: [...s.attachments, up] }));
       } catch (e) {
         problems.push(`${file.name}: ${(e as Error).message}`);
@@ -385,7 +385,7 @@ export function ChangeDriverModal({ target, current, onClose, onDone }: { target
       const bad = fileError(file);
       if (bad) { problems.push(`${file.name}: ${bad}`); continue; }
       try {
-        const up = await uploadAttachment(file);
+        const up = await uploadAttachment(file, "/vehicles/attachments?category=allotment-changes");
         setF((x) => ({ ...x, attachments: [...x.attachments, up] }));
       } catch (e) {
         problems.push(`${file.name}: ${(e as Error).message}`);

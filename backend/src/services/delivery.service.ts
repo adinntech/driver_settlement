@@ -68,7 +68,7 @@ export async function uploadDeliveryPhoto(id: string, kindParam: string, file: {
   const c = await deliverable(id);
   if (!file) throw new AppError("Choose a photo to upload", 400);
   if (!/^image\/(jpeg|png|webp)$/.test(file.mimetype)) throw new AppError("Only JPG, PNG or WEBP photos are allowed", 400);
-  const a: Attachment = await storeUpload(file); // type, magic bytes and size are validated here (10 MB max)
+  const a: Attachment = await storeUpload(file, "delivery-photos"); // type, magic bytes and size are validated here (10 MB max)
   await DeliveryEvent.create({
     clearance: c._id, version: c.currentVersion, action: ACTION_FOR[kind], username, role: "RBP", at: now, fileKey: a.key,
     details: { kind, trackupNumber: c.trackupNumber, vehicleId: String(c.vehicle), driverId: String(c.driver), allotmentId: String(c.allotment), attachment: a },
