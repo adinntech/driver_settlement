@@ -1,7 +1,7 @@
 "use client";
 
 import ReadMore from "@/components/ui/ReadMore";
-import { useState, type ReactNode } from "react";
+import { useLayoutEffect, useState, type ReactNode } from "react";
 import { ApprovalBadge, ACTION_LABEL } from "@/components/ApprovalTimeline";
 import type { Activity, BudgetEvent, BudgetVersion, Stamp } from "@/types/domain";
 import { describeBudget, fieldLabel, show, STATUS_LABEL } from "@/utils/budgetDescribe";
@@ -132,6 +132,24 @@ function VersionBody({ v }: { v: BudgetVersion }) {
 }
 
 // ------------------------------------------------------------------ approval history
+/** The "Approval history" heading: closed whenever the page or another budget is opened. */
+export function ApprovalHistorySection({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  // the router keeps a left page alive: close it again, so coming back starts collapsed
+  useLayoutEffect(() => () => setOpen(false), []);
+  return (
+    <>
+      <h3 className="sub section-fold">
+        <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}>
+          <span>Approval history</span>
+          <span className="hist-chev" aria-hidden>{open ? "▾" : "▸"}</span>
+        </button>
+      </h3>
+      {open && children}
+    </>
+  );
+}
+
 export function ApprovalHistory({ events }: { events: BudgetEvent[] }) {
   const list = approvalEvents(events);
   if (list.length === 0) return <p className="muted">No approval activity yet.</p>;

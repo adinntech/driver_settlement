@@ -11,7 +11,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { RsaPager } from "@/components/RsaHistory";
 import { EmptyState, ErrorState, Modal, Skeleton } from "@/components/ui/Ui";
 import { useAuth } from "@/context/AuthContext";
-import { useToast } from "@/context/ToastContext";
+import { useErrorState, useToast } from "@/context/ToastContext";
 import { useApi } from "@/hooks/useApi";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useSessionState } from "@/hooks/useSessionState";
@@ -471,7 +471,7 @@ function DecisionForm({ p, decision, onCancel, onDone }: { p: SettlementDetail; 
   const toast = useToast();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
+  const [, setErr] = useErrorState<string>("");
   const submit = async () => {
     if (decision === "reject" && text.trim().length < 3) return setErr("Enter the reason for rejection");
     setBusy(true);
@@ -491,7 +491,6 @@ function DecisionForm({ p, decision, onCancel, onDone }: { p: SettlementDetail; 
         {decision === "reject" ? "Reason for rejection *" : "Comment (optional)"}
         <textarea rows={3} maxLength={500} value={text} onChange={(e) => setText(e.target.value)} autoFocus />
       </label>
-      {err && <div className="alert" role="alert">{err}</div>}
       <div className="actions-row">
         <button type="button" className="btn btn-outline" onClick={onCancel} disabled={busy}>Cancel</button>
         <button type="button" className={`btn ${decision === "reject" ? "btn-danger" : "btn-primary"}`} onClick={submit} disabled={busy}>

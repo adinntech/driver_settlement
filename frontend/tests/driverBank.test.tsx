@@ -42,7 +42,6 @@ test("edit mode: four editable fields, Save Bank Details and Cancel, loaded with
   for (const l of ['aria-label="Account Holder Name"', 'aria-label="Bank Name"', 'aria-label="Account Number"', 'aria-label="IFSC Code"', "Save Bank Details", ">Cancel<"]) assert.ok(html.includes(l), l);
   for (const v of ['value="Murugan K"', 'value="State Bank of India"', 'value="123456789012"', 'value="SBIN0001234"']) assert.ok(html.includes(v), v);
   assert.ok(!html.includes("Edit Bank Details") && html.includes('data-mode="edit"'));
-  assert.ok(panel(view(), { editing: true, errors: ["IFSC code is not valid (e.g. SBIN0001234)"] }).includes("IFSC code is not valid"));
   assert.ok(panel(view(), { editing: true, saving: true }).includes("Saving…"));
 });
 

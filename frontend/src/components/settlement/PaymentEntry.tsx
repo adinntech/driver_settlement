@@ -4,7 +4,7 @@ import Select from "@/components/ui/Select";
 import DateInput from "@/components/ui/DateInput";
 import { useRef, useState } from "react";
 import { Modal } from "@/components/ui/Ui";
-import { useToast } from "@/context/ToastContext";
+import { useErrorState, useToast } from "@/context/ToastContext";
 import { request } from "@/services/api";
 import { formatDate, formatInr } from "@/utils/format";
 import { ENTRY_MODES, cleanReference, validatePaymentEntry, type PaymentEntryForm, type SettlementDetail, type SettlementRow } from "@/utils/settlement";
@@ -23,7 +23,7 @@ export function PaymentEntryForm({ p, onCancel, onDone, inline = false }: { p: S
   const approvedOn = istDate(p.reviewedAt);
   const [f, setF] = useState<PaymentEntryForm>({ paymentMode: "", paymentDate: today, bankName: "", referenceNumber: "", referenceDate: "" });
   const [errs, setErrs] = useState<Record<string, string>>({});
-  const [err, setErr] = useState("");
+  const [, setErr] = useErrorState<string>("");
   const [busy, setBusy] = useState(false);
   const sending = useRef(false); // guards a double click before React re-renders the disabled button
 
@@ -147,7 +147,6 @@ export function PaymentEntryForm({ p, onCancel, onDone, inline = false }: { p: S
         </div>
       </fieldset>
 
-      {err && <div className="alert pe-alert" role="alert">{err}</div>}
       <div className="pe-actions">
         <span className="pe-foot-note"><Icon d={ICONS.lock} />Amount and category are fixed by the approval</span>
         <button type="button" className="btn btn-outline" onClick={onCancel} disabled={busy}>Cancel</button>

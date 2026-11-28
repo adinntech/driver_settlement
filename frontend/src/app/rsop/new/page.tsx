@@ -8,7 +8,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import AppShell from "@/components/AppShell";
 import CopyButton from "@/components/ui/CopyButton";
 import { ConfirmDialog, Modal } from "@/components/ui/Ui";
-import { useToast } from "@/context/ToastContext";
+import { useErrorState, useToast } from "@/context/ToastContext";
 import { request } from "@/services/api";
 import type { Project, ProjectType } from "@/types/domain";
 import { countDays, formatDate } from "@/utils/format";
@@ -97,7 +97,7 @@ function Field({ label, children, hint, wide }: { label: string; children: React
 
 function useFormState(initial: Form) {
   const [f, setF] = useState<Form>(initial);
-  const [errors, setErrors] = useState<string[]>([]);
+  const [errors, setErrors] = useErrorState<string[]>([]);
   const set = (k: string, v: string) => setF((s) => ({ ...s, [k]: v }));
   const bind = (k: string) => ({ value: f[k] ?? "", onChange: (e: { target: { value: string } }) => set(k, e.target.value) });
   return { f, set, bind, errors, setErrors };
@@ -255,7 +255,7 @@ function useSubmit(projectType: ProjectType, onReset: () => void) {
 const clean = (f: Form) => Object.fromEntries(Object.entries(f).filter(([, v]) => v !== ""));
 
 function RoadshowForm({ onReset }: { onReset: () => void }) {
-  const { f, set, bind, errors, setErrors } = useFormState({
+  const { f, set, bind, setErrors } = useFormState({
     sundayHalt: "NO", paSystem: "NO", mike: "NO", tv: "NO", promoter: "NO", leaflet: "NO", extraKmAllowed: "NO",
     photos: "REQUIRED", startDate: todayIst(),
   });
@@ -387,13 +387,6 @@ function RoadshowForm({ onReset }: { onReset: () => void }) {
         ))}
       </ol>
 
-      {errors.length > 0 && (
-        <div className="alert" role="alert">
-          {errors.map((e) => (
-            <div key={e}>{e}</div>
-          ))}
-        </div>
-      )}
 
       {step === 0 && (
         <div className="grid">
@@ -495,7 +488,7 @@ function RoadshowForm({ onReset }: { onReset: () => void }) {
 
 function SignageForm({ onReset }: { onReset: () => void }) {
   const today = todayIst();
-  const { f, bind, set, errors, setErrors } = useFormState({ date: today, fromDate: today });
+  const { f, bind, set, setErrors } = useFormState({ date: today, fromDate: today });
   const minStart = earliestStartYmd(today);
   const [confirm, setConfirm] = useState(false);
   const [manualDays, setManualDays] = useState(false);
@@ -543,13 +536,6 @@ function SignageForm({ onReset }: { onReset: () => void }) {
 
   return (
     <div className="card form-card">
-      {errors.length > 0 && (
-        <div className="alert" role="alert">
-          {errors.map((e) => (
-            <div key={e}>{e}</div>
-          ))}
-        </div>
-      )}
       <div className="grid">
         <ProjectCodeField bind={bind("projectCode")} />
         <Field label="Date"><DateInput {...bind("date")} max={today} /></Field>

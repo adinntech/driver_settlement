@@ -4,7 +4,7 @@ import TableWrap from "@/components/ui/TableWrap";
 import Select from "@/components/ui/Select";
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { EmptyState, ErrorState, Modal, Skeleton } from "@/components/ui/Ui";
-import { useToast } from "@/context/ToastContext";
+import { useErrorState, useToast } from "@/context/ToastContext";
 import { useApi } from "@/hooks/useApi";
 import { request } from "@/services/api";
 import { formatDate, formatDateTime } from "@/utils/format";
@@ -19,8 +19,6 @@ const KV = ({ k, v }: { k: string; v: ReactNode }) => (
     <dd>{v === null || v === undefined || v === "" ? "—" : v}</dd>
   </div>
 );
-const Errors = ({ list }: { list: string[] }) =>
-  list.length ? <div className="alert" role="alert">{list.map((e) => <div key={e}>{e}</div>)}</div> : null;
 
 /** Top block, like the reference screen: job sheet, vehicle, client, driver (+ payment number). Read-only. */
 export function ProjectHeader({ ctx }: { ctx: RsaContext }) {
@@ -144,7 +142,7 @@ export function PaymentFormPanel({
   const [draft, setDraft] = useState<ExpenseDraft>(emptyExpenseDraft(options.expenseOptions[0]?.key ?? ""));
   const [editing, setEditing] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
-  const [errors, setErrors] = useState<string[]>([]);
+  const [, setErrors] = useErrorState<string[]>([]);
   const t = totals(form);
   const set = <K extends keyof PaymentForm>(k: K, v: PaymentForm[K]) => onChange({ ...form, [k]: v });
   const opt = options.expenseOptions.find((o) => o.key === draft.optionKey);
@@ -180,7 +178,6 @@ export function PaymentFormPanel({
 
   return (
     <div className="rsa-form" data-section="payment-form">
-      <Errors list={errors} />
       <div className="rsa-grid">
         <label>Payment For</label>
         <Select value={ctx.paymentFor} disabled aria-label="Payment For">
@@ -374,7 +371,7 @@ export function EligibilityResult({ r }: { r: Eligibility }) {
 export function EligibilityModal({ tvId, onClose }: { tvId: string; onClose: () => void }) {
   const [days, setDays] = useState("");
   const [res, setRes] = useState<Eligibility | null>(null);
-  const [err, setErr] = useState("");
+  const [, setErr] = useErrorState<string>("");
   const [busy, setBusy] = useState(false);
   async function check() {
     if (!/^\d+$/.test(days) || Number(days) < 1) return setErr("Overall working days must be a positive whole number");
@@ -391,7 +388,6 @@ export function EligibilityModal({ tvId, onClose }: { tvId: string; onClose: () 
   }
   return (
     <Modal title="Check Advance Eligibility" onClose={onClose}>
-      <Errors list={err ? [err] : []} />
       <div className="b-row">
         <label>Overall Working Days</label>
         <div className="b-ctl"><input className="num-input" inputMode="numeric" value={days} aria-label="Overall Working Days" placeholder="e.g. 10" onChange={(e) => setDays(e.target.value.replace(/[^0-9]/g, "").slice(0, 3))} /></div>
@@ -481,7 +477,7 @@ export default function RsaPaymentScreen({ tvId, onClose, onSaved }: { tvId: str
   const [page, setPage] = useState(1);
   const hist = useApi<HistPage>(`/rsa/projects/${tvId}/payments?page=${page}&limit=20`);
   const [form, setForm] = useState<PaymentForm>(() => emptyPaymentForm());
-  const [errors, setErrors] = useState<string[]>([]);
+  const [, setErrors] = useErrorState<string[]>([]);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [panel, setPanel] = useState<null | "budget" | "driver" | "eligibility">(null);
@@ -536,7 +532,6 @@ export default function RsaPaymentScreen({ tvId, onClose, onSaved }: { tvId: str
         </button>
       </div>
       <div className="card rsa-full">
-        <Errors list={errors} />
         <PaymentFormPanel ctx={c} options={opts.data} form={form} onChange={setForm} />
       </div>
       <RsaActionBar onBudget={() => setPanel("budget")} onDriver={() => setPanel("driver")} onEligibility={() => setPanel("eligibility")} onSave={review} onClose={onClose} busy={busy} />

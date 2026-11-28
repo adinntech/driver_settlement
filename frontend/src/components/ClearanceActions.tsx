@@ -4,7 +4,7 @@ import Link from "next/link";
 import Select from "@/components/ui/Select";
 import { useState } from "react";
 import { Modal } from "@/components/ui/Ui";
-import { useToast } from "@/context/ToastContext";
+import { useErrorState, useToast } from "@/context/ToastContext";
 import { ApiError, request, uploadAttachment } from "@/services/api";
 import type { Attachment } from "@/types/domain";
 import { REJECTION_REASONS, MAX_REMARKS, financialLabel, outstandingText, validateRejection, type ClearanceDetail } from "@/utils/clearance";
@@ -33,7 +33,7 @@ export function ReviewActions({ d, onDone }: { d: ClearanceDetail; onDone: () =>
 function ApproveDialog({ d, onClose, onDone }: { d: ClearanceDetail; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useErrorState<string | null>(null);
   async function go() {
     setBusy(true);
     setError(null);
@@ -57,7 +57,6 @@ function ApproveDialog({ d, onClose, onDone }: { d: ClearanceDetail; onClose: ()
         <div><dt>Advance Verification</dt><dd>{financialLabel(d.financial.status)} ({outstandingText(d.financial.outstanding, d.financial.status)})</dd></div>
       </dl>
       <p className="muted">Approve this complete vehicle and driver allocation for on-road operations?</p>
-      {error && <div className="alert" role="alert">{error}</div>}
       <div className="actions-row">
         <button className="btn btn-outline" onClick={onClose} disabled={busy}>Cancel</button>
         <button className="btn btn-primary" onClick={go} disabled={busy}>{busy ? "Please wait…" : "Confirm Approval"}</button>
@@ -72,14 +71,14 @@ function RejectDialog({ d, onClose, onDone }: { d: ClearanceDetail; onClose: () 
   const [remarks, setRemarks] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useErrorState<string | null>(null);
   const problems = validateRejection(reason, remarks);
   async function go() {
     if (problems.length) return setError(problems.join("; "));
     setBusy(true);
     setError(null);
     try {
-      const attachments: Attachment[] = file ? [await uploadAttachment(file)] : [];
+      const attachments: Attachment[] = file ? [await uploadAttachment(file, "/rsa-clearances/attachments")] : [];
       await request(`/rsa-clearances/${d._id}/reject`, "POST", { version: d.version, reason, remarks: remarks.trim() || undefined, attachments });
       toast("Vehicle and driver rejected");
       onDone();
@@ -103,7 +102,6 @@ function RejectDialog({ d, onClose, onDone }: { d: ClearanceDetail; onClose: () 
       <label className="field"><span>Supporting Attachment (optional)</span>
         <input type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={(e) => setFile(e.target.files?.[0] ?? null)} aria-label="Supporting attachment" />
       </label>
-      {error && <div className="alert" role="alert">{error}</div>}
       <div className="actions-row">
         <button className="btn btn-outline" onClick={onClose} disabled={busy}>Cancel</button>
         <button className="btn btn-primary" onClick={go} disabled={busy || problems.length > 0}>{busy ? "Please wait…" : "Confirm Rejection"}</button>
@@ -117,7 +115,7 @@ export function RbpActions({ d, onDone }: { d: ClearanceDetail; onDone: () => vo
   const toast = useToast();
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useErrorState<string | null>(null);
   if (d.status !== "REJECTED") return null;
   async function go() {
     setBusy(true);
@@ -139,7 +137,6 @@ export function RbpActions({ d, onDone }: { d: ClearanceDetail; onDone: () => vo
       <p className="muted">Change the driver or vehicle in Vehicle Management → Allotment if needed, then resubmit. The rejected version stays in the history.</p>
       {d.changedSinceSubmission && d.current && <div className="cl-flag warn">The allocation was changed after the rejection: now {d.current.vehicleNo} · {d.current.driverNumber} {d.current.driverName}.</div>}
       {!d.allocationActive && <div className="cl-flag bad" role="alert">No active vehicle and driver allocation exists; allot a vehicle and driver before resubmitting.</div>}
-      {error && <div className="alert" role="alert">{error}</div>}
       <div className="actions-row">
         <Link className="btn btn-outline" href="/rbp/vehicles/allotment">Change Driver / Vehicle</Link>
         <button className="btn btn-primary" disabled={!d.canResubmit} onClick={() => setConfirm(true)}>Resubmit for RSA Approval</button>

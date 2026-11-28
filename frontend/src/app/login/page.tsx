@@ -1,5 +1,6 @@
 "use client";
 
+import { ErrorToasts, useErrorState } from "@/context/ToastContext";
 import { roadshowOn } from "@/utils/features";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
@@ -40,7 +41,7 @@ export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useErrorState<string>("");
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const pwRef = useRef<HTMLInputElement>(null);
@@ -77,7 +78,7 @@ export default function LoginPage() {
       setDemoPinned(false);
       setDemoPeek(false);
     };
-  }, []);
+  }, [setError]);
 
   const available = WORKSPACES.filter((w) => !roles.data || roles.data[w.role]);
 
@@ -166,7 +167,7 @@ export default function LoginPage() {
             <p>Select your workspace to continue.</p>
           </header>
 
-          {roles.error && <div className="lx-alert" role="alert">Cannot load workspaces: {roles.error}</div>}
+          <ErrorToasts errors={roles.error ? `Cannot load workspaces: ${roles.error}` : null} />
 
           <section className={`lx-card${role ? " has-role" : ""}`}>
           <p className="lx-card-label">Workspace</p>
@@ -217,7 +218,6 @@ export default function LoginPage() {
                   </span>
                   {touched && missing.pass && <small className="lx-field-error">Enter your password</small>}
                 </label>
-                {error && <div className="lx-alert" role="alert">{error}</div>}
                 {status === "offline" && !error && <div className="lx-alert is-soft" role="status">The server is not reachable right now. Signing in may fail until it is back.</div>}
                 <button className="lx-submit" disabled={busy}>
                   {busy ? <><span className="lx-spin" aria-hidden /> Signing in…</> : <>Sign in to {selected.role}<span aria-hidden className="lx-arrow">→</span></>}

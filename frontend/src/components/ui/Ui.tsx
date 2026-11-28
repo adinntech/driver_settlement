@@ -1,5 +1,6 @@
 "use client";
 
+import { ErrorToasts } from "@/context/ToastContext";
 import { useEffect, type ReactNode } from "react";
 
 export const Skeleton = ({ rows = 4 }: { rows?: number }) => (
@@ -21,7 +22,8 @@ export const EmptyState = ({ title, hint }: { title: string; hint?: string }) =>
 export const ErrorState = ({ message, onRetry }: { message: string; onRetry?: () => void }) => (
   <div className="empty error">
     <strong>Something went wrong</strong>
-    <p>{message}</p>
+    <p>This could not be loaded.</p>
+    <ErrorToasts errors={message} />
     {onRetry && (
       <button className="btn btn-outline" onClick={onRetry}>
         Retry

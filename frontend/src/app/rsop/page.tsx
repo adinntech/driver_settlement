@@ -1,5 +1,6 @@
 "use client";
 
+import { useErrorState } from "@/context/ToastContext";
 import { roadshowOn } from "@/utils/features";
 import VerticalSelect from "@/components/ui/VerticalSelect";
 import TableWrap from "@/components/ui/TableWrap";
@@ -35,7 +36,7 @@ function Dashboard() {
   const [detail, setDetail] = useState<Project | null>(null);
   const [doomed, setDoomed] = useState<ProjectGroup | null>(null); // project awaiting delete confirmation
   const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState("");
+  const [, setDeleteError] = useErrorState<string>("");
 
   const qs = useMemo(() => {
     const p = new URLSearchParams();
@@ -195,7 +196,6 @@ function Dashboard() {
           <div className="alert">
             This deletes the whole project ({doomed.projectType === "ROADSHOW" ? "Roadshow" : "Signage"}, every request under this code) for all users and notifies everyone. It cannot be undone from the application.
           </div>
-          {deleteError && <div className="alert" role="alert">{deleteError}</div>}
           <div className="actions-row">
             <button type="button" className="btn btn-outline" onClick={() => setDoomed(null)} disabled={deleting}>
               Cancel

@@ -9,13 +9,16 @@ const project = (...vehicles: [string, string | null][]) =>
   ({ vehicles: vehicles.map(([budgetStatus, approvalStatus]) => ({ budgetStatus, approvalStatus })) }) as unknown as Project;
 
 test("status filters", () => {
-  assert.deepEqual(STATUS_FILTERS.map((s) => s.label), ["All", "Pending Approval", "Rejected", "Approved", "Partially Budgeted", "Budget Created"]);
+  assert.deepEqual(STATUS_FILTERS.map((s) => s.label), ["All", "Budget Pending", "Pending Approval", "Rejected", "Approved", "Partially Budgeted", "Budget Created"]);
   const mixed = project(["CREATED", "REJECTED"], ["PENDING", null]);
   const full = project(["CREATED", "PENDING"], ["CREATED", "APPROVED"]);
   const matching = (p: Project) => STATUS_FILTERS.filter((s) => matchesStatus(p, s.value)).map((s) => s.label);
   assert.deepEqual(matching(mixed), ["All", "Rejected", "Partially Budgeted"]);
   assert.deepEqual(matching(full), ["All", "Pending Approval", "Approved", "Budget Created"]);
-  assert.deepEqual(matching(project(["PENDING", null])), ["All"]);
+  assert.deepEqual(matching(project(["PENDING", null])), ["All", "Budget Pending"]);
+  assert.deepEqual(matching(project(["PENDING", null], ["PENDING", null])), ["All", "Budget Pending"]); // never Pending Approval
+  assert.deepEqual(matching(project(["CREATED", "DRAFT"], ["PENDING", null])), ["All", "Partially Budgeted"]);
+  assert.deepEqual(matching(project(["CREATED", "DRAFT"])), ["All", "Budget Created"]);
 });
 
 test("only an unseen current rejection is marked as viewed", () => {

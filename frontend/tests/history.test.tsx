@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ActivitySummary, ApprovalHistory, VersionHistory } from "../src/components/HistorySections";
+import { ActivitySummary, ApprovalHistory, ApprovalHistorySection, VersionHistory } from "../src/components/HistorySections";
 import type { Activity, BudgetEvent, BudgetVersion } from "../src/types/domain";
 import { approvalEvents, sortEventsDesc, sortVersionsDesc, statusAfter, versionStatus, versionSubmittedAt } from "../src/utils/history";
 
@@ -125,4 +125,10 @@ test("activity summary: role-specific labels, missing entries hidden, old decisi
   assert.ok(legacy.includes("Not available"));
   assert.ok(!/undefined|Invalid Date/.test(legacy));
   assert.equal(renderToStaticMarkup(<ActivitySummary activity={null} role="RBP" />), "");
+});
+
+test("Approval history starts collapsed: only the heading and its arrow", () => {
+  const html = renderToStaticMarkup(<ApprovalHistorySection><ApprovalHistory events={events} /></ApprovalHistorySection>);
+  assert.ok(html.includes("Approval history") && html.includes('aria-expanded="false"') && html.includes("▸"));
+  assert.ok(!html.includes("hist-item"));
 });

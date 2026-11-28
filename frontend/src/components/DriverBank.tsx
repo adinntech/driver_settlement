@@ -1,5 +1,6 @@
 "use client";
 
+import { useErrorState } from "@/context/ToastContext";
 import { useState } from "react";
 import { useApi } from "@/hooks/useApi";
 import { request } from "@/services/api";
@@ -19,9 +20,9 @@ const KV = ({ k, v }: { k: string; v: React.ReactNode }) => (
  * Everything is driven by props so it renders the same in tests and in the dialogs.
  */
 export function DriverBankPanel({
-  bank, editing, form, errors = [], saving, onEdit, onChange, onSave, onCancel,
+  bank, editing, form, saving, onEdit, onChange, onSave, onCancel,
 }: {
-  bank: BankView; editing: boolean; form: BankForm; errors?: string[]; saving?: boolean;
+  bank: BankView; editing: boolean; form: BankForm; saving?: boolean;
   onEdit: () => void; onChange: (next: BankForm) => void; onSave: () => void; onCancel: () => void;
 }) {
   const set = <K extends keyof BankForm>(k: K, v: BankForm[K]) => onChange({ ...form, [k]: v });
@@ -44,7 +45,6 @@ export function DriverBankPanel({
         )
       ) : (
         <div data-mode="edit">
-          {errors.length > 0 && <div className="alert" role="alert">{errors.map((e) => <div key={e}>{e}</div>)}</div>}
           <div className="b-row"><label>Account Holder Name</label><div className="b-ctl"><input value={form.accountName} maxLength={80} aria-label="Account Holder Name" onChange={(e) => set("accountName", sanitizeBankText(e.target.value))} /></div></div>
           <div className="b-row"><label>Bank Name</label><div className="b-ctl"><input value={form.bankName} maxLength={80} aria-label="Bank Name" onChange={(e) => set("bankName", sanitizeBankText(e.target.value))} /></div></div>
           <div className="b-row"><label>Account Number</label><div className="b-ctl"><input className="num-input" inputMode="numeric" value={form.accountNumber} aria-label="Account Number" onChange={(e) => set("accountNumber", sanitizeDigits(e.target.value))} /></div></div>
@@ -71,7 +71,7 @@ export default function DriverBankSection({
   const [saved, setSaved] = useState<BankView | null>(null);
   const [editing, setEditingState] = useState(false);
   const [form, setForm] = useState<BankForm>(() => bankFormFrom(null));
-  const [errors, setErrors] = useState<string[]>([]);
+  const [, setErrors] = useErrorState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const bank = saved ?? res.data;
   const setEditing = (v: boolean) => { setEditingState(v); onEditingChange?.(v); };
@@ -97,7 +97,7 @@ export default function DriverBankSection({
 
   return (
     <DriverBankPanel
-      bank={bank} editing={editing} form={form} errors={errors} saving={saving}
+      bank={bank} editing={editing} form={form} saving={saving}
       onEdit={() => { setForm(bankFormFrom(bank)); setErrors([]); setEditing(true); }}
       onChange={setForm}
       onSave={save}

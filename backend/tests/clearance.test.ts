@@ -22,6 +22,8 @@ import mongoose from "mongoose";
 const { config: cfg } = await import("../src/config/index.js");
 cfg.mongoUri = "mongodb://127.0.0.1:27017/driver_settlement_test_clearance";
 cfg.storage.type = "local";
+// uploads of this test go to a throw-away folder, never into backend/public
+cfg.storage.localDir = (await import("node:fs")).mkdtempSync((await import("node:path")).join((await import("node:os")).tmpdir(), "ds-clearance-test-"));
 const { default: app } = await import("../src/app.js");
 const { connectDB } = await import("../src/db/connect.js");
 const { seedUsers } = await import("../src/services/auth.service.js");
@@ -476,6 +478,83 @@ test("regression: existing modules unchanged, every response uses the sendRespon
   await rsa("/summary");
   await rsa(`/${cid}`);
   assert.equal(await snap(), before);
+});
+
+test("supporting attachment: RSA uploads and the rejection keeps it; other roles, bad files and failures change nothing", async () => {
+  const t = await T();
+  const upload = async (token: string | undefined, name: string, type: string, bytes: Buffer, path = "/rsa-clearances/attachments") => {
+    const fd = new FormData();
+    fd.append("file", new Blob([new Uint8Array(bytes)], { type }), name);
+    const res = await fetch(base + path, { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body: fd });
+    return { status: res.status, body: (await res.json()) as any };
+  };
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+  const pdf = Buffer.from("%PDF-1.4 test");
+
+  assert.equal((await upload(undefined, "a.png", "image/png", png)).status, 401);
+  for (const role of [t.rbp, t.rsop, t.rsom]) assert.equal((await upload(role, "a.png", "image/png", png)).status, 403);
+  assert.equal((await upload(t.rsa, "a.png", "image/png", png, "/vehicles/attachments")).status, 403, "the RBP upload route is unchanged"); // the old failure
+  assert.equal((await upload(t.rsa, "a.exe", "application/octet-stream", png)).status, 400);
+  assert.equal((await upload(t.rsa, "fake.png", "image/png", Buffer.from("not a picture"))).status, 400);
+  assert.equal((await upload(t.rsa, "big.pdf", "application/pdf", Buffer.concat([pdf, Buffer.alloc(10 * 1024 * 1024)]))).status, 413);
+
+  const image = await upload(t.rsa, "evidence.png", "image/png", png);
+  assert.equal(image.status, 201, image.body.message);
+  const doc = await upload(t.rsa, "note.pdf", "application/pdf", pdf);
+  assert.equal(doc.status, 201, doc.body.message);
+
+  const pending: any = await Clearance.findOne({ status: "YET_TO_APPROVE" }).lean();
+  assert.ok(pending, "a pending clearance is needed");
+  const id = String(pending._id);
+  const body = { version: pending.currentVersion, reason: "Missing Documents", remarks: "see attached" };
+  assert.equal((await rsa(`/${id}/reject`, "POST", { ...body, attachments: [{ storage: "local", key: "../x", name: "x", size: 1, mimeType: "image/png" }] })).status, 400);
+  assert.equal(((await Clearance.findById(id).lean()) as any).status, "YET_TO_APPROVE", "a refused attachment leaves nothing half done");
+
+  const done = await rsa(`/${id}/reject`, "POST", { ...body, attachments: [image.body.data, doc.body.data] }); // retry with the uploaded files
+  assert.equal(done.status, 200, done.body.message);
+  const detail = (await rsa(`/${id}`)).body.data;
+  const event = detail.history.find((h: any) => h.action === "REJECTED" && h.version === pending.currentVersion);
+  assert.deepEqual([event.details.reason, event.details.remarks, event.username], ["Missing Documents", "see attached", "RSA"]);
+  assert.deepEqual(event.details.attachments.map((a: any) => a.name), ["evidence.png", "note.pdf"]);
+  assert.ok(event.details.pifNumber ?? detail.pifNumber);
+  for (const a of event.details.attachments) assert.ok(a.url.includes(a.key), a.url);
+  const seenByRbp = (await rbp(`/${id}`)).body.data.history.find((h: any) => h._id === event._id);
+  assert.equal(seenByRbp.details.attachments.length, 2);
+});
+
+test("unread rejections: counted for RBP only, cleared one by one on opening, kept across logins, new again after another rejection", async () => {
+  const t = await T();
+  await Clearance.collection.updateMany({}, { $unset: { rejectionViewedVersion: 1 } });
+  const count = async (token = t.rbp) => (await call("/on-road-vehicles/rejections/unviewed", "GET", undefined, token)).body.data.count as number;
+  for (const token of [t.rsa, t.rsom, t.rsop]) {
+    assert.equal((await call("/on-road-vehicles/rejections/unviewed", "GET", undefined, token)).status, 403);
+    assert.equal((await call("/on-road-vehicles/aaaaaaaaaaaaaaaaaaaaaaaa/rejection-viewed", "POST", { version: 1 }, token)).status, 403);
+  }
+  const rejected: any[] = await Clearance.find({ status: "REJECTED" }).lean();
+  const start = await count();
+  assert.equal(start, rejected.length);
+  assert.ok(start >= 1, "a rejected allocation is needed");
+  await rbp("?limit=100"); // opening the list marks nothing
+  assert.equal(await count(), start);
+
+  const one = rejected[0];
+  const id = String(one._id);
+  assert.equal((await rbp(`/${id}`)).body.data.unviewedRejection, true);
+  assert.equal(await count(), start, "reading alone marks nothing");
+  assert.equal((await rbp(`/${id}/rejection-viewed`, "POST", { version: one.currentVersion + 1 })).body.data.count, start, "a stale version marks nothing");
+  for (let i = 0; i < 2; i++) assert.equal((await rbp(`/${id}/rejection-viewed`, "POST", { version: one.currentVersion })).body.data.count, start - 1);
+  const after1: any = await Clearance.findById(id).lean();
+  assert.deepEqual([after1.status, after1.currentVersion, after1.updatedAt.getTime()], ["REJECTED", one.currentVersion, one.updatedAt.getTime()]);
+  assert.equal((await rbp(`/${id}`)).body.data.unviewedRejection, false);
+  assert.equal(await count(await login("RBP", "RBP", "123123")), start - 1, "still viewed after signing in again");
+
+  // another rejection of a later review cycle is unread again (the version moves on)
+  await Clearance.collection.updateOne({ _id: one._id }, { $set: { currentVersion: one.currentVersion + 1 } });
+  assert.equal(await count(), start);
+  // approved, pending and delivered allocations never count
+  await Clearance.collection.updateMany({ status: "REJECTED" }, { $set: { status: "APPROVED" } });
+  assert.equal(await count(), 0);
+  await Clearance.collection.updateMany({ _id: { $in: rejected.map((r) => r._id) } }, { $set: { status: "REJECTED" } });
 });
 
 test("cleanup", async () => {

@@ -314,7 +314,9 @@ export async function clearanceDetail(id: string) {
           : !matches ? "The vehicle / driver allocation changed; refresh to review the latest submission"
             : fin.canApprove ? null : fin.message,
     canResubmit: c.status === "REJECTED" && allocationActive && budgetOk,
-    history: events.map((e: any) => ({ _id: String(e._id), version: e.version, action: e.action, username: e.username, role: e.role, at: e.at, details: e.details })),
+    unviewedRejection: c.status === "REJECTED" && c.rejectionViewedVersion !== c.currentVersion,
+    history: events.map((e: any) => ({ _id: String(e._id), version: e.version, action: e.action, username: e.username, role: e.role, at: e.at,
+      details: e.details?.attachments?.length ? { ...e.details, attachments: e.details.attachments.map((x: any) => ({ ...x, url: attachmentUrl(x) })) } : e.details })),
   };
 }
 
@@ -411,4 +413,21 @@ export async function resubmitClearance(id: string, input: unknown, username: st
   await record(upd, version, "RESUBMITTED", username, "RBP", now, { ...refs(upd), previousVersion: c.currentVersion, financial: snap(fin), remarks });
   await notifyRsa(upd, version, true, now);
   return row(upd);
+}
+
+// ---------------------------------------------------------------- RBP: unread rejections (sidebar badge)
+
+/** Rejected allocations whose current rejection RBP has not opened. */
+export async function countUnviewedRejections() {
+  return { count: await Clearance.countDocuments({ status: "REJECTED", $expr: { $ne: ["$rejectionViewedVersion", "$currentVersion"] } }) };
+}
+
+/** RBP opened this rejected allocation. Safe to repeat; a stale version marks nothing. Nothing else about it changes. */
+export async function markRejectionViewed(id: string, version: unknown) {
+  if (!validId(id)) throw new AppError("Invalid clearance id", 400);
+  const n = Number(version);
+  if (!Number.isInteger(n) || n < 1) throw new AppError("Invalid version", 400);
+  // timestamps: false, because viewing is not an edit of the allocation
+  await Clearance.updateOne({ _id: id, status: "REJECTED", currentVersion: n }, { $set: { rejectionViewedVersion: n } }, { timestamps: false });
+  return countUnviewedRejections();
 }

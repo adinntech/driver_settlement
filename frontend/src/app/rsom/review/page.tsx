@@ -8,10 +8,10 @@ import AppShell from "@/components/AppShell";
 import { ApprovalBadge } from "@/components/ApprovalTimeline";
 import CopyButton from "@/components/ui/CopyButton";
 import { ConfirmDialog, ErrorState, Modal, Skeleton } from "@/components/ui/Ui";
-import { useToast } from "@/context/ToastContext";
+import { useErrorState, useToast } from "@/context/ToastContext";
 import { useApi } from "@/hooks/useApi";
 import { request } from "@/services/api";
-import { ActivitySummary, ApprovalHistory, VersionHistory } from "@/components/HistorySections";
+import { ActivitySummary, ApprovalHistory, ApprovalHistorySection, VersionHistory } from "@/components/HistorySections";
 import type { Activity, Budget, BudgetContext, BudgetEvent, BudgetVersion, Details } from "@/types/domain";
 import { describeBudget, fieldLabel, rejectableFields, show, statusOf } from "@/utils/budgetDescribe";
 import { formatDate, formatDateTime, formatInr, labelize } from "@/utils/format";
@@ -69,7 +69,7 @@ function Body({ data, reload }: { data: Review; reload: () => void }) {
   const [confirm, setConfirm] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [, setError] = useErrorState<string>("");
   const inflight = useRef(false);
   const rejected = new Map(status === "REJECTED" && budget.rejection ? budget.rejection.fields.map((f) => [f.field, f.comment]) : []);
 
@@ -103,7 +103,6 @@ function Body({ data, reload }: { data: Review; reload: () => void }) {
         </div>
         <ApprovalBadge status={status} />
       </div>
-      {error && <div className="alert" role="alert">{error}</div>}
 
       <div className="card">
         <h3 className="sub">Project information</h3>
@@ -219,8 +218,9 @@ function Body({ data, reload }: { data: Review; reload: () => void }) {
       </div>
 
       <div className="card">
-        <h3 className="sub">Approval history</h3>
-        <ApprovalHistory events={events} />
+        <ApprovalHistorySection key={budget._id}>
+          <ApprovalHistory events={events} />
+        </ApprovalHistorySection>
       </div>
 
       <div className="sticky-actions decision">
@@ -269,7 +269,7 @@ function RejectModal({ budget, onClose, onDone }: { budget: Budget; onClose: () 
   const options = rejectableFields(budget.data);
   const [reason, setReason] = useState("");
   const [picked, setPicked] = useState<Record<string, string>>({}); // field -> comment
-  const [errors, setErrors] = useState<string[]>([]);
+  const [, setErrors] = useErrorState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const inflight = useRef(false);
 
@@ -306,7 +306,6 @@ function RejectModal({ budget, onClose, onDone }: { budget: Budget; onClose: () 
 
   return (
     <Modal title={`Reject budget · V${budget.currentVersion}`} wide onClose={busy ? () => {} : onClose}>
-      {errors.length > 0 && <div className="alert" role="alert">{errors.map((e) => <div key={e}>{e}</div>)}</div>}
       <label className="field">
         <span>Rejection reason (optional)</span>
         <textarea rows={3} maxLength={1000} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Explain why this budget is rejected" />

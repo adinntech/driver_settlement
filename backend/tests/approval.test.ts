@@ -589,6 +589,27 @@ test("self-correction racing an approval: exactly one wins", async () => {
   assert.deepEqual(results.map((r) => r.status).sort(), [200, 409]);
 });
 
+test("the project list carries what Budget Pending is derived from: no record, then submitted, rejected, approved", async () => {
+  const t = await T();
+  const details = { ...signage("Pending Status Client"), numberOfVehicles: 2, vehicleTypes: [{ code: "CENTRE_NO_ROOF", quantity: 2 }] };
+  const p = (await call("/tracking", "POST", { projectType: "SIGNAGE", details }, t.rsop)).body.data;
+  const state = async () => {
+    const mine = (await call("/tracking?q=Pending%20Status%20Client", "GET", undefined, t.rbp)).body.data[0];
+    return mine.vehicles.map((v: any) => [v.budgetStatus, v.approvalStatus]);
+  };
+  assert.deepEqual(await state(), [["PENDING", null], ["PENDING", null]]);
+  const b = (await call("/budgets", "POST", { vehicleId: p.vehicles[0]._id, ...budgetBody }, t.rbp)).body.data.budget;
+  assert.deepEqual(await state(), [["CREATED", "DRAFT"], ["PENDING", null]]);
+  await call(`/budgets/${b._id}/submit`, "POST", {}, t.rbp);
+  assert.deepEqual((await state())[0], ["CREATED", "PENDING"]);
+  await call(`/approvals/${b._id}/reject`, "POST", { version: 1, reason: "Too high", fields: [{ field: "foodAmount", comment: "check" }] }, t.rsom);
+  assert.deepEqual((await state())[0], ["CREATED", "REJECTED"]);
+  await call(`/budgets/${b._id}`, "PUT", { ...budgetBody, foodAmount: 250 }, t.rbp);
+  await call(`/budgets/${b._id}/submit`, "POST", {}, t.rbp);
+  await call(`/approvals/${b._id}/approve`, "POST", { version: 2 }, t.rsom);
+  assert.deepEqual(await state(), [["CREATED", "APPROVED"], ["PENDING", null]]);
+});
+
 test("cleanup", async () => {
   server.close();
   await mongoose.connection.dropDatabase();

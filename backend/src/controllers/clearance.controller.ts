@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import { approveClearance, clearanceDetail, clearanceSummary, listClearances, rejectClearance, resubmitClearance } from "../services/clearance.service.js";
+import { approveClearance, clearanceDetail, clearanceSummary, countUnviewedRejections, listClearances, markRejectionViewed, rejectClearance, resubmitClearance } from "../services/clearance.service.js";
 import { sendResponse } from "../utils/sendResponse.js";
 
 const wrap =
@@ -37,4 +37,11 @@ export const reject = wrap(async (req, res) => {
 
 export const resubmit = wrap(async (req, res) => {
   res.status(200).json(sendResponse(true, "Allocation resubmitted for RSA approval", await resubmitClearance(id(req), req.body ?? {}, req.user!.username)));
+});
+
+export const unviewedRejections = wrap(async (_req, res) => {
+  res.status(200).json(sendResponse(true, "Unviewed rejections counted", await countUnviewedRejections()));
+});
+export const rejectionViewed = wrap(async (req, res) => {
+  res.status(200).json(sendResponse(true, "Rejection marked as viewed", await markRejectionViewed(id(req), req.body?.version)));
 });

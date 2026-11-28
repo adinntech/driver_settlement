@@ -8,7 +8,7 @@ import DateInput from "@/components/ui/DateInput";
 import Select from "@/components/ui/Select";
 import TableWrap from "@/components/ui/TableWrap";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/Ui";
-import { useToast } from "@/context/ToastContext";
+import { useErrorState, useToast } from "@/context/ToastContext";
 import { useApi } from "@/hooks/useApi";
 import { useDebounce } from "@/hooks/useDebounce";
 import { downloadFile, postFile } from "@/services/api";
@@ -24,7 +24,7 @@ export default function IoclData() {
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState<null | "upload" | "export">(null);
   const [result, setResult] = useState<IoclSummary | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useErrorState<string | null>(null);
   const [tick, setTick] = useState(0);
   const vehicleNo = useDebounce(f.vehicleNo, 300);
   const list = useApi<IoclPage>(`/iocl?${ioclQuery({ ...f, vehicleNo }, page)}&_=${tick}`);
@@ -75,7 +75,6 @@ export default function IoclData() {
         </div>
       </div>
 
-      {error && <div className="alert" role="alert">{error}</div>}
       {result && (
         <div className="card" role="status">
           <strong>Import finished:</strong> {result.imported} imported · {result.duplicate} duplicate · {result.failed} failed

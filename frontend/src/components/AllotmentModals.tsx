@@ -8,7 +8,7 @@ import DriverPicker, { DriverCard } from "@/components/DriverPicker";
 import VehiclePicker from "@/components/VehiclePicker";
 import { fileError } from "@/components/RenewalModal";
 import { Modal } from "@/components/ui/Ui";
-import { useToast } from "@/context/ToastContext";
+import { useErrorState, useToast } from "@/context/ToastContext";
 import { request, uploadAttachment } from "@/services/api";
 import type { AllotmentDriverRef, AllotmentProject, AvailableVehicle } from "@/types/domain";
 import { formatDate, formatInr } from "@/utils/format";
@@ -26,12 +26,6 @@ export const Field = ({ label, req, children }: { label: string; req?: boolean; 
     <div className="b-ctl">{children}</div>
   </div>
 );
-const Errors = ({ list }: { list: string[] }) =>
-  list.length ? (
-    <div className="alert" role="alert">
-      {list.map((e) => <div key={e}>{e}</div>)}
-    </div>
-  ) : null;
 const KV = ({ k, v }: { k: string; v: ReactNode }) => (
   <div>
     <dt>{k}</dt>
@@ -68,7 +62,7 @@ export function AllotModal({ project, onClose, onDone }: { project: AllotmentPro
   const [f, setF] = useState<AllotForm>(() => emptyAllotForm());
   const [veh, setVeh] = useState<AvailableVehicle | null>(null);
   const [pick, setPick] = useState<DriverPick>(() => emptyDriverPick());
-  const [errors, setErrors] = useState<string[]>([]);
+  const [, setErrors] = useErrorState<string[]>([]);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const inflight = useRef(false);
@@ -132,7 +126,6 @@ export function AllotModal({ project, onClose, onDone }: { project: AllotmentPro
 
   return (
     <Modal title={`Allot Vehicle · ${project.trackupNumber} · ${project.pifNumber}`} onClose={onClose} wide className="modal-allot">
-      <Errors list={errors} />
       <h4 className="sub">Project</h4>
       <ProjectSummary p={project} />
       <div className="allot-cols">
@@ -191,7 +184,7 @@ export function ChangeModal({ project, onClose, onDone }: { project: AllotmentPr
   const a = project.allotment!;
   const [f, setF] = useState<ChangeForm>(() => emptyChangeForm());
   const [veh, setVeh] = useState<AvailableVehicle | null>(null);
-  const [errors, setErrors] = useState<string[]>([]);
+  const [, setErrors] = useErrorState<string[]>([]);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -259,7 +252,6 @@ export function ChangeModal({ project, onClose, onDone }: { project: AllotmentPr
 
   return (
     <Modal title={`Change Vehicle · ${project.trackupNumber} · ${project.pifNumber}`} onClose={onClose}>
-      <Errors list={errors} />
       <Field label="Current Vehicle Number">
         <input value={a.vehicleNo} readOnly aria-label="Current Vehicle Number" />
       </Field>
@@ -307,7 +299,7 @@ export interface DriverTarget { _id: string; vehicleNo: string; trackupNumber: s
 export function AssignDriverModal({ target, onClose, onDone }: { target: DriverTarget; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
   const [pick, setPick] = useState<DriverPick>(() => emptyDriverPick());
-  const [errors, setErrors] = useState<string[]>([]);
+  const [, setErrors] = useErrorState<string[]>([]);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const inflight = useRef(false);
@@ -358,7 +350,6 @@ export function AssignDriverModal({ target, onClose, onDone }: { target: DriverT
     );
   return (
     <Modal title={`Assign Driver · ${target.vehicleNo}`} onClose={onClose}>
-      <Errors list={errors} />
       <Field label="Vehicle"><input value={target.vehicleNo} readOnly aria-label="Vehicle" /></Field>
       <Field label="Project"><input value={[target.trackupNumber, target.pifNumber, target.projectName].filter(Boolean).join(" · ")} readOnly aria-label="Project" /></Field>
       <h4 className="sub">Driver (Available Now only)</h4>
@@ -376,7 +367,7 @@ export function ChangeDriverModal({ target, current, onClose, onDone }: { target
   const toast = useToast();
   const [pick, setPick] = useState<DriverPick>(() => emptyDriverPick());
   const [f, setF] = useState<ChangeDriverForm>(() => emptyChangeDriverForm());
-  const [errors, setErrors] = useState<string[]>([]);
+  const [, setErrors] = useErrorState<string[]>([]);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -448,7 +439,6 @@ export function ChangeDriverModal({ target, current, onClose, onDone }: { target
     );
   return (
     <Modal title={`Change Driver · ${target.vehicleNo}`} onClose={onClose}>
-      <Errors list={errors} />
       <h4 className="sub">Current driver</h4>
       <dl className="kv drv-pick-card" data-section="current-driver">
         <KV k="Driver Number" v={<strong className="num">{current.driverNumber}</strong>} />
@@ -500,7 +490,7 @@ export function ExtendModal({ project, onClose, onDone }: { project: AllotmentPr
   const a = project.allotment!;
   const [s, setS] = useState<Schedule>(() => scheduleFromAllotment(a));
   const [reason, setReason] = useState("");
-  const [errors, setErrors] = useState<string[]>([]);
+  const [, setErrors] = useErrorState<string[]>([]);
   const [busy, setBusy] = useState(false);
   async function submit() {
     const e = validateSchedule(s, new Date(a.allottedAt));
@@ -518,7 +508,6 @@ export function ExtendModal({ project, onClose, onDone }: { project: AllotmentPr
   }
   return (
     <Modal title={`Extend Allotment · ${a.vehicleNo}`} onClose={onClose}>
-      <Errors list={errors} />
       <Field label="Expected Release">
         <DateTimePicker date={s.expectedReleaseDate} time={s.expectedReleaseTime} onChange={(d, t) => setS({ ...s, expectedReleaseDate: d, expectedReleaseTime: t })} label="Expected release" />
       </Field>
@@ -540,7 +529,7 @@ export function ReleaseModal({ project, onClose, onDone }: { project: AllotmentP
   const toast = useToast();
   const a = project.allotment!;
   const [remarks, setRemarks] = useState("");
-  const [error, setError] = useState("");
+  const [, setError] = useErrorState<string>("");
   const [busy, setBusy] = useState(false);
   async function submit() {
     setBusy(true);
@@ -555,7 +544,6 @@ export function ReleaseModal({ project, onClose, onDone }: { project: AllotmentP
   }
   return (
     <Modal title={`Release Vehicle · ${a.vehicleNo}`} onClose={onClose}>
-      <Errors list={error ? [error] : []} />
       <p className="muted">{a.vehicleNo} becomes Available Now and this allotment ends. The record stays in the Allotment History.</p>
       <Field label="Remarks">
         <input value={remarks} maxLength={300} onChange={(e) => setRemarks(e.target.value)} placeholder="Optional" />

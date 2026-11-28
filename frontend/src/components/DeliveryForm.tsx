@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DetailSections } from "@/components/Clearance";
 import { ErrorState, Modal, Skeleton } from "@/components/ui/Ui";
-import { useToast } from "@/context/ToastContext";
+import { useErrorState, useToast } from "@/context/ToastContext";
 import { useApi } from "@/hooks/useApi";
 import { ApiError, request, uploadDeliveryPhoto, type UploadedPhoto } from "@/services/api";
 import type { ClearanceDetail, DeliveryPhoto } from "@/utils/clearance";
@@ -13,15 +13,14 @@ import { formatDateTime } from "@/utils/format";
 
 const errText = (e: unknown) => (e instanceof ApiError || e instanceof Error ? e.message : "Something went wrong");
 
-/** One photo slot: camera capture (mobile), choose-from-device, preview, replace and remove. Nothing is uploaded until delivery is confirmed. */
-export function PhotoPicker({ label, helper, file, onChange, camera }: { label: string; helper?: string; file: File | null; onChange: (f: File | null) => void; camera: boolean }) {
-  const cam = useRef<HTMLInputElement>(null);
+/** One photo slot: Upload / Re-upload Photo with a preview. A chosen photo can only be replaced. Nothing is uploaded until delivery is confirmed. */
+export function PhotoPicker({ label, helper, file, onChange }: { label: string; helper?: string; file: File | null; onChange: (f: File | null) => void }) {
   const pick = useRef<HTMLInputElement>(null);
   const url = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
   useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
   const take = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0] ?? null;
-    e.target.value = ""; // the same file can be chosen again after a removal
+    e.target.value = ""; // so choosing the same file again is noticed
     if (f) onChange(f);
   };
   return (
@@ -36,28 +35,23 @@ export function PhotoPicker({ label, helper, file, onChange, camera }: { label: 
         </div>
       ) : <p className="muted">No photo selected.</p>}
       <div className="actions-row" style={{ justifyContent: "flex-start" }}>
-        {camera && <button type="button" className="btn btn-outline" onClick={() => cam.current?.click()}>{file ? "Retake Photo" : "Take Photo"}</button>}
-        <button type="button" className="btn btn-outline" onClick={() => pick.current?.click()}>{file ? "Replace from Device" : "Choose from Device"}</button>
-        {file && <button type="button" className="btn btn-outline btn-danger" onClick={() => onChange(null)}>Remove</button>}
+        <button type="button" className="btn btn-outline" onClick={() => pick.current?.click()}>{file ? "Re-upload Photo" : "Upload Photo"}</button>
       </div>
-      <input ref={cam} type="file" accept="image/*" capture="environment" hidden onChange={take} aria-label={`${label} camera`} />
       <input ref={pick} type="file" accept={PHOTO_EXTENSIONS.join(",")} hidden onChange={take} aria-label={`${label} file`} />
     </section>
   );
 }
 
-/** Optional extra photos: several can be chosen at once, each with a preview and Remove. Uploaded only when delivery is confirmed. */
-export function MultiPhotoPicker({ files, onChange, camera }: { files: File[]; onChange: (f: File[]) => void; camera: boolean }) {
-  const cam = useRef<HTMLInputElement>(null);
+/** Optional extra photos: several are chosen at once, each with a preview; Re-upload replaces the selection. Uploaded only when delivery is confirmed. */
+export function MultiPhotoPicker({ files, onChange }: { files: File[]; onChange: (f: File[]) => void }) {
   const pick = useRef<HTMLInputElement>(null);
   const urls = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
   useEffect(() => () => urls.forEach((u) => URL.revokeObjectURL(u)), [urls]);
   const add = (e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(e.target.files ?? []);
     e.target.value = "";
-    if (picked.length) onChange([...files, ...picked].slice(0, MAX_ADDITIONAL_PHOTOS));
+    if (picked.length) onChange(picked.slice(0, MAX_ADDITIONAL_PHOTOS));
   };
-  const full = files.length >= MAX_ADDITIONAL_PHOTOS;
   return (
     <section className="card cl-section" data-section="photo-additional">
       <h3>Additional Photos (optional)</h3>
@@ -69,17 +63,14 @@ export function MultiPhotoPicker({ files, onChange, camera }: { files: File[]; o
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={urls[i]} alt={`Additional photo ${i + 1} preview`} className="photo-preview" />
               <small className="muted">{f.name} · {fileSizeText(f.size)}</small>
-              <button type="button" className="btn btn-outline btn-danger btn-sm" onClick={() => onChange(files.filter((_, j) => j !== i))} aria-label={`Remove additional photo ${i + 1}`}>Remove</button>
             </div>
           ))}
         </div>
       ) : <p className="muted">No additional photos.</p>}
       <div className="actions-row" style={{ justifyContent: "flex-start" }}>
-        {camera && <button type="button" className="btn btn-outline" disabled={full} onClick={() => cam.current?.click()}>Take Photo</button>}
-        <button type="button" className="btn btn-outline" disabled={full} onClick={() => pick.current?.click()}>Add from Device</button>
+        <button type="button" className="btn btn-outline" onClick={() => pick.current?.click()}>{files.length ? "Re-upload Photo" : "Upload Photo"}</button>
         <small className="muted">{files.length}/{MAX_ADDITIONAL_PHOTOS}</small>
       </div>
-      <input ref={cam} type="file" accept="image/*" capture="environment" hidden onChange={add} aria-label="Additional photo camera" />
       <input ref={pick} type="file" accept={PHOTO_EXTENSIONS.join(",")} multiple hidden onChange={add} aria-label="Additional photos file" />
     </section>
   );
@@ -114,7 +105,7 @@ export default function DeliveryForm({ id }: { id: string }) {
   const [extra, setExtra] = useState<File[]>([]);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useErrorState<string | null>(null);
   const [done, setDone] = useState(false);
   // photos already stored by an earlier (failed) attempt are reused on retry; replacing a file drops its stored copy
   const stored = useRef<{ speedo?: { file: File; up: UploadedPhoto }; evidence?: { file: File; up: UploadedPhoto } }>({});
@@ -199,13 +190,12 @@ export default function DeliveryForm({ id }: { id: string }) {
           <small>{description.trim().length}/{DESCRIPTION_MAX}</small>
         </label>
       </section>
-      <PhotoPicker label="Speedometer Photo" helper="Capture the vehicle's current speedometer reading." file={speedo} onChange={setSpeedo} camera />
-      <PhotoPicker label="Driver & Vehicle Handover Photo" helper={EVIDENCE_HELPER} file={evidence} onChange={setEvidence} camera />
-      <MultiPhotoPicker files={extra} onChange={setExtra} camera />
+      <PhotoPicker label="Speedometer Photo" helper="Capture the vehicle's current speedometer reading." file={speedo} onChange={setSpeedo} />
+      <PhotoPicker label="Driver & Vehicle Handover Photo" helper={EVIDENCE_HELPER} file={evidence} onChange={setEvidence} />
+      <MultiPhotoPicker files={extra} onChange={setExtra} />
       <section className="card cl-section">
         <p className="muted">Delivered Date &amp; Time and Delivered By are recorded automatically by the server (IST) for the signed-in user when you confirm.</p>
       </section>
-      {error && !confirm && <div className="alert" role="alert">{error}</div>}
       <div className="cl-actions">
         <Link href="/rbp/on-road" className="btn btn-outline">Cancel</Link>
         <button type="button" className="btn btn-primary" disabled={problems.length > 0} onClick={() => { setError(null); setConfirm(true); }} title={problems[0] ?? ""}>Confirm Vehicle Delivery</button>
@@ -223,7 +213,6 @@ export default function DeliveryForm({ id }: { id: string }) {
             <div><dt>Additional Photos</dt><dd>{extra.length ? `${extra.length} photo${extra.length > 1 ? "s" : ""}` : "None"}</dd></div>
             <div className="wide"><dt>Delivery Description</dt><dd>{description.trim()}</dd></div>
           </dl>
-          {error && <div className="alert" role="alert">{error}</div>}
           <div className="actions-row">
             <button className="btn btn-outline" onClick={() => setConfirm(false)} disabled={busy}>Back</button>
             <button className="btn btn-primary" onClick={go} disabled={busy}>{busy ? "Uploading & saving…" : error ? "Retry Delivery" : "Confirm Delivery"}</button>

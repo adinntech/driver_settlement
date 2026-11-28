@@ -10,7 +10,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { EmptyState, ErrorState, Modal, Skeleton } from "@/components/ui/Ui";
-import { useToast } from "@/context/ToastContext";
+import { useErrorState, useToast } from "@/context/ToastContext";
 import { useApi } from "@/hooks/useApi";
 import { useDebounce } from "@/hooks/useDebounce";
 import { downloadFile, request } from "@/services/api";
@@ -133,7 +133,7 @@ function DriverPanel({ tv, onClose }: { tv: string; onClose: () => void }) {
 function AdvancePanel({ tv, onClose }: { tv: string; onClose: () => void }) {
   const [days, setDays] = useState("");
   const [res, setRes] = useState<null | { workingDays: number; perDaySalary: number; eligibleAdvanceAmount: number; finalAdvanceAmount: number }>(null);
-  const [err, setErr] = useState("");
+  const [, setErr] = useErrorState<string>("");
   const check = async () => {
     setErr("");
     setRes(null);
@@ -150,7 +150,6 @@ function AdvancePanel({ tv, onClose }: { tv: string; onClose: () => void }) {
         <input inputMode="numeric" placeholder="Overall working days" value={days} onChange={(e) => setDays(e.target.value.replace(/\D/g, "").slice(0, 3))} aria-label="Working days" />
         <button type="button" className="btn btn-primary" disabled={!days} onClick={check}>Check</button>
       </div>
-      {err && <div className="alert">{err}</div>}
       {res && <dl className="ds-kv"><Row k="Working days" v={res.workingDays} /><Row k="Per day salary" v={formatInr(res.perDaySalary)} /><Row k="Eligible" v={formatInr(res.eligibleAdvanceAmount)} /><Row k="Advance allowed" v={<b>{formatInr(res.finalAdvanceAmount)}</b>} /></dl>}
     </Modal>
   );
@@ -222,7 +221,7 @@ function DailyInner({ ctx, existing, expenseOptions }: { ctx: SettlementContext;
   const [selected, setSelected] = useState<string | null>(null);
   const [panel, setPanel] = useState<null | "budget" | "driver" | "advance">(null);
   const [comment, setComment] = useState("");
-  const [errors, setErrors] = useState<string[]>([]);
+  const [, setErrors] = useErrorState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const key = useRef(newSubmissionKey());
 
@@ -408,7 +407,6 @@ function DailyInner({ ctx, existing, expenseOptions }: { ctx: SettlementContext;
         </div>
       </div>
 
-      {errors.length > 0 && <div className="alert" role="alert">{errors.map((x) => <div key={x}>{x}</div>)}</div>}
       <div className="dsf-actions">
         <button type="button" className="dsf-btn dsf-btn-amber" onClick={() => setPanel("budget")}>View Budget</button>
         <button type="button" className="dsf-btn dsf-btn-amber" onClick={() => setPanel("driver")}>View Driver</button>
@@ -447,11 +445,11 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
   const [f, setF] = useState<FinalForm>(() => finalFormFrom(ctx, existing?.data ?? null));
   const [initialForm, setInitialForm] = useState(() => JSON.stringify(finalFormFrom(ctx, existing?.data ?? null)));
   const [comment, setComment] = useState("");
-  const [errors, setErrors] = useState<string[]>([]);
+  const [, setErrors] = useErrorState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [panel, setPanel] = useState<null | "suspense" | "closing" | "onroad" | "travel">(null);
   const [draft, setDraft] = useState({ category: "", description: "", quantity: "1", cost: "" });
-  const [draftErr, setDraftErr] = useState("");
+  const [, setDraftErr] = useErrorState<string>("");
   const [entryDate] = useState(() => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10));
   const key = useRef(newSubmissionKey());
   const t = useMemo(() => finalTotals(f), [f]);
@@ -645,7 +643,6 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
             <input className="dsf-in num-input" aria-label="Cost" placeholder="Cost" inputMode="decimal" value={draft.cost} onChange={(e) => setDraft({ ...draft, cost: sanitizeAmount(e.target.value) })} onKeyDown={(e) => e.key === "Enter" && addExpense()} />
             <button type="button" className="dsf-btn dsf-btn-amber dsf-add" onClick={addExpense}>Add</button>
           </div>
-          {draftErr && <div className="alert">{draftErr}</div>}
           <div className="dsf-table">
             <table>
               <thead><tr><th /><th>OTHERS</th><th className="ds-amt">QTY/HRS/DAYS</th><th className="ds-amt">COST</th><th className="ds-amt">CLAIMS</th><th className="ds-amt">APPROVED</th><th /></tr></thead>
@@ -698,7 +695,6 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
         </section>
       </div>
 
-      {errors.length > 0 && <div className="alert" role="alert">{errors.map((e) => <div key={e}>{e}</div>)}</div>}
       <div className="dsf-actions">
         <button type="button" className="dsf-btn dsf-btn-blue" onClick={() => setPanel("closing")}>Closing Balance View</button>
         <button type="button" className="dsf-btn dsf-btn-blue" onClick={() => setPanel("onroad")}>OnRoad Report</button>
