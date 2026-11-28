@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Regression: a driver + project vehicle with a Final Settlement (any status) must not be selectable or creatable again.
+process.env.ROADSHOW = "on";
 process.env.MONGO_URI = "mongodb://127.0.0.1:27017/driver_settlement_test_final_settled";
 process.env.JWT_SECRET = "test-secret";
 for (const [r, p] of [["RBP", "p2"], ["RSA", "p4"], ["RSO", "p5"]]) {

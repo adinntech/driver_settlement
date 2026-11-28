@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Requested vehicle types: validation and the RSOP -> budget -> allotment-picker chain. Own test database; never the real one.
+process.env.ROADSHOW = "on";
 process.env.MONGO_URI = "mongodb://127.0.0.1:27017/driver_settlement_test_vehicle_types";
 process.env.JWT_SECRET = "test-secret";
 

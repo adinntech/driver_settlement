@@ -1,4 +1,5 @@
 import mongoose, { Schema } from "mongoose";
+import { hideDeleted } from "./DeletedProject.js";
 
 // Current state of a budget (one per vehicle). History lives in immutable BudgetVersion docs.
 const budgetSchema = new Schema(
@@ -19,6 +20,10 @@ const budgetSchema = new Schema(
     resubmissionComment: String,
     approvedVersion: Number,
     rejectedVersion: Number,
+    /** Rejected version RBP has already opened (drives the unviewed-rejections badge). */
+    rejectionViewedVersion: Number,
+    /** Set when RBP corrected a pending budget before RSOM reviewed it (allowed once, never after a rejection). */
+    selfRevisedVersion: Number,
     reviewedBy: String,
     reviewedAt: Date,
     rejection: Schema.Types.Mixed, // { version, reason, fields: [{ field, comment }], rejectedBy, rejectedAt }
@@ -47,6 +52,7 @@ for (const op of ["updateOne", "findOneAndUpdate", "updateMany", "deleteOne", "d
     throw new Error("Budget versions are immutable");
   });
 
+hideDeleted(budgetSchema, "project");
 export const Budget = mongoose.models.Budget ?? mongoose.model("Budget", budgetSchema);
 export const BudgetVersion =
   mongoose.models.BudgetVersion ?? mongoose.model("BudgetVersion", versionSchema);

@@ -1,10 +1,12 @@
 "use client";
 
+import { markRejectionViewed, unviewedRejection } from "@/utils/rejectionViews";
+import ReadMore from "@/components/ui/ReadMore";
 import Select from "@/components/ui/Select";
 import DateInput from "@/components/ui/DateInput";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, Suspense, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
 import CopyButton from "@/components/ui/CopyButton";
 import { DecimalInput, IntInput } from "@/components/ui/Inputs";
@@ -24,7 +26,7 @@ import { keepInRange, laterOf } from "@/utils/dates";
 import {
   STATUS_TEXT, TOLL_VEHICLE_CLASSES, applyPlaza, rateOrigin, sourceLine, tollClassLabel, type TollJourney, type TollSourceInfo, type TollVehicleClass,
 } from "@/utils/tolls";
-import { canEdit, canSubmit, describeBudget, statusOf } from "@/utils/budgetDescribe";
+import { canEdit, canSelfCorrect, canSubmit, describeBudget, statusOf } from "@/utils/budgetDescribe";
 import { formatDate, formatDateTime, formatInr } from "@/utils/format";
 import { allowanceText, kmText } from "@/utils/kmAllowance";
 
@@ -44,6 +46,13 @@ function BudgetView() {
   const [editing, setEditing] = useState(false);
   const [askReason, setAskReason] = useState(false);
   const [revisionReason, setRevisionReason] = useState("");
+  // Opening the details of a rejected budget marks that rejection as viewed (a failure just leaves it counted).
+  const opened = res.data?.budget;
+  const openedId = opened?._id;
+  const unviewed = unviewedRejection(opened);
+  useEffect(() => {
+    if (openedId && unviewed) markRejectionViewed(openedId, unviewed).catch(() => {});
+  }, [openedId, unviewed]);
 
   if (!vehicle) return <ErrorState message="No vehicle selected." />;
   if (res.loading) return <Skeleton rows={8} />;
@@ -60,8 +69,8 @@ function BudgetView() {
             {c.client} · Vehicle {c.vehicleIndex}
           </p>
         </div>
-        {budget && !editing && canEdit(budget.approvalStatus) && (
-          <button className="btn btn-primary" onClick={() => (statusOf(budget.approvalStatus) === "REJECTED" ? setAskReason(true) : setEditing(true))}>
+        {budget && !editing && (canEdit(budget.approvalStatus) || canSelfCorrect(budget)) && (
+          <button className="btn btn-primary" onClick={() => (canSelfCorrect(budget) ? setAskReason(true) : setEditing(true))}>
             {statusOf(budget.approvalStatus) === "REJECTED" ? "Edit & Resubmit" : "Edit Budget"}
           </button>
         )}
@@ -100,7 +109,10 @@ function BudgetView() {
         </dl>
       </div>
 
-      {!budget || (editing && canEdit(budget.approvalStatus)) ? (
+      {/* RSOM's reason and requested changes stay in view while RBP corrects a rejected budget. */}
+      {budget && editing && statusOf(budget.approvalStatus) === "REJECTED" && <RbpApprovalPanel budget={budget} />}
+
+      {!budget || (editing && (canEdit(budget.approvalStatus) || canSelfCorrect(budget))) ? (
         <BudgetForm
           vehicleId={vehicle}
           context={c}
@@ -135,12 +147,12 @@ function BudgetView() {
   );
 }
 
-/** Mandatory before a rejected budget can be edited; the reason is saved with the new version and shown to RSOM. */
+/** Mandatory before a submitted budget can be corrected ahead of RSOM review; the reason is saved with the new version and shown to RSOM. */
 function RevisionReasonModal({ version, onClose, onConfirm }: { version: number; onClose: () => void; onConfirm: (reason: string) => void }) {
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
   return (
-    <Modal title={`Edit rejected budget · V${version}`} onClose={onClose}>
+    <Modal title={`Edit submitted budget · V${version}`} onClose={onClose}>
       {error && <div className="alert" role="alert">{error}</div>}
       <label className="field">
         <span>Reason for revision *</span>
@@ -207,7 +219,7 @@ const Row = ({ label, k, children }: { label: string; k?: string; children: Reac
     <div className={`b-row${bad !== undefined ? " b-rej" : ""}`}>
       <label>{label}</label>
       <div className="b-ctl">{children}</div>
-      {bad !== undefined && <small className="rej-note b-rej-note">Rejected: {bad}</small>}
+      {bad !== undefined && <small className="rej-note b-rej-note"><ReadMore>Rejected: {bad}</ReadMore></small>}
     </div>
   );
 };
@@ -245,6 +257,7 @@ function BudgetForm({
   const saving = useRef(false); // blocks double submits
   const status = budget ? statusOf(budget.approvalStatus) : "DRAFT";
   const resubmit = status === "REJECTED";
+  const correcting = status === "PENDING"; // self-correction: saving resubmits at once
   const v = useMemo(() => computeValues(f), [f]);
   // Budget KM estimate against the campaign allowance (KM / day x days + the one-time Extra KM pool). Shown only; no money effect.
   const estimatedKm = Math.round((Number(f.estimatedKmPerDay) || 0) * (Number(f.numberOfDays) || 0) * 100) / 100;
@@ -303,7 +316,7 @@ function BudgetForm({
     if (saving.current) return;
     saving.current = true;
     setBusy(true);
-    const body = { ...toPayload(f), ...(resubmit ? { revisionReason } : {}) };
+    const body = { ...toPayload(f), ...(correcting ? { selfCorrection: true, revisionReason } : {}) };
     let id = budget?._id ?? "";
     let saved = false;
     const fail = (msg: string) => {
@@ -329,7 +342,8 @@ function BudgetForm({
     } catch (err) {
       return fail((err as Error).message);
     }
-    if (mode === "SUBMIT") {
+    if (correcting) toast("Revised budget resubmitted to RSOM");
+    else if (mode === "SUBMIT") {
       try {
         await request(`/budgets/${id}/submit`, "POST", { comment });
       } catch (err) {
@@ -386,11 +400,10 @@ function BudgetForm({
               {estimatedKm > context.km.totalAllowedKm && ` · exceeds the allowance by ${kmText(Math.round((estimatedKm - context.km.totalAllowedKm) * 100) / 100)}`}
             </p>
           )}
-          <Row label="Fuel Cost" k="dieselAmount">
-            <DecimalInput value={f.dieselAmount} onChange={(x) => set("dieselAmount", x)} placeholder="0.00" />
-            <UnitSelect value="PER_CAMPAIGN" fixed />
-            <Out value={v.dieselValue} />
-          </Row>
+          <Row label="Fuel Rate (₹/litre)" k="fuelRate"><DecimalInput value={f.fuelRate} onChange={(x) => set("fuelRate", x)} placeholder="0.00" aria-label="Fuel Rate per litre" /></Row>
+          <Row label="Daily Fuel Cost"><Out value={v.dailyFuelCost} /></Row>
+          <Row label="Fuel Cost (campaign)" k="dieselAmount"><Out value={v.dieselValue} /></Row>
+          <p className="muted b-date-hint">Daily = Estimated KM per day ÷ Mileage × Fuel Rate (₹/litre). Campaign = Daily × Number of days.</p>
           <Row label="Salary" k="salaryAmount">
             <DecimalInput value={f.salaryAmount} onChange={(x) => set("salaryAmount", x)} placeholder="0.00" />
             <UnitSelect value={f.salaryUnit} onChange={(u) => set("salaryUnit", u)} />
@@ -405,7 +418,7 @@ function BudgetForm({
         </div>
 
         <div className="b-col">
-          <h4 className={`sub${rejected.has("tolls") ? " kv-rej-h" : ""}`}>Toll Detail{rejected.has("tolls") && <small className="rej-note"> — Rejected: {rejected.get("tolls")}</small>}</h4>
+          <h4 className={`sub${rejected.has("tolls") ? " kv-rej-h" : ""}`}>Toll Detail{rejected.has("tolls") && <small className="rej-note"><ReadMore>Rejected: {rejected.get("tolls")}</ReadMore></small>}</h4>
           <div className="toll-basis">
             <label>
               <span>Toll vehicle class</span>
@@ -495,7 +508,7 @@ function BudgetForm({
                   </button>
                 </div>
               ))}
-              {rejected.has("others") && <small className="rej-note">Rejected: {rejected.get("others")}</small>}
+              {rejected.has("others") && <small className="rej-note"><ReadMore>Rejected: {rejected.get("others")}</ReadMore></small>}
               <div>
                 <button type="button" className="btn btn-outline btn-sm" onClick={() => setF(addCharge)}>+ Add Others</button>
               </div>
@@ -513,7 +526,6 @@ function BudgetForm({
             ))}
           </datalist>
           <Row label="Total Km" k="totalKm"><DecimalInput value={f.totalKm} onChange={(x) => set("totalKm", x)} placeholder="0.00" /></Row>
-          <Row label="Fuel Rate (₹/litre)" k="fuelRate"><DecimalInput value={f.fuelRate} onChange={(x) => set("fuelRate", x)} placeholder="0.00" aria-label="Fuel Rate per litre" /></Row>
           <Row label="Up/Down Value" k="upDownValue"><Out value={v.upDownValue} /></Row>
           <p className="muted b-date-hint">Up/Down = Total KM ÷ Mileage × Fuel Rate + Toll Amount (calculated automatically).</p>
           <Row label="Total Value"><Out value={v.totalValue} /></Row>
@@ -521,10 +533,12 @@ function BudgetForm({
       </div>
       </RejectedCtx.Provider>
 
-      <label className="field comment-field">
-        <span>{resubmit ? "Resubmission comment for RSOM (optional, sent with Save & Submit)" : "Comment for RSOM (optional, sent with Save & Submit)"}</span>
-        <textarea rows={2} maxLength={500} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="What did you change or what should RSOM know?" />
-      </label>
+      {!correcting && (
+        <label className="field comment-field">
+          <span>{resubmit ? "Resubmission comment for RSOM (optional, sent with Save & Submit)" : "Comment for RSOM (optional, sent with Save & Submit)"}</span>
+          <textarea rows={2} maxLength={500} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="What did you change or what should RSOM know?" />
+        </label>
+      )}
 
       <div className="sticky-actions">
         <div className="total">
@@ -537,11 +551,13 @@ function BudgetForm({
               Close
             </button>
           )}
-          <button className="btn btn-outline" onClick={() => setConfirm("SAVE")} disabled={busy}>
-            Save
-          </button>
+          {!correcting && (
+            <button className="btn btn-outline" onClick={() => setConfirm("SAVE")} disabled={busy}>
+              Save
+            </button>
+          )}
           <button className="btn btn-primary" onClick={() => setConfirm("SUBMIT")} disabled={busy}>
-            Save &amp; Submit for Approval
+            {correcting ? "Resubmit to RSOM" : <>Save &amp; Submit for Approval</>}
           </button>
         </div>
       </div>
@@ -557,10 +573,10 @@ function BudgetForm({
       )}
       {confirm === "SUBMIT" && (
         <ConfirmDialog
-          title={resubmit ? "Save and resubmit to RSOM?" : "Save and submit for approval?"}
-          message={`${budget ? "Any changes are saved as a new version" : "The budget is saved"}, and that version is sent to RSOM. You cannot edit it while it is waiting for approval.`}
+          title={resubmit || correcting ? "Save and resubmit to RSOM?" : "Save and submit for approval?"}
+          message={`${budget ? "Any changes are saved as a new version" : "The budget is saved"}, and that version is sent to RSOM. ${correcting ? "It cannot be edited again while RSOM reviews it." : "While it waits, you can correct it once, before RSOM reviews it."}`}
           busy={busy}
-          confirmLabel={resubmit ? "Save & Resubmit" : "Save & Submit"}
+          confirmLabel={resubmit || correcting ? "Save & Resubmit" : "Save & Submit"}
           onConfirm={() => save("SUBMIT")}
           onCancel={() => setConfirm(null)}
         />

@@ -25,6 +25,8 @@ export interface DeliverySummary { total: number; approved: number; yetToApprove
 export interface DeliveryHistoryRow { _id: string; version: number; action: string; username: string; role: string; at: string; details: Record<string, unknown> | null }
 export interface ClearanceSummary { total: number; yetToApprove: number; approved: number; rejected: number }
 export interface ClearanceFinancial {
+  /** Previous Data (historical payments) of this driver on this vehicle; informational only. */
+  previousData?: { entryId: string; revision: number; fromDate: string; toDate: string; referenceNumber: string; amount: number }[];
   status: FinancialStatus; totalAdvance: number; totalSettled: number | null; outstanding: number | null; canApprove: boolean; message: string; settlementDataAvailable: boolean;
   advances: { _id: string; submittedAt: string; workingDays: number; finalAdvanceAmount: number; submittedBy: string }[]; settlements: { amount: number }[];
 }
@@ -41,7 +43,7 @@ export interface ClearanceDetail extends ClearanceRow {
   driver: {
     _id: string; driverNumber: string; driverName: string; driverType: string | null; mobileNumber: string | null; licenceNumber: string | null; licenceType: string | null; licenceExpiryDate: string | null;
     availabilityStatus: string | null; assignedAt: string | null; assignedBy: string | null; remarks: string | null;
-    bank: { accountName: string | null; bankName: string | null; accountNumberMasked: string | null; ifscCode: string | null };
+    bank: { accountName: string | null; bankName: string | null; accountNumberMasked: string | null; ifscCode: string | null; accountNumber?: string | null /* RSA review only */ };
   };
   financial: ClearanceFinancial;
   rejection: { reason: string | null; remarks: string | null; rejectedBy: string | null; rejectedAt: string | null } | null;

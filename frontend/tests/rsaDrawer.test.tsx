@@ -1,3 +1,4 @@
+process.env.NEXT_PUBLIC_ROADSHOW = "on";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

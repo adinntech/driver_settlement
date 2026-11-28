@@ -113,7 +113,7 @@ test("change vehicle: current vehicle read-only, replacement picker, mandatory r
 
 test("extend / release dialogs show the current allotment", () => {
   const ext = renderToStaticMarkup(<ExtendModal project={allotted} onClose={noop} onDone={noop} />);
-  assert.ok(ext.includes("Extend Allotment") && ext.includes("TN58BM6554") && ext.includes("Next Available") && ext.includes('value="2026-11-26"') && ext.includes('value="09:00"'));
+  assert.ok(ext.includes("Extend Allotment") && ext.includes("TN58BM6554") && ext.includes("Next Available") && ext.includes('value="2026-11-26"') && ext.includes("09:00 AM"));
   const rel = renderToStaticMarkup(<ReleaseModal project={allotted} onClose={noop} onDone={noop} />);
   assert.ok(rel.includes("Release Vehicle") && rel.includes("Available Now"));
   assert.deepEqual(scheduleFromAllotment({ expectedReleaseAt: null, nextAvailableAt: "2026-11-26T03:30:00.000Z" }), { expectedReleaseDate: "", expectedReleaseTime: "", nextAvailableDate: "2026-11-26", nextAvailableTime: "09:00" });

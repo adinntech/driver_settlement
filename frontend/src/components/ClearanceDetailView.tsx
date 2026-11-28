@@ -1,5 +1,6 @@
 "use client";
 
+import ReadMore from "@/components/ui/ReadMore";
 import TableWrap from "@/components/ui/TableWrap";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -47,7 +48,7 @@ function Screen({ mode }: { mode: "RSA" | "RBP" }) {
       {d.status === "YET_TO_APPROVE" && mode === "RBP" && <div className="cl-flag warn" role="status">Waiting for RSA Approval</div>}
       {d.status === "REJECTED" && d.rejection && (
         <div className="cl-flag bad" role="alert" data-section="rejection-details">
-          Rejected by {d.rejection.rejectedBy} on {formatDateTime(d.rejection.rejectedAt)} — {d.rejection.reason}{d.rejection.remarks ? `: ${d.rejection.remarks}` : ""}
+          <ReadMore>Rejected by {d.rejection.rejectedBy} on {formatDateTime(d.rejection.rejectedAt)} — {d.rejection.reason}{d.rejection.remarks ? `: ${d.rejection.remarks}` : ""}</ReadMore>
         </div>
       )}
       {d.changedSinceSubmission && d.status === "YET_TO_APPROVE" && <div className="cl-flag warn">The allocation changed since this page was prepared; reload to review the latest submission.</div>}

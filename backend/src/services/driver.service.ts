@@ -68,7 +68,7 @@ const DETAIL_KEYS = ["driverName", "driverType", "address", "mobileNumber", "acc
 
 /** Resolves the approved project (read-only on RSOP data) and validates the availability block. */
 async function checkAvailability(input: unknown, prev?: any) {
-  const linked = await linkDriverProject(input);
+  const linked = await linkDriverProject(input, prev);
   const r = validateDriverAvailability(linked.input, new Date(), prev);
   if (linked.error) r.errors.unshift(linked.error);
   return r;

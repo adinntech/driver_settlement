@@ -71,6 +71,8 @@ export interface Budget {
   resubmissionComment?: string;
   approvedVersion?: number;
   rejectedVersion?: number;
+  rejectionViewedVersion?: number | null;
+  selfRevisedVersion?: number | null;
   reviewedBy?: string;
   reviewedAt?: string;
   rejection?: Rejection;

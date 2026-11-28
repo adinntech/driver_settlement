@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Suspense = Daily Payments with a recorded Reference No. / UTR (whole Total Payable), in the popup, its total and the PDF.
+process.env.ROADSHOW = "on";
 process.env.MONGO_URI = "mongodb://127.0.0.1:27017/driver_settlement_test_suspense";
 process.env.JWT_SECRET = "test-secret";
 for (const [r, p] of [["RBP", "p2"], ["RSOM", "p3"], ["RSA", "p4"], ["RSO", "p5"]]) {

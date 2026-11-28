@@ -1,4 +1,5 @@
 import mongoose, { Schema } from "mongoose";
+import { hideDeleted } from "./DeletedProject.js";
 
 const vehicleSchema = new Schema(
   {
@@ -14,5 +15,6 @@ const vehicleSchema = new Schema(
   { timestamps: true },
 );
 
+hideDeleted(vehicleSchema, "project");
 export const TrackingVehicle =
   mongoose.models.TrackingVehicle ?? mongoose.model("TrackingVehicle", vehicleSchema);

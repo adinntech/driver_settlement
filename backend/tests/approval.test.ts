@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+process.env.ROADSHOW = "on";
 process.env.MONGO_URI = "mongodb://127.0.0.1:27017/driver_settlement_test_approval";
 process.env.JWT_SECRET = "test-secret";
 process.env.RSOP_USERNAME = "RSOP";
@@ -59,7 +60,7 @@ const budgetBody = {
   mileage: 12, estimatedKmPerDay: 150, onRoadDate: day(-2), completionDate: day(3), sundayHalt: true, numberOfDays: 6, // Halt Food needs Sunday Halt
   dieselAmount: 5000, salaryAmount: 800, salaryUnit: "PER_DAY", foodAmount: 300, foodUnit: "PER_DAY", haltFood: 200,
   tolls: [{ location: "Salem", rate: 120 }], others: [{ description: "Parking", amount: 100 }],
-  fromLocation: "Chennai", toLocation: "Madurai", totalKm: 900, upDownValue: 50,
+  fromLocation: "Chennai", toLocation: "Madurai", totalKm: 900, fuelRate: 96, upDownValue: 50,
 };
 let tokens: { rsop: string; rbp: string; rsom: string };
 const T = async () => (tokens ??= { rsop: await login("RSOP", "RSOP", "pass2"), rbp: await login("RBP", "RBP", "123123"), rsom: await login("RSOM", "RSOM", "pass3") });
@@ -176,7 +177,7 @@ test("approve: confirms version, records approver, notifies RBP, no duplicates, 
   assert.equal(a.body.data.approvedVersion, 1);
   assert.equal(a.body.data.reviewedBy, "RSOM");
   assert.ok(a.body.data.reviewedAt);
-  assert.equal(a.body.data.data.dieselAmount, 5000); // original budget untouched
+  assert.equal(a.body.data.data.dieselAmount, 7200); // original budget untouched
 
   assert.equal((await call(`/approvals/${b._id}/approve`, "POST", { version: 1 }, t.rsom)).status, 409); // duplicate
   assert.equal((await call(`/approvals/${b._id}/reject`, "POST", { version: 1, reason: "x", fields: [{ field: "haltFood", comment: "y" }] }, t.rsom)).status, 409);
@@ -286,7 +287,7 @@ test("full reject -> correct -> resubmit -> approve cycle with history, notifica
   assert.equal(e.status, 200);
   assert.equal(e.body.data.currentVersion, 2);
   assert.equal(e.body.data.approvalStatus, "REJECTED"); // still rejected until resubmitted
-  assert.equal(e.body.data.data.dieselAmount, 5000);
+  assert.equal(e.body.data.data.dieselAmount, 7200);
   const vs = (await call(`/budgets/${b._id}/versions`, "GET", undefined, t.rbp)).body.data;
   assert.equal(vs[0].data.haltFood, 200); // rejected V1 preserved
   assert.deepEqual(vs[1].changes.map((c: any) => c.field).sort(), ["haltFood", "tolls", "upDownValue"]); // Up/Down follows the tolls
@@ -333,23 +334,21 @@ test("full reject -> correct -> resubmit -> approve cycle with history, notifica
   await assert.rejects(BudgetEvent.deleteMany({ budget: b._id }));
 });
 
-test("revision: reason is mandatory, V1 and its rejection are kept, RSOM sees one row with who/when, V3 works too", async () => {
+test("after a rejection RBP edits without a reason; RSOM's rejection is kept; no further edit while pending; V3 works too", async () => {
   const { t, b } = await newBudget("Revision Co");
   const reject = (version: number) =>
     call(`/approvals/${b._id}/reject`, "POST", { version, fields: [{ field: "haltFood", comment: "Too high" }] }, t.rsom);
-  const edit = (haltFood: number, revisionReason?: string) => call(`/budgets/${b._id}`, "PUT", { ...budgetBody, haltFood, revisionReason }, t.rbp);
+  const edit = (haltFood: number) => call(`/budgets/${b._id}`, "PUT", { ...budgetBody, haltFood }, t.rbp);
   const detail = async () => (await call(`/approvals/${b._id}`, "GET", undefined, t.rsom)).body.data;
   await call(`/budgets/${b._id}/submit`, "POST", {}, t.rbp);
   for (const version of [2, 3]) {
     assert.equal((await reject(version - 1)).status, 200);
-    assert.equal((await edit(version)).status, 400);
-    assert.equal((await edit(version, "   ")).status, 400);
-    assert.equal((await edit(version, `Fix ${version}`)).body.data.currentVersion, version);
+    assert.equal((await edit(version)).body.data.currentVersion, version);
     assert.equal((await call(`/budgets/${b._id}/submit`, "POST", {}, t.rbp)).status, 200);
     const d = await detail();
-    assert.equal(d.comparison.revision.reason, `Fix ${version}`);
-    assert.equal(d.comparison.revision.by, "RBP");
-    assert.ok(d.comparison.revision.at);
+    assert.equal(d.comparison.revision, null);
+    assert.deepEqual(d.comparison.rejection.fields, [{ field: "haltFood", comment: "Too high" }]);
+    assert.equal((await call(`/budgets/${b._id}`, "PUT", { ...budgetBody, haltFood: 99, selfCorrection: true, revisionReason: "again" }, t.rbp)).status, 409);
     const rows = (await call("/approvals?client=Revision", "GET", undefined, t.rsom)).body.data.items;
     assert.deepEqual(rows.map((r: any) => [r.version, r.status]), [[version, "PENDING"]]);
   }
@@ -363,12 +362,10 @@ test("revision: reason is mandatory, V1 and its rejection are kept, RSOM sees on
 test("approved budget is locked: edit and resubmit are refused, also concurrently, and nothing changes", async () => {
   const { t, b } = await newBudget("Locked Co");
   await call(`/budgets/${b._id}/submit`, "POST", {}, t.rbp);
-  const edit = (haltFood: number) => call(`/budgets/${b._id}`, "PUT", { ...budgetBody, haltFood, revisionReason: "Late change" }, t.rbp);
+  const edit = (haltFood: number) => call(`/budgets/${b._id}`, "PUT", { ...budgetBody, haltFood, selfCorrection: true, revisionReason: "Late change" }, t.rbp);
   const submit = () => call(`/budgets/${b._id}/submit`, "POST", {}, t.rbp);
-  const [approved, ...racing] = await Promise.all([
-    call(`/approvals/${b._id}/approve`, "POST", { version: 1 }, t.rsom), edit(1), submit(), edit(2),
-  ]);
-  assert.equal(approved.status, 200);
+  assert.equal((await call(`/approvals/${b._id}/approve`, "POST", { version: 1 }, t.rsom)).status, 200);
+  const racing = await Promise.all([edit(1), submit(), edit(2)]);
   for (const r of [...racing, await edit(3), await submit()]) assert.equal(r.status, 409);
   const saved: any = await Budget.findById(b._id).lean();
   assert.deepEqual([saved.approvalStatus, saved.currentVersion, saved.approvedVersion], ["APPROVED", 1, 1]);
@@ -532,6 +529,64 @@ test("legacy budgets without any events or approval fields still produce a safe 
   assert.equal(a.currentStatus, "DRAFT");
   assert.deepEqual((await call(`/budgets/${b._id}/events?order=desc`, "GET", undefined, t.rbp)).body.data, []);
   assert.equal((await call(`/budgets/vehicle/${p.vehicles[0]._id}?order=desc`, "GET", undefined, t.rsom)).status, 403); // permissions unchanged
+});
+
+test("unviewed rejections: RBP count, marked once on viewing, a new rejection counts again", async () => {
+  const { t, b } = await newBudget("Viewed Client");
+  const count = async () => (await call("/budgets/rejections/unviewed", "GET", undefined, t.rbp)).body.data.count as number;
+  const view = (version: number, token = t.rbp) => call(`/budgets/${b._id}/rejection-viewed`, "POST", { version }, token);
+  const reject = async (version: number) => {
+    assert.equal((await call(`/budgets/${b._id}/submit`, "POST", {}, t.rbp)).status, 200);
+    assert.equal((await call(`/approvals/${b._id}/reject`, "POST", { version, fields: [{ field: "tolls", comment: "Fix" }] }, t.rsom)).status, 200);
+  };
+  const before = await count();
+  await reject(1);
+  assert.equal(await count(), before + 1);
+  assert.equal((await view(1, t.rsom)).status, 403);
+  assert.equal((await view(9)).body.data.count, before + 1); // stale version marks nothing
+  const updatedAt = ((await Budget.findById(b._id).lean()) as any).updatedAt;
+  assert.equal((await view(1)).body.data.count, before);
+  assert.equal((await view(1)).body.data.count, before);
+  assert.deepEqual(((await Budget.findById(b._id).lean()) as any).updatedAt, updatedAt); // viewing is not an edit
+  const edit = await call(`/budgets/${b._id}`, "PUT", { ...budgetBody, salaryAmount: 900, revisionReason: "Corrected" }, t.rbp);
+  assert.equal(edit.status, 200);
+  assert.equal(await count(), before); // revising does not bring the old rejection back
+  await reject(2);
+  assert.equal(await count(), before + 1);
+});
+
+test("self-correction before review: reason mandatory, V2 resubmitted and shown to RSOM, then locked", async () => {
+  const { t, b } = await newBudget("Self Fix Co");
+  const edit = (patch: object, token = t.rbp) => call(`/budgets/${b._id}`, "PUT", { ...budgetBody, haltFood: 300, selfCorrection: true, ...patch }, token);
+  assert.equal((await edit({ revisionReason: "too early" })).status, 409); // a draft is simply edited
+  await call(`/budgets/${b._id}/submit`, "POST", {}, t.rbp);
+  assert.equal((await call(`/budgets/${b._id}`, "PUT", { ...budgetBody, haltFood: 300 }, t.rbp)).status, 409);
+  assert.equal((await edit({})).status, 400);
+  assert.equal((await edit({ revisionReason: "   " })).status, 400);
+  assert.equal((await edit({ revisionReason: "x" }, t.rsom)).status, 403);
+
+  const r = await edit({ revisionReason: "Wrong halt food" });
+  assert.equal(r.status, 200);
+  assert.deepEqual([r.body.data.approvalStatus, r.body.data.currentVersion, r.body.data.submittedVersion], ["PENDING", 2, 2]);
+  assert.equal((await edit({ haltFood: 350, revisionReason: "once more" })).status, 409);
+  assert.equal((await call(`/approvals/${b._id}/approve`, "POST", { version: 1 }, t.rsom)).status, 409); // stale review
+
+  const d = (await call(`/approvals/${b._id}`, "GET", undefined, t.rsom)).body.data;
+  assert.deepEqual([d.selfCorrection.reason, d.selfCorrection.fromVersion, d.selfCorrection.toVersion], ["Wrong halt food", 1, 2]);
+  assert.equal(d.events.find((e: any) => e.action === "RESUBMITTED").details.revisionReason, "Wrong halt food");
+  assert.deepEqual(d.versions.map((v: any) => v.version), [1, 2]);
+  assert.equal((await call(`/approvals/${b._id}/approve`, "POST", { version: 2 }, t.rsom)).status, 200);
+  assert.equal((await edit({ haltFood: 400, revisionReason: "after approval" })).status, 409);
+});
+
+test("self-correction racing an approval: exactly one wins", async () => {
+  const { t, b } = await newBudget("Race Fix Co");
+  await call(`/budgets/${b._id}/submit`, "POST", {}, t.rbp);
+  const results = await Promise.all([
+    call(`/approvals/${b._id}/approve`, "POST", { version: 1 }, t.rsom),
+    call(`/budgets/${b._id}`, "PUT", { ...budgetBody, haltFood: 300, selfCorrection: true, revisionReason: "race" }, t.rbp),
+  ]);
+  assert.deepEqual(results.map((r) => r.status).sort(), [200, 409]);
 });
 
 test("cleanup", async () => {

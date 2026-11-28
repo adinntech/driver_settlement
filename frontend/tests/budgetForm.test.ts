@@ -61,14 +61,28 @@ test("edit restores all saved entries (round trip); legacy records fall back to 
 
 test("calculation mirrors the backend", () => {
   let d = emptyDraft(ctx);
-  d = { ...d, sundayHalt: true, dieselAmount: "5000", salaryAmount: "800", foodAmount: "300", haltFood: "200", mileage: "10", totalKm: "100", fuelRate: "95" };
+  d = { ...d, sundayHalt: true, estimatedKmPerDay: "50", salaryAmount: "800", foodAmount: "300", haltFood: "200", mileage: "10", totalKm: "100", fuelRate: "95" };
   d = updateCharge(d, d.others[0].id, { description: "Parking", amount: "100" });
   d = updateToll(d, d.tolls[0].id, { location: "Salem", rate: "120" });
   d = addToll(d);
   d = updateToll(d, d.tolls[1].id, { location: "Madurai", rate: "80.5" });
   // Up/Down = 100 km / 10 km per litre x Rs 95 + tolls 200.5 = 1150.5
-  assert.deepEqual(computeValues(d), { dieselValue: 5000, salaryValue: 1600, foodValue: 600, tollAmount: 200.5, upDownValue: 1150.5, totalValue: 8851 });
+  assert.deepEqual(computeValues(d), { dailyFuelCost: 475, dieselValue: 950, salaryValue: 1600, foodValue: 600, tollAmount: 200.5, upDownValue: 1150.5, totalValue: 4801 });
   assert.equal(computeValues({ ...d, salaryUnit: "PER_CAMPAIGN" }).salaryValue, 800);
+});
+
+test("fuel cost: daily and campaign totals recalculate from KM per day, mileage, fuel rate and campaign dates", () => {
+  const d = { ...emptyDraft(ctx), estimatedKmPerDay: "60", mileage: "15", fuelRate: "110", numberOfDays: "3" };
+  const fuel = (patch: object) => { const v = computeValues({ ...d, ...patch }); return [v.dailyFuelCost, v.dieselValue]; };
+  assert.deepEqual(fuel({}), [440, 1320]);
+  assert.deepEqual(fuel({ dieselAmount: "9999" }), [440, 1320]); // a stale saved value is ignored
+  assert.deepEqual(fuel({ estimatedKmPerDay: "90" }), [660, 1980]);
+  assert.deepEqual(fuel({ mileage: "10" }), [660, 1980]);
+  assert.deepEqual(fuel({ fuelRate: "100" }), [400, 1200]);
+  assert.deepEqual(fuel({ numberOfDays: autoDays("2026-10-22", "2026-10-26", false) }), [440, 2200]);
+  assert.deepEqual(fuel({ mileage: "" }), [0, 0]);
+  assert.ok(validateDraft({ ...d, fuelRate: "" }).includes("Mileage and Fuel Rate are required to calculate the Fuel Cost"));
+  assert.equal(toPayload(d).dieselAmount, 1320);
 });
 
 test("Up/Down recalculates from Total KM, Mileage, Fuel Rate and tolls; never typed", () => {

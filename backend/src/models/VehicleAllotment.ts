@@ -1,4 +1,5 @@
 import mongoose, { Schema } from "mongoose";
+import { hideDeleted } from "./DeletedProject.js";
 
 export const ALLOTMENT_STATUSES = ["ACTIVE", "RELEASED", "CHANGED"] as const;
 export type AllotmentStatus = (typeof ALLOTMENT_STATUSES)[number];
@@ -89,5 +90,6 @@ for (const op of ["updateOne", "findOneAndUpdate", "updateMany", "deleteOne", "d
     throw new Error("Allotment history is immutable");
   });
 
+hideDeleted(allotmentSchema, "project");
 export const VehicleAllotment = mongoose.models.VehicleAllotment ?? mongoose.model("VehicleAllotment", allotmentSchema);
 export const AllotmentEvent = mongoose.models.AllotmentEvent ?? mongoose.model("AllotmentEvent", eventSchema);

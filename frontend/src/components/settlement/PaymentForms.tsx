@@ -1,5 +1,6 @@
 "use client";
 
+import ReadMore from "@/components/ui/ReadMore";
 import VerticalSelect from "@/components/ui/VerticalSelect";
 import { verticalLabel } from "@/utils/vertical";
 import TableWrap from "@/components/ui/TableWrap";
@@ -14,6 +15,7 @@ import { useApi } from "@/hooks/useApi";
 import { useDebounce } from "@/hooks/useDebounce";
 import { downloadFile, request } from "@/services/api";
 import SuspenseTable from "@/components/settlement/SuspenseTable";
+import { PreviousDataPanel } from "@/components/settlement/PreviousData";
 import { useAuth } from "@/context/AuthContext";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { formatDate, formatDateTime, formatInr } from "@/utils/format";
@@ -21,7 +23,7 @@ import { earlierOf, keepInRange, laterOf } from "@/utils/dates";
 import { amountPaise, money, newSubmissionKey, rowId, sanitizeAmount, type RsaProjectRow } from "@/utils/rsa";
 import { allowanceText, kmText, kmUsage } from "@/utils/kmAllowance";
 import {
-  DEDUCTION_KEYS, campaignDays, isHighlightedExpense, travelPayPaise, onRoadBase, paymentsBase, finalFormFrom, finalPayload, finalTotals, validateFinalForm, type FinalForm, type FinalNumberKey, type SettlementContext, type SettlementDetail, type SettlementOptions,
+  DEDUCTION_KEYS, campaignDays, isHighlightedExpense, travelPayPaise, onRoadBase, paymentsBase, finalFormFrom, finalPayload, finalTotals, validateFinalForm, type FinalForm, type FinalNumberKey, type SettlementContext, type SettlementDetail, type SettlementOptions, type SuspenseRecords,
 } from "@/utils/settlement";
 
 const d = (v: unknown) => (v === null || v === undefined || v === "" ? "-" : String(v));
@@ -308,7 +310,7 @@ function DailyInner({ ctx, existing, expenseOptions }: { ctx: SettlementContext;
   return (
     <div className="dsf vp">
       <div className="dsf-title"><span>VEHICLE PAYMENT</span><Link className="dsf-back" href={base} onClick={(e) => { if (!confirmLeave()) e.preventDefault(); }}>{fromOnRoad ? "← Back to on road vehicles" : "← Back to driver payments"}</Link></div>
-      {existing && <div className="alert">Correcting {existing.paymentNumber} (rejected: {existing.rejectionReason}). Saving creates version {existing.version + 1}.</div>}
+      {existing && <div className="alert"><ReadMore>Correcting {existing.paymentNumber} (rejected: {existing.rejectionReason}). Saving creates version {existing.version + 1}.</ReadMore></div>}
       <div className="vp-body">
         {/* ---------------- left: entry form */}
         <div className="vp-left">
@@ -516,7 +518,13 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
   const earn = (label: string) => t.earnings.find((e) => e.label === label)?.amount ?? 0;
   const dirty = !busy && (JSON.stringify(f) !== initialForm || !!comment.trim() || !!draft.cost.trim());
   const confirmLeave = useUnsavedChanges(dirty);
-  const suspense = ctx.suspense ?? { rows: [], total: 0 };
+  // after Previous Data is saved the server's new records replace the ones loaded with the form
+  const [updatedSuspense, setUpdatedSuspense] = useState<SuspenseRecords | null>(null);
+  const suspense = updatedSuspense ?? ctx.suspense ?? { rows: [], total: 0 };
+  const onSuspense = (next: SuspenseRecords) => {
+    setUpdatedSuspense(next);
+    setF((cur) => ({ ...cur, n: { ...cur.n, suspenseAmount: String(next.total) } }));
+  };
   const perDayTotal = pv(f.n.perDaySalary) + pv(f.n.perDayFood);
 
   return (
@@ -529,7 +537,7 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
         <Link className="dsf-back" href={base} onClick={(e) => { if (!confirmLeave()) e.preventDefault(); }}>← Back to driver payments</Link>
       </header>
       {blocked && <div className="alert">A final settlement ({ctx.existingFinal!.paymentNumber}, {ctx.existingFinal!.status.toLowerCase()}) already exists for this driver on this vehicle. Only one final settlement is allowed.</div>}
-      {existing && <div className="alert">Correcting {existing.paymentNumber} (rejected: {existing.rejectionReason}). Saving creates version {existing.version + 1}.</div>}
+      {existing && <div className="alert"><ReadMore>Correcting {existing.paymentNumber} (rejected: {existing.rejectionReason}). Saving creates version {existing.version + 1}.</ReadMore></div>}
 
       <div className="fsf-top">
         <section className="fsf-card">
@@ -708,11 +716,13 @@ function FinalInner({ ctx, existing, opts }: { ctx: SettlementContext; existing:
       {panel === "suspense" && (
         <Modal title="Suspense Amount (daily payments with Reference No. / UTR)" onClose={() => setPanel(null)} wide>
           <SuspenseTable records={suspense} />
+          <PreviousDataPanel who={{ trackingVehicle: ctx.trackingVehicle, driverNumber: ctx.driverNumber, driverName: ctx.driverName, trackupNumber: ctx.trackupNumber, pifNumber: ctx.pifNumber, vehicleNo: ctx.vehicleNo }}
+            total={suspense.total} onSuspense={onSuspense} />
           <div className="actions-row">
             <button type="button" className="btn btn-outline btn-sm" title="Payment Details of these records"
               onClick={() => downloadFile(`/settlements/projects/${ctx.trackingVehicle}/payments-pdf`, "payment-details.pdf").catch((e: Error) => toast(e.message, "error"))}>Download PDF</button>
           </div>
-          <p className="muted ds-note">Prefilled suspense: {formatInr(Number(ctx.prefill.suspenseAmount) || 0)}. Entered: {money(pv(f.n.suspenseAmount))}.</p>
+          <p className="muted ds-note">Prefilled suspense: {formatInr(suspense.total)}. Entered: {money(pv(f.n.suspenseAmount))}.</p>
         </Modal>
       )}
       {panel === "closing" && (

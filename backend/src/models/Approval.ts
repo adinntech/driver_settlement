@@ -36,6 +36,7 @@ export const NOTIFICATION_TYPES = [
   "PAYMENT_APPROVED",
   "PAYMENT_REJECTED",
   "PAYMENT_COMPLETED",
+  "PROJECT_DELETED",
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 

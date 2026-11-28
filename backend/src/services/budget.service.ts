@@ -5,6 +5,7 @@ import { TrackingVehicle } from "../models/TrackingVehicle.js";
 import { TrackingProject } from "../models/TrackingProject.js";
 import { budgetTotal, diffBudget, rateSourceOf, toStored, validateBudget, type BudgetInput } from "../validators/budget.validator.js";
 import { tollDirectory } from "./toll.service.js";
+import { announceSelfCorrection } from "./approval.service.js";
 import { recordEvent, statusOf } from "./budgetEvents.js";
 import { buildActivity } from "./budgetActivity.js";
 import { AppError } from "../utils/AppError.js";
@@ -78,6 +79,22 @@ export async function getVehicleBudget(vehicleId: string) {
   return { context, budget, activity };
 }
 
+/** Rejected budgets whose current rejection RBP has not opened. One per budget, however often it was rejected. */
+export async function countUnviewedRejections() {
+  const count = await Budget.countDocuments({ approvalStatus: "REJECTED", $expr: { $ne: ["$rejectionViewedVersion", "$rejectedVersion"] } });
+  return { count };
+}
+
+/** RBP opened the details of this rejection. Safe to repeat; a stale version marks nothing. */
+export async function markRejectionViewed(budgetId: string, version: unknown) {
+  if (!validId(budgetId)) throw new AppError("Invalid budget id", 400);
+  const n = Number(version);
+  if (!Number.isInteger(n) || n < 1) throw new AppError("Invalid budget version", 400);
+  // timestamps: false, because viewing is not an edit of the budget
+  await Budget.updateOne({ _id: budgetId, approvalStatus: "REJECTED", rejectedVersion: n }, { $set: { rejectionViewedVersion: n } }, { timestamps: false });
+  return countUnviewedRejections();
+}
+
 export async function createBudget(vehicleId: string, input: unknown, username: string) {
   const { vehicle, project, context } = await contextFor(vehicleId);
   const v = validateBudget(input, { campaignFrom: context.campaignFrom, campaignTo: context.campaignTo });
@@ -125,11 +142,15 @@ export async function updateBudget(budgetId: string, input: unknown, username: s
   const existing = await Budget.findById(budgetId);
   if (!existing) throw new AppError("Budget not found", 404);
   const st = statusOf(existing);
-  if (st === "PENDING") throw new AppError("This budget is waiting for approval and cannot be edited", 409);
   if (st === "APPROVED") throw new AppError("An approved budget cannot be edited", 409);
-  const raw = (input as { revisionReason?: unknown } | null)?.revisionReason;
-  const revisionReason = st === "REJECTED" && typeof raw === "string" ? raw.trim() : "";
-  if (st === "REJECTED" && !revisionReason) throw new AppError("Enter the reason for editing this rejected budget", 400);
+  // Self-correction: RBP fixes a first submission before RSOM reviews it. It is saved and resubmitted in one step, once.
+  const body = (input ?? {}) as { selfCorrection?: unknown; revisionReason?: unknown };
+  const correcting = body.selfCorrection === true;
+  if (st === "PENDING" && (!correcting || existing.rejectedVersion || existing.selfRevisedVersion))
+    throw new AppError("This budget is waiting for approval and cannot be edited", 409);
+  if (st !== "PENDING" && correcting) throw new AppError("This budget is no longer waiting for approval; reload", 409);
+  const revisionReason = correcting && typeof body.revisionReason === "string" ? body.revisionReason.trim() : "";
+  if (correcting && !revisionReason) throw new AppError("Enter the reason for revision", 400);
   if (revisionReason.length > 1000) throw new AppError("Revision reason is too long", 400);
   const { context } = await contextFor(String(existing.vehicle));
   const v = validateBudget(input, {
@@ -148,8 +169,14 @@ export async function updateBudget(budgetId: string, input: unknown, username: s
   // Optimistic lock: only one concurrent editor can move from version N to N+1.
   const updated = await Budget.findOneAndUpdate(
     // The status must still be the one checked above, so an edit can never slip past a submit / approve / reject made meanwhile.
-    { _id: budgetId, currentVersion: existing.currentVersion, approvalStatus: st === "DRAFT" ? { $in: [null, "DRAFT"] } : st },
-    { data: toStored(v.data), total, currentVersion: nextVersion, updatedBy: username },
+    {
+      _id: budgetId, currentVersion: existing.currentVersion, approvalStatus: st === "DRAFT" ? { $in: [null, "DRAFT"] } : st,
+      ...(correcting ? { rejectedVersion: null, selfRevisedVersion: null } : {}),
+    },
+    {
+      data: toStored(v.data), total, currentVersion: nextVersion, updatedBy: username,
+      ...(correcting ? { submittedVersion: nextVersion, selfRevisedVersion: nextVersion, submittedBy: username, submittedAt: new Date(), $unset: { resubmissionComment: 1 } } : {}),
+    },
     { new: true },
   );
   if (!updated) throw new AppError("Budget was modified by someone else; reload and retry", 409);
@@ -165,17 +192,20 @@ export async function updateBudget(budgetId: string, input: unknown, username: s
   await recordEvent(budgetId, nextVersion, "UPDATED", username, "RBP", {
     total, changedFields: changes.map((c) => c.field), ...(revisionReason ? { revisionReason } : {}),
   });
+  if (correcting) await announceSelfCorrection(updated.toObject(), username, revisionReason);
   return updated.toObject();
 }
 
 /** Oldest first by default (existing contract); `desc` returns the latest version first. */
 export async function listVersions(budgetId: string, desc = false) {
   if (!validId(budgetId)) throw new AppError("Invalid budget id", 400);
+  if (!(await Budget.exists({ _id: budgetId }))) throw new AppError("Budget not found", 404);
   return BudgetVersion.find({ budget: budgetId }).sort(desc ? { createdAt: -1, version: -1 } : { version: 1 }).lean();
 }
 
 export async function getVersion(budgetId: string, version: number) {
   if (!validId(budgetId)) throw new AppError("Invalid budget id", 400);
+  if (!(await Budget.exists({ _id: budgetId }))) throw new AppError("Budget not found", 404);
   const v = await BudgetVersion.findOne({ budget: budgetId, version }).lean();
   if (!v) throw new AppError("Version not found", 404);
   return v;

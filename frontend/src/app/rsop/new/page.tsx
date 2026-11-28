@@ -1,5 +1,6 @@
 "use client";
 
+import { roadshowOn } from "@/utils/features";
 import Select from "@/components/ui/Select";
 import DateInput from "@/components/ui/DateInput";
 import { useRouter } from "next/navigation";
@@ -11,7 +12,7 @@ import { useToast } from "@/context/ToastContext";
 import { request } from "@/services/api";
 import type { Project, ProjectType } from "@/types/domain";
 import { countDays, formatDate } from "@/utils/format";
-import { earlierOf, earliestStartYmd, inYmdRange, isYmd, keepInRange, laterOf, startDateError, todayIst } from "@/utils/dates";
+import { earlierOf, earliestStartYmd, inYmdRange, isYmd, isSunday, keepInRange, laterOf, startDateError, sundayHaltError, todayIst } from "@/utils/dates";
 import { DecimalInput, PhoneInput } from "@/components/ui/Inputs";
 import { isValidPhone, toFullPhone } from "@/utils/phone";
 import { allowanceText, extraKmError, kmAllowance, parseKmPerDay } from "@/utils/kmAllowance";
@@ -31,8 +32,26 @@ const ELEMENT_DATES = [
 export default function NewTrackingPage() {
   return (
     <AppShell role="RSOP">
-      <Wizard />
+      {roadshowOn() ? <Wizard /> : <SignageOnly />}
     </AppShell>
+  );
+}
+
+/** ROADSHOW off: there is only one project type, so the form opens directly. A new key discards a finished form. */
+function SignageOnly() {
+  const [round, setRound] = useState(0);
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <h1>New Tracking Request</h1>
+          <p className="muted">Enter the Signage details.</p>
+        </div>
+      </div>
+      <div key={round} className="fade-in">
+        <SignageForm onReset={() => setRound((n) => n + 1)} />
+      </div>
+    </>
   );
 }
 
@@ -278,6 +297,10 @@ function RoadshowForm({ onReset }: { onReset: () => void }) {
     [f.startDate, f.endDate, f.sundayHalt],
   );
   const allowance = kmAllowance(f.kmAllotted, days, extraYes, f.extraKmAllotted);
+  const halt = f.sundayHalt === "YES";
+  const noSunday = halt ? isSunday : undefined;
+  const endSunday = sundayHaltError(f.endDate ?? "", "End date", halt);
+  const reportingSunday = sundayHaltError(f.reportingDate ?? "", "Reporting date", halt);
 
   function stepErrors(s: number): string[] {
     const e: string[] = [];
@@ -300,6 +323,7 @@ function RoadshowForm({ onReset }: { onReset: () => void }) {
       else if (!isYmd(f.reportingDate)) e.push("Reporting date must be a valid date");
       else if (isYmd(f.startDate) && isYmd(f.endDate) && !inYmdRange(f.reportingDate, f.startDate, f.endDate))
         e.push("Reporting date must be within the campaign start and end dates");
+      e.push(...[endSunday, reportingSunday].filter(Boolean));
     }
     if (s === 2) {
       // same rule as the server: every Elements & Billing date lies within the campaign start and end dates
@@ -381,12 +405,12 @@ function RoadshowForm({ onReset }: { onReset: () => void }) {
           {types.summary}
           <Field label="Sunday Halt"><YesNo value={f.sundayHalt} onChange={(v) => set("sundayHalt", v)} /></Field>
           <Field label="Start Date *" hint="Today or up to 7 days back"><DateInput value={f.startDate ?? ""} min={minStart} max={earlierOf(today, f.endDate)} onChange={(e) => setCampaign("startDate", e.target.value)} aria-label="Start Date" /></Field>
-          <Field label="End Date *" hint="On or after the start date"><DateInput value={f.endDate ?? ""} min={f.startDate || minStart} onChange={(e) => setCampaign("endDate", e.target.value)} aria-label="End Date" /></Field>
+          <Field label="End Date *" hint={endSunday || "On or after the start date"}><DateInput isDayBlocked={noSunday} value={f.endDate ?? ""} min={f.startDate || minStart} onChange={(e) => setCampaign("endDate", e.target.value)} aria-label="End Date" /></Field>
           <Field label="Number of Days" hint={f.sundayHalt === "YES" ? "Sundays excluded" : "Sundays included"}>
             <input value={days ? `${days} day${days > 1 ? "s" : ""}` : ""} readOnly />
           </Field>
-          <Field label="Reporting Date *" hint={dateNote || "Within the campaign start and end dates"}>
-            <DateInput {...bind("reportingDate")} min={f.startDate || minStart} max={f.endDate || undefined} disabled={!f.startDate || !f.endDate} aria-label="Reporting Date" />
+          <Field label="Reporting Date *" hint={reportingSunday || dateNote || "Within the campaign start and end dates"}>
+            <DateInput {...bind("reportingDate")} isDayBlocked={noSunday} min={f.startDate || minStart} max={f.endDate || undefined} disabled={!f.startDate || !f.endDate} aria-label="Reporting Date" />
           </Field>
         </div>
       )}

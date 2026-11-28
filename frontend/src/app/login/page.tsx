@@ -1,5 +1,6 @@
 "use client";
 
+import { roadshowOn } from "@/utils/features";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { useAuth } from "@/context/AuthContext";
@@ -153,7 +154,7 @@ export default function LoginPage() {
             <i aria-hidden />
             {STATUS_TEXT[status]}
           </span>
-          <span className="lx-foot-note">Roadshow · Signage · Settlement</span>
+          <span className="lx-foot-note">{roadshowOn() ? "Roadshow · " : ""}Signage · Settlement</span>
         </div>
       </aside>
 

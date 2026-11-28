@@ -13,7 +13,7 @@ export async function pendingDriverChange(driverId: string, exceptPaymentId?: st
   const [events, finals]: any[][] = await Promise.all([
     AllotmentEvent.find({ action: "DRIVER_CHANGED", "details.from.driverId": driverId }).sort({ createdAt: 1 }).lean(),
     SettlementPayment.find({ driver: driverId, category: "FINAL", status: { $ne: "REJECTED" }, ...(exceptPaymentId ? { _id: { $ne: exceptPaymentId } } : {}) })
-      .select("allotment submittedAt data.driverChangeEvents data.deductions.driverChangeTravel").lean(),
+      .select("allotment submittedAt data.driverChangeEvents data.deductions.driverChangeTravel").setOptions({ withDeleted: true }).lean(),
   ]);
   const claimed = new Set<string>(finals.flatMap((p) => p.data?.driverChangeEvents ?? []));
   const old = finals.filter((p) => !p.data?.driverChangeEvents && Number(p.data?.deductions?.driverChangeTravel) > 0);

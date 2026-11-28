@@ -5,6 +5,7 @@ import {
   loadProject,
   trackingStats,
 } from "../services/tracking.service.js";
+import { deleteProject } from "../services/projectDelete.service.js";
 import { sendResponse } from "../utils/sendResponse.js";
 
 const q = (v: unknown) => (typeof v === "string" && v ? v : undefined);
@@ -51,6 +52,16 @@ export const getOne = async (req: Request, res: Response, next: NextFunction) =>
     res
       .status(200)
       .json(sendResponse(true, "Tracking request fetched successfully", await loadProject(id)));
+  } catch (e) {
+    next(e);
+  }
+};
+
+export const remove = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user = req.user!;
+    const data = await deleteProject(String(req.params.id), { id: user.id, username: user.username });
+    res.status(200).json(sendResponse(true, "Project deleted successfully", data));
   } catch (e) {
     next(e);
   }

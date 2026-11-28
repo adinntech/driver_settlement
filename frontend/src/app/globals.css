@@ -467,7 +467,6 @@ textarea:focus { outline: none; border-color: var(--red); box-shadow: 0 0 0 3px 
 .av-state { margin: 0; }
 .av-note { margin: 0; font-size: 0.875rem; }
 .av-linked { margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--ok-soft); font-size: .88rem; }
-.dt-pair { display: grid; grid-template-columns: 1fr 130px; gap: 8px; }
 .proj-pick { position: relative; }
 .proj-results { margin-top: 6px; max-height: 260px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 6px; display: grid; gap: 4px; }
 .proj-results p { margin: 6px 8px; }
@@ -483,9 +482,6 @@ textarea:focus { outline: none; border-color: var(--red); box-shadow: 0 0 0 3px 
 .stat-av-green strong { color: var(--ok); }
 .stat-av-blue strong { color: #1b4fb3; }
 .stat-av-red strong { color: var(--red-dark); }
-@media (max-width: 560px) {
-  .dt-pair { grid-template-columns: 1fr; }
-}
 .av-note-strong { margin: 0; font-weight: 600; color: #1b4fb3; }
 .proj-pager { display: flex; align-items: center; justify-content: space-between; padding: 4px 2px 0; }
 .proj-pick small[role="alert"] { display: block; margin-top: 4px; }
@@ -1947,3 +1943,86 @@ button.stat, button.ds-kpi { font: inherit; text-align: left; color: inherit; wi
 .ds-pencil { display: inline-flex; padding: 3px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--red); cursor: pointer; }
 .ds-mileage-edit { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .ds-mileage-edit input { width: 90px; }
+
+/* ---------- long remarks / reasons: two lines with Read more ---------- */
+.read-more { display: block; white-space: normal; overflow-wrap: anywhere; }
+.read-more-text { display: block; }
+.read-more-text.clamped { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.read-more-toggle { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; text-decoration: underline; color: inherit; cursor: pointer; }
+.sidebar nav a .nav-count { float: right; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--red); color: #fff; font-size: 0.75rem; font-weight: 700; line-height: 18px; text-align: center; }
+
+/* ---------- date + time picker (date-only pickers are not affected) ---------- */
+.ui-datetime .ui-date-value { font-variant-numeric: tabular-nums; }
+.ui-datetime.is-invalid > .ui-date-trigger { border-color: var(--red); background: var(--red-soft); }
+.ui-datetime.is-invalid .ui-cal-icon { color: var(--red); }
+.ui-cal.has-time { width: 400px !important; padding: 18px; gap: 14px; border-radius: 14px; overflow-y: auto; }
+.ui-cal.has-time > * { flex-shrink: 0; }
+.has-time .ui-cal-nav { width: 36px; height: 36px; border-radius: 8px; }
+.has-time .ui-cal-title { font-size: 0.95rem; }
+.has-time .ui-cal-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; justify-items: center; }
+.has-time .ui-day, .has-time .ui-day-out { width: 100%; max-width: 46px; height: 38px; border-radius: 8px; font-variant-numeric: tabular-nums; }
+.has-time .ui-day { transition: background-color .12s, color .12s, box-shadow .12s; }
+.has-time .ui-day:hover:not(:disabled):not(.is-selected) { background: var(--red-soft); color: var(--red-dark); }
+.has-time .ui-day.is-today:not(.is-selected) { box-shadow: inset 0 0 0 1.5px var(--red); color: var(--red-dark); }
+.has-time .ui-day.is-today::after { content: none; }
+.has-time .ui-day.is-cursor:not(.is-selected):focus-visible { outline: 2px solid var(--red); }
+.has-time .ui-day:disabled { color: #98a2b3; background: var(--surface-2); text-decoration: line-through; }
+.has-time .ui-day-out { display: grid; place-items: center; color: #c3c9d4; font-size: 0.8125rem; }
+.has-time .ui-cal-months { min-height: 270px; align-content: center; }
+.has-time .ui-cal-cell.is-selected { background: var(--red); color: #fff; }
+.ui-cal-time { display: grid; gap: 8px; border-top: 1px solid var(--border); padding-top: 12px; }
+.ui-cal-time-head { display: flex; align-items: center; justify-content: space-between; font-size: 0.8125rem; font-weight: 600; color: var(--muted); }
+.ui-cal-time-head strong { font-size: 1rem; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ui-cal-time-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ui-cal-time-field { display: grid; gap: 4px; min-width: 0; font-size: 0.75rem; font-weight: 600; color: var(--muted); }
+.ui-cal-time-row .ui-select-trigger { height: 44px; padding: 0 12px; font-size: 1rem; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 8px; }
+.has-time .ui-cal-foot { position: sticky; bottom: -18px; margin: 0 -18px -18px; padding: 14px 18px; gap: 8px; justify-content: flex-start; background: var(--surface); }
+.has-time .ui-cal-link { min-width: 80px; height: 38px; border: 1px solid var(--border-strong); border-radius: 8px; color: var(--ink); font-weight: 600; }
+.has-time .ui-cal-link:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
+.has-time .ui-cal-link:last-child { margin-left: auto; background: var(--red); border-color: var(--red); color: #fff; }
+.has-time .ui-cal-link:last-child:hover:not(:disabled) { background: var(--red-dark); color: #fff; }
+/* small or short screens: centred in the viewport, so it is never clipped */
+@media (max-width: 640px), (max-height: 760px) {
+  .ui-cal.has-time {
+    top: 50% !important; left: 50% !important; transform: translate(-50%, -50%); animation: none;
+    width: min(400px, calc(100vw - 16px)) !important; max-height: calc(100dvh - 16px) !important;
+    box-shadow: 0 0 0 100vmax rgba(16, 24, 40, 0.35);
+  }
+}
+
+/* hour / minute / AM-PM lists of the date + time picker */
+.ui-time-pop .ui-select-list { padding: 6px; }
+.ui-time-pop .ui-opt { justify-content: center; gap: 6px; min-height: 36px; font-size: 0.9375rem; font-variant-numeric: tabular-nums; transition: background-color .12s; }
+.ui-time-pop .ui-opt.is-selected { background: var(--red); color: #fff; }
+.ui-time-pop .ui-opt svg { display: none; }
+.ui-time-hours .ui-select-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; align-content: start; }
+
+/* ---------- Allot Vehicle dialog ---------- */
+.modal.modal-allot { width: min(1400px, 92vw); height: 90vh; max-height: 90vh; }
+.modal-allot .modal-body { flex: 1; min-height: 0; padding: 24px 28px 0; }
+.modal-allot .allot-proj { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px 24px; }
+.allot-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 32px; align-items: start; }
+.allot-cols > section { min-width: 0; }
+.modal-allot .b-row { grid-template-columns: 190px minmax(0, 1fr); margin-bottom: 12px; }
+.modal-allot .b-ctl > .ui-date, .modal-allot .b-ctl > textarea { flex: 1; width: 100%; }
+.modal-allot textarea { min-height: 96px; resize: vertical; }
+.modal-allot .allot-actions { position: sticky; bottom: 0; z-index: 3; margin: 20px -28px 0; padding: 14px 28px; background: var(--surface); border-top: 1px solid var(--border); }
+@media (max-width: 1000px) {
+  .modal.modal-allot { width: min(100%, 96vw); }
+  .allot-cols { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .modal.modal-allot { width: 100%; height: 96vh; height: 96dvh; max-height: 96dvh; }
+  .modal-allot .modal-body { padding: 16px 14px 0; }
+  .modal-allot .b-row { grid-template-columns: minmax(0, 1fr); }
+  .modal-allot .allot-actions { margin: 16px -14px 0; padding: 12px 14px; flex-wrap: wrap; }
+  .modal-allot .allot-actions .btn { flex: 1 1 auto; min-height: 44px; }
+}
+.modal-allot .modal-body { scroll-padding-bottom: 90px; }
+.modal-allot .b-ctl > * { flex: 1; }
+.modal-allot .modal-body { display: flex; flex-direction: column; }
+.modal-allot .modal-body > * { flex-shrink: 0; }
+.modal-allot .modal-body > .allot-actions { margin-top: auto; }
+.modal-allot .modal-body > :nth-last-child(2) { margin-bottom: 20px; }
+.ui-time-pop .ui-opt.is-empty { display: none; }
+.modal-allot .allot-actions { border-radius: 0 0 12px 12px; }

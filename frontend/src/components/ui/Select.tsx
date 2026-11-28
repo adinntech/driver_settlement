@@ -26,6 +26,9 @@ export interface SelectProps {
   autoFocus?: boolean;
   /** Force (true) or disable (false) the search box. Default: on when there are more than 8 options. */
   searchable?: boolean;
+  /** Extra class and minimum width (default 180) of the option popover. */
+  popClassName?: string;
+  popMinWidth?: number;
   "aria-label"?: string;
   "aria-describedby"?: string;
 }
@@ -111,7 +114,7 @@ export default function Select(props: SelectProps) {
     const q = query.trim().toLowerCase();
     return q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options;
   }, [options, query]);
-  const pos = usePopoverPosition(open, trigger, panel, 180);
+  const pos = usePopoverPosition(open, trigger, panel, props.popMinWidth ?? 180);
 
   const close = useCallback((focus = true) => {
     setOpen(false);
@@ -197,7 +200,7 @@ export default function Select(props: SelectProps) {
         <button type="button" className="ui-select-clear" aria-label="Clear selection" tabIndex={-1} onClick={() => { if (controlled === undefined) setInner(""); onChange?.(fakeEvent("")); }}>×</button>
       )}
       {open && createPortal(
-        <div ref={panel} className="ui-pop ui-select-pop" style={pos} onKeyDown={onKey}>
+        <div ref={panel} className={`ui-pop ui-select-pop${props.popClassName ? ` ${props.popClassName}` : ""}`} style={pos} onKeyDown={onKey}>
           {withSearch && (
             <div className="ui-select-search">
               <input ref={search} value={query} placeholder="Search…" aria-label="Search options" onChange={(e) => { setQuery(e.target.value); setActive(0); }} />

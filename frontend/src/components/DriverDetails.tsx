@@ -1,5 +1,6 @@
 "use client";
 
+import ReadMore from "@/components/ui/ReadMore";
 import { DriverAvBadge } from "@/components/DriverAvailability";
 import type { Driver, DriverHistoryRow } from "@/types/domain";
 import {
@@ -37,16 +38,16 @@ export function DriverAvailabilityDetails({ d }: { d: Driver }) {
               <KV k="PIF Number" v={a.project?.pifNumber} />
               <KV k="Project From Date" v={a.project?.startDate ? formatDate(a.project.startDate) : null} />
               <KV k="Project To Date" v={a.project?.endDate ? formatDate(a.project.endDate) : null} />
-              <KV k="Additional Remarks" v={a.project?.remarks} />
+              <KV k="Additional Remarks" v={a.project?.remarks && <ReadMore>{a.project?.remarks}</ReadMore>} />
             </>
           )}
           {a.status === "NOT_AVAILABLE" && (
             <>
               <KV k="Reason Category" v={a.notAvailable?.category} />
-              <KV k="Unavailable Reason" v={a.notAvailable?.reason} />
+              <KV k="Unavailable Reason" v={a.notAvailable?.reason && <ReadMore>{a.notAvailable?.reason}</ReadMore>} />
               <KV k="Unavailable From" v={a.notAvailable?.fromDate ? formatDate(a.notAvailable.fromDate) : null} />
               <KV k="Expected Available Date" v={a.notAvailable?.expectedAvailableDate ? formatDate(a.notAvailable.expectedAvailableDate) : null} />
-              <KV k="Additional Remarks" v={a.notAvailable?.remarks} />
+              <KV k="Additional Remarks" v={a.notAvailable?.remarks && <ReadMore>{a.notAvailable?.remarks}</ReadMore>} />
             </>
           )}
           <KV k="Last Status Update" v={a.lastStatusUpdatedAt ? `${formatDateTime(a.lastStatusUpdatedAt)} by ${a.lastStatusUpdatedBy ?? "—"}` : null} />
@@ -78,7 +79,7 @@ export function DriverHistoryList({ rows }: { rows: DriverHistoryRow[] }) {
                   <span>New status: <strong>{historyStatus(h.newStatus)}</strong></span>
                 </p>
               )}
-              {h.reason && <p className="drv-hist-reason">Reason: {h.reason}</p>}
+              {h.reason && <p className="drv-hist-reason"><ReadMore>Reason: {h.reason}</ReadMore></p>}
               {h.changes.length > 0 && (
                 <table className="table drv-hist-changes">
                   <thead><tr><th>Field</th><th>Previous value</th><th>Updated value</th></tr></thead>

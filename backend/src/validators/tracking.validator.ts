@@ -102,6 +102,10 @@ export function validateTracking(projectType: unknown, input: unknown, opts: Tra
         errors.push(`${milestones[i]} cannot be before ${milestones[i - 1]}`);
     }
     if (!yesNo(b.sundayHalt)) errors.push("Sunday halt must be YES or NO");
+    // Sunday Halt: the campaign cannot report or complete on a Sunday (historical imports are left as recorded).
+    if (b.sundayHalt === "YES" && !opts.allowPastStart)
+      for (const [k, label] of [["reportingDate", "Reporting date"], ["endDate", "End date"]])
+        if (isDate(b[k]) && new Date(`${b[k]}T00:00:00Z`).getUTCDay() === 0) errors.push(`${label} cannot be a Sunday when Sunday Halt is Yes`);
     for (const k of ["paSystem", "mike", "tv", "promoter", "leaflet", "extraKmAllowed"])
       if (b[k] && !yesNo(b[k])) errors.push(`${k} must be YES or NO`);
     if (!Array.isArray(b.reportingLocations) || b.reportingLocations.length === 0)

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Integration tests run against a separate test database; never the real one.
+process.env.ROADSHOW = "on";
 process.env.MONGO_URI = "mongodb://127.0.0.1:27017/driver_settlement_test";
 process.env.JWT_SECRET = "test-secret";
 process.env.RSOP_USERNAME = "RSOP";

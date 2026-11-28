@@ -1,7 +1,7 @@
 "use client";
 
 import Select from "@/components/ui/Select";
-import DateInput from "@/components/ui/DateInput";
+import DateTimePicker from "@/components/ui/DateTimePicker";
 import { todayIst } from "@/utils/dates";
 import { useState, type ReactNode } from "react";
 import { useApi } from "@/hooks/useApi";
@@ -17,12 +17,6 @@ const Row = ({ label, req, children }: { label: string; req?: boolean; children:
   <div className="b-row">
     <label>{label}{req && <span className="req"> *</span>}</label>
     <div className="b-ctl">{children}</div>
-  </div>
-);
-const DateTime = ({ d, t, onD, onT, minD, maxD }: { d: string; t: string; onD: (v: string) => void; onT: (v: string) => void; minD?: string; maxD?: string }) => (
-  <div className="dt-pair">
-    <DateInput value={d} min={minD} max={maxD} onChange={(e) => onD(e.target.value)} aria-label="date" />
-    <input type="time" value={t} onChange={(e) => onT(e.target.value)} aria-label="time" />
   </div>
 );
 
@@ -142,7 +136,7 @@ export default function VehicleAvailability({ value: a, onChange }: { value: AvF
         <div className="av-panel av-green" data-panel="available">
           <p className="av-state">Current availability: <strong>Available now</strong></p>
           <Row label="Available From">
-            <DateTime d={a.availableFromDate} t={a.availableFromTime} onD={(v) => set("availableFromDate", v)} onT={(v) => set("availableFromTime", v)} />
+            <DateTimePicker date={a.availableFromDate} time={a.availableFromTime} label="Available from" onChange={(d, t) => onChange({ ...a, availableFromDate: d, availableFromTime: t })} />
           </Row>
         </div>
       )}
@@ -180,10 +174,10 @@ export default function VehicleAvailability({ value: a, onChange }: { value: AvF
             </div>
             <div className="b-col">
               <Row label="Expected Release">
-                <DateTime d={a.expectedReleaseDate} t={a.expectedReleaseTime} onD={(v) => set("expectedReleaseDate", v)} onT={(v) => set("expectedReleaseTime", v)} />
+                <DateTimePicker date={a.expectedReleaseDate} time={a.expectedReleaseTime} label="Expected release" onChange={(d, t) => onChange({ ...a, expectedReleaseDate: d, expectedReleaseTime: t })} />
               </Row>
               <Row label="Next Available (optional)">
-                <DateTime d={a.nextAvailableDate} t={a.nextAvailableTime} minD={a.expectedReleaseDate || undefined} onD={(v) => set("nextAvailableDate", v)} onT={(v) => set("nextAvailableTime", v)} />
+                <DateTimePicker date={a.nextAvailableDate} time={a.nextAvailableTime} min={a.expectedReleaseDate || undefined} label="Next available" onChange={(d, t) => onChange({ ...a, nextAvailableDate: d, nextAvailableTime: t })} />
               </Row>
               <Row label="Remarks">
                 <textarea rows={3} value={a.project.remarks} maxLength={300} aria-label="Remarks" placeholder="Optional notes about this allocation" onChange={(e) => proj("remarks", e.target.value)} />
@@ -209,7 +203,7 @@ export default function VehicleAvailability({ value: a, onChange }: { value: AvF
                 <textarea rows={3} value={a.issue.description} maxLength={500} onChange={(e) => iss("description", e.target.value)} placeholder="What is wrong with the vehicle?" />
               </Row>
               <Row label="Issue Reported">
-                <DateTime d={a.issue.reportedDate} t={a.issue.reportedTime} maxD={todayIst()} onD={(v) => iss("reportedDate", v)} onT={(v) => iss("reportedTime", v)} />
+                <DateTimePicker date={a.issue.reportedDate} time={a.issue.reportedTime} max={todayIst()} label="Issue reported" onChange={(d, t) => onChange({ ...a, issue: { ...a.issue, reportedDate: d, reportedTime: t } })} />
               </Row>
               <Row label="Issue Status">
                 <Select value={a.issue.issueStatus} onChange={(e) => iss("issueStatus", e.target.value)}>
@@ -219,7 +213,7 @@ export default function VehicleAvailability({ value: a, onChange }: { value: AvF
             </div>
             <div className="b-col">
               <Row label="Expected Repair Completion">
-                <DateTime d={a.issue.expectedRepairDate} t={a.issue.expectedRepairTime} minD={a.issue.reportedDate || undefined} onD={(v) => iss("expectedRepairDate", v)} onT={(v) => iss("expectedRepairTime", v)} />
+                <DateTimePicker date={a.issue.expectedRepairDate} time={a.issue.expectedRepairTime} min={a.issue.reportedDate || undefined} label="Expected repair completion" onChange={(d, t) => onChange({ ...a, issue: { ...a.issue, expectedRepairDate: d, expectedRepairTime: t } })} />
               </Row>
               <Row label="Garage / Service Centre">
                 <input value={a.issue.garage} maxLength={120} onChange={(e) => iss("garage", e.target.value)} placeholder="Optional" />

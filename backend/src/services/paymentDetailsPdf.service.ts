@@ -2,6 +2,7 @@
 import PDFDocument from "pdfkit";
 import { config } from "../config/index.js";
 import { Driver } from "../models/Driver.js";
+import { countedHistorical } from "../models/HistoricalSuspense.js";
 import { DriverAdvance } from "../models/DriverAdvance.js";
 import { PAYMENT_MODE_LABEL, SettlementPayment } from "../models/SettlementPayment.js";
 import { TrackingProject } from "../models/TrackingProject.js";
@@ -40,7 +41,7 @@ export function paymentGroups(advances: any[], payments: any[]): DetailGroup[] {
     const d = p.data ?? {};
     const date = c?.paymentDate ?? p.fromDate;
     const paid = {
-      source: p.paymentNumber, date, mode: c ? PAYMENT_MODE_LABEL[c.paymentMode] ?? c.paymentMode : d.cashInHand ? "Cash" : "",
+      source: p.previousDataEntry ? `Previous Data · ${p.paymentNumber}` : p.paymentNumber, date, mode: c ? PAYMENT_MODE_LABEL[c.paymentMode] ?? c.paymentMode : d.cashInHand ? "Cash" : "",
       paymentDate: c?.paymentDate ?? "", refDate: c?.referenceDate ?? "", refNo: c?.referenceNumber ?? "", bank: c?.bankName ?? "",
     };
     const lines: DetailLine[] = [];
@@ -48,7 +49,7 @@ export function paymentGroups(advances: any[], payments: any[]): DetailGroup[] {
       if (paiseOf(amount)) lines.push({ ...paid, mode: paid.mode || mode || "", description, paise: paiseOf(amount) });
     };
     line("Salary Advance", d.salaryAdvance);
-    for (const x of d.dieselEntries ?? []) line(x.reference ? `Diesel - ${x.reference}` : "Diesel", x.amount, x.mode);
+    for (const x of d.dieselEntries ?? []) line(x.reference ? `Diesel - ${x.reference}` : p.previousDataEntry || p.paymentNumber === "Previous Data" ? "Fuel" : "Diesel", x.amount, x.mode);
     line("Food", d.foodAmount);
     for (const e of d.expenses ?? []) line(`${e.optionLabel}${e.description ? ` - ${e.description}` : ""}${e.deduct ? " (deduction)" : ""}`, e.deduct ? -e.amount : e.amount);
     add(date, lines);
@@ -115,11 +116,18 @@ export function renderPaymentDetails(head: { vertical?: string; client: string; 
 
 /** The one lookup: records of this driver on this project vehicle only (any allotment of it), each payment once. */
 export async function suspenseFor(trackingVehicle: string, driver: string, campaignFrom: string | null) {
-  const [advances, payments]: any[] = await Promise.all([
+  const [advances, payments, previous]: any[] = await Promise.all([
     DriverAdvance.find({ driver, submittedAt: { $gte: new Date(`${campaignFrom ?? "1970-01-01"}T00:00:00+05:30`) } }).sort({ submittedAt: 1 }).lean(),
     SettlementPayment.find({ trackingVehicle, driver, category: "DAILY", status: { $in: ["APPROVED", "COMPLETED"] }, "completion.referenceNumber": /\S/ }).sort({ fromDate: 1 }).lean(),
+    countedHistorical(trackingVehicle, driver), // Previous Data (latest submitted revision of each entry), counted once
   ]);
-  const groups = paymentGroups(advances, payments);
+  // a submitted entry is counted through its completed daily payment; only one without a payment is added here
+  const paid = new Set(payments.map((p: any) => String(p.previousDataEntry)));
+  const historical = previous.filter((h: any) => !paid.has(String(h.entryId))).map((h: any) => ({
+    paymentNumber: "Previous Data", fromDate: h.fromDate, data: h.data,
+    completion: { paymentDate: h.paymentDate, paymentMode: h.paymentMode, referenceNumber: h.referenceNumber, bankName: h.bankName },
+  }));
+  const groups = paymentGroups(advances, [...payments, ...historical]);
   const lines = groups.flatMap((g) => g.lines);
   return {
     groups,

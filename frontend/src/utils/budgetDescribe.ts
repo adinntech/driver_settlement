@@ -1,4 +1,5 @@
 import { formatDate, formatInr, labelize } from "./format";
+import { fuelCostOf } from "./budgetForm";
 import { formatList } from "./historyFormat";
 import { tollClassLabel } from "./tolls";
 
@@ -23,6 +24,15 @@ export function show(x: unknown): string {
 function othersText(data: Record<string, unknown>): string {
   if (Array.isArray(data.others)) return formatList(data.others);
   return data.othersDescription || data.othersAmount ? `${show(data.othersDescription)} ${money(data.othersAmount)}` : "—"; // earlier single pair
+}
+
+/** The daily figure is shown only when the saved total matches the formula (older versions hold a typed amount). */
+function fuelText(data: Record<string, unknown>, c: Record<string, number>): string {
+  const [km, mileage, rate, days] = [data.estimatedKmPerDay, data.mileage, data.fuelRate, data.numberOfDays].map((x) => Number(x) || 0);
+  const fuel = fuelCostOf({ estimatedKmPerDay: String(km), mileage: String(mileage), fuelRate: String(rate), numberOfDays: String(days) });
+  return fuel.total > 0 && fuel.total === data.dieselAmount
+    ? `${money(fuel.daily)} per day × ${days} days = ${money(c.dieselValue)}`
+    : `${money(data.dieselAmount)} (Per Campaign) = ${money(c.dieselValue)}`;
 }
 
 /** Human-readable labels for every field RSOM can flag. */
@@ -60,7 +70,7 @@ export function describeBudget(data: Record<string, unknown>): DescribedField[] 
     { key: "completionDate", label: "Completion Date", value: formatDate(data.completionDate as string) },
     { key: "sundayHalt", label: "Sunday Halt", value: yesNo(data.sundayHalt) },
     { key: "numberOfDays", label: "Number of days", value: show(data.numberOfDays) },
-    { key: "dieselAmount", label: "Fuel Cost", value: `${money(data.dieselAmount)} (Per Campaign) = ${money(c.dieselValue)}` },
+    { key: "dieselAmount", label: "Fuel Cost", value: fuelText(data, c) },
     { key: "salaryAmount", label: "Salary", value: `${money(data.salaryAmount)} (${unitLabel(data.salaryUnit)}) = ${money(c.salaryValue)}` },
     { key: "foodAmount", label: "Food", value: `${money(data.foodAmount)} (${unitLabel(data.foodUnit)}) = ${money(c.foodValue)}` },
     // Halt Food applies only with Sunday Halt (an older saved non-zero value is still shown, as it is in that version's total)
@@ -90,6 +100,9 @@ export const statusOf = (s: string | null | undefined): ApprovalStatus =>
 
 /** Only Draft and Rejected budgets can be edited by RBP. */
 export const canEdit = (s: string | null | undefined): boolean => statusOf(s) === "DRAFT" || statusOf(s) === "REJECTED";
+/** A first submission still waiting for RSOM may be corrected once, with a reason (same rule as the server). */
+export const canSelfCorrect = (b: { approvalStatus?: string | null; rejectedVersion?: number | null; selfRevisedVersion?: number | null }): boolean =>
+  statusOf(b.approvalStatus) === "PENDING" && !b.rejectedVersion && !b.selfRevisedVersion;
 /** Draft can be submitted; Rejected only after a new version exists. */
 export const canSubmit = (s: string | null | undefined, currentVersion: number, rejectedVersion?: number | null): boolean =>
   statusOf(s) === "DRAFT" || (statusOf(s) === "REJECTED" && currentVersion > (rejectedVersion ?? 0));

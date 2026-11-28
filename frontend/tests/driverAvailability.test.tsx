@@ -1,3 +1,4 @@
+process.env.NEXT_PUBLIC_ROADSHOW = "on";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -68,7 +69,7 @@ test("Available Now shows From Date / Time (defaulting to now) and hides project
   assert.deepEqual([f.status, f.availableFromDate, f.availableFromTime], ["AVAILABLE", "2026-11-24", "12:00"]);
   const html = render(f);
   assert.ok(html.includes('data-panel="available"'));
-  assert.ok(html.includes("Available From Date") && html.includes("Available From Time"));
+  assert.ok(html.includes("Available From Date &amp; Time") && html.includes("24-Nov-2026, 12:00 PM"));
   assert.ok(!html.includes("Project From Date") && !html.includes("Unavailable Reason") && !html.includes("Trackup Number"));
 });
 
@@ -76,7 +77,7 @@ test("In Use shows the project fields (type, name, client, trackup, PIF, from / 
   const html = render(inUseForm());
   assert.ok(html.includes('data-panel="in-use"'));
   for (const l of ["Trackup Number", "PIF Number", "Project Type", "Project Name", "Client / Billing Name", "Project From Date", "Project To Date", "Additional Remarks"]) assert.ok(html.includes(l), l);
-  assert.ok(!html.includes("Unavailable Reason") && !html.includes("Available From Time"));
+  assert.ok(!html.includes("Unavailable Reason") && !html.includes("Available From Date &amp; Time"));
   assert.ok(html.includes("Pepsi India") && html.includes("Pepsi India Signage – ZZ-77") && html.includes("JS-1/2026-27") && html.includes("PIF-100"));
   assert.match(html, /Project From Date[^>]*>|aria-label="Project From Date"/);
   assert.ok(html.includes('value="2026-11-25"') && html.includes('value="2026-12-05"'));
@@ -88,7 +89,7 @@ test("Not Available shows reason, category, from date, expected date and remarks
   for (const l of ["Reason Category", "Unavailable Reason", "Unavailable From Date", "Expected Available Date", "Additional Remarks"]) assert.ok(html.includes(l), l);
   for (const c of UNAVAILABLE_CATEGORIES) assert.ok(html.includes(`>${c}</option>`), c);
   assert.deepEqual(UNAVAILABLE_CATEGORIES, ["Personal Leave", "Medical Leave", "License Issue", "Vehicle/Project Related", "Other"]);
-  assert.ok(!html.includes("Project From Date") && !html.includes("Available From Time"));
+  assert.ok(!html.includes("Project From Date") && !html.includes("Available From Date &amp; Time"));
   assert.ok(!html.includes("Custom Reason"));
   assert.ok(render(naForm({ category: "Other" })).includes("Custom Reason"));
 });

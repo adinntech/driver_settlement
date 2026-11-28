@@ -1,9 +1,11 @@
 import type { NextFunction, Request, Response } from "express";
 import {
+  countUnviewedRejections,
   createBudget,
   getVehicleBudget,
   getVersion,
   listVersions,
+  markRejectionViewed,
   updateBudget,
 } from "../services/budget.service.js";
 import { sendResponse } from "../utils/sendResponse.js";
@@ -16,6 +18,15 @@ const wrap =
 export const getForVehicle = wrap(async (req, res) => {
   const data = await getVehicleBudget(String(req.params.vehicleId));
   res.status(200).json(sendResponse(true, "Budget details fetched successfully", data));
+});
+
+export const unviewedRejections = wrap(async (_req, res) => {
+  res.status(200).json(sendResponse(true, "Unviewed rejections fetched successfully", await countUnviewedRejections()));
+});
+
+export const rejectionViewed = wrap(async (req, res) => {
+  const data = await markRejectionViewed(String(req.params.id), req.body?.version);
+  res.status(200).json(sendResponse(true, "Rejection marked as viewed", data));
 });
 
 export const create = wrap(async (req, res) => {

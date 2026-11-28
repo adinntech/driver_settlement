@@ -1,5 +1,6 @@
 "use client";
 
+import ReadMore from "@/components/ui/ReadMore";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useRef, useState } from "react";
@@ -24,6 +25,7 @@ interface Review {
   versions: BudgetVersion[];
   events: BudgetEvent[];
   activity: Activity | null;
+  selfCorrection: null | { fromVersion: number; toVersion: number; reason: string; by: string; at: string; changes: { field: string; from: unknown; to: unknown }[] };
   comparison: null | {
     fromVersion: number;
     toVersion: number;
@@ -61,7 +63,7 @@ function ReviewView() {
 }
 
 function Body({ data, reload }: { data: Review; reload: () => void }) {
-  const { context: c, budget, versions, events, comparison, projectDetails, activity } = data;
+  const { context: c, budget, versions, events, comparison, selfCorrection, projectDetails, activity } = data;
   const toast = useToast();
   const status = statusOf(budget.approvalStatus);
   const [confirm, setConfirm] = useState(false);
@@ -141,17 +143,31 @@ function Body({ data, reload }: { data: Review; reload: () => void }) {
         </details>
       </div>
 
+      {selfCorrection && (
+        <div className="card compare fade-in">
+          <h3 className="sub">Corrected by RBP before review — V{selfCorrection.fromVersion} → V{selfCorrection.toVersion}</h3>
+          <ReadMore><strong>Reason for revision:</strong> {selfCorrection.reason}</ReadMore>
+          <p className="muted">Edited by {selfCorrection.by} on {formatDateTime(selfCorrection.at)}</p>
+          <ul className="changes">
+            {selfCorrection.changes.map((ch) => (
+              <li key={ch.field}>{fieldLabel(ch.field)}: <s>{show(ch.from)}</s> → <strong>{show(ch.to)}</strong></li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {comparison && (
         <div className="card compare fade-in">
           <h3 className="sub">Revised budget — V{comparison.fromVersion} (rejected) vs V{comparison.toVersion} (resubmitted)</h3>
           <p className="muted">
-            Previously rejected{comparison.rejection.reason ? `: ${comparison.rejection.reason}` : ""}
-            {comparison.resubmissionComment && <> · <strong>RBP comment:</strong> {comparison.resubmissionComment}</>}
+            <ReadMore>
+              Previously rejected{comparison.rejection.reason ? `: ${comparison.rejection.reason}` : ""}
+              {comparison.resubmissionComment && <> · <strong>RBP comment:</strong> {comparison.resubmissionComment}</>}
+            </ReadMore>
           </p>
           {comparison.revision && (
             <p>
-              <strong>Reason for revision:</strong> {comparison.revision.reason}
-              <br />
+              <ReadMore><strong>Reason for revision:</strong> {comparison.revision.reason}</ReadMore>
               <span className="muted">Edited by {comparison.revision.by} on {formatDateTime(comparison.revision.at)} (V{comparison.revision.version})</span>
             </p>
           )}
@@ -163,7 +179,7 @@ function Body({ data, reload }: { data: Review; reload: () => void }) {
                   <td><strong>{fieldLabel(ch.field)}</strong></td>
                   <td><s>{show(ch.from)}</s></td>
                   <td><strong>{show(ch.to)}</strong></td>
-                  <td>{comparison.rejection.fields.find((f) => f.field === ch.field)?.comment ?? <span className="muted">—</span>}</td>
+                  <td><ReadMore>{comparison.rejection.fields.find((f) => f.field === ch.field)?.comment ?? <span className="muted">—</span>}</ReadMore></td>
                 </tr>
               ))}
               {comparison.changes.length === 0 && <tr><td colSpan={4} className="muted">No field values changed.</td></tr>}
@@ -191,7 +207,7 @@ function Body({ data, reload }: { data: Review; reload: () => void }) {
             <div key={d.label} className={d.key && rejected.has(d.key) ? "kv-rej" : ""}>
               <dt>{d.label}</dt>
               <dd>{d.value || "—"}</dd>
-              {d.key && rejected.has(d.key) && <small className="rej-note">Rejected: {rejected.get(d.key)}</small>}
+              {d.key && rejected.has(d.key) && <small className="rej-note"><ReadMore>Rejected: {rejected.get(d.key)}</ReadMore></small>}
             </div>
           ))}
         </dl>

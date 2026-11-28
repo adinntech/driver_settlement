@@ -53,7 +53,8 @@ export interface BudgetInput {
   completionDate: string;
   sundayHalt: boolean;
   numberOfDays: number;
-  dieselAmount: number; // unit is always per campaign
+  /** Fuel cost for the whole campaign. Always calculated on the server (see fuelCostFor). */
+  dieselAmount: number;
   salaryAmount: number;
   salaryUnit: Unit;
   foodAmount: number;
@@ -65,7 +66,7 @@ export interface BudgetInput {
   fromLocation: string | null;
   toLocation: string | null;
   totalKm: number;
-  /** Fuel price in Rs per litre: used only to calculate the Up/Down value. */
+  /** Fuel price in Rs per litre: used for the Fuel Cost and the Up/Down value. */
   fuelRate: number;
   /** Always calculated on the server: (Total KM / Mileage x Fuel Rate) + Toll Amount. */
   upDownValue: number;
@@ -209,7 +210,7 @@ export function validateBudget(input: unknown, bounds: BudgetDateBounds = {}): {
     completionDate: String(b.completionDate ?? ""),
     sundayHalt: b.sundayHalt === true,
     numberOfDays: Number.isInteger(days) ? days : 0,
-    dieselAmount: num("dieselAmount", "Fuel cost"),
+    dieselAmount: 0,
     salaryAmount: num("salaryAmount", "Salary"),
     salaryUnit: unit("salaryUnit", "Salary"),
     foodAmount: num("foodAmount", "Food"),
@@ -229,6 +230,8 @@ export function validateBudget(input: unknown, bounds: BudgetDateBounds = {}): {
   // Up/Down is never taken from the browser: it is (Total KM / Mileage x Fuel Rate) + Toll Amount.
   if (data.totalKm > 0 && data.fuelRate > 0 && !(data.mileage > 0)) errors.push("Mileage is required to calculate the Up/Down value");
   data.upDownValue = upDownFor(data);
+  if (data.estimatedKmPerDay > 0 && !(data.mileage > 0 && data.fuelRate > 0)) errors.push("Mileage and Fuel Rate are required to calculate the Fuel Cost");
+  data.dieselAmount = fuelCostFor(data);
   return { errors, data };
 }
 
@@ -268,6 +271,14 @@ export function upDownFor(d: Pick<BudgetInput, "totalKm" | "mileage" | "fuelRate
   const tollAmount = round2(d.tolls.reduce((s, t) => s + t.rate, 0));
   const fuel = d.mileage > 0 ? (d.totalKm / d.mileage) * d.fuelRate : 0;
   return round2(fuel + tollAmount);
+}
+
+/**
+ * Campaign Fuel Cost in Rs = Estimated KM per day / Mileage [km per litre] x Fuel Rate [Rs per litre] x Number of days.
+ * Rounded once, on the total. 0 without a mileage.
+ */
+export function fuelCostFor(d: Pick<BudgetInput, "estimatedKmPerDay" | "mileage" | "fuelRate" | "numberOfDays">): number {
+  return d.mileage > 0 ? round2((d.estimatedKmPerDay * d.fuelRate * d.numberOfDays) / d.mileage) : 0;
 }
 
 /** Per-day items multiply by number of days; per-campaign items are taken as is. */

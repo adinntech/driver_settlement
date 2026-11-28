@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Bulk Approve drives the existing approval endpoint once per payment: what the server accepts and refuses for that traffic.
+process.env.ROADSHOW = "on";
 process.env.MONGO_URI = "mongodb://127.0.0.1:27017/driver_settlement_test_bulk_approval";
 process.env.JWT_SECRET = "test-secret";
 for (const [r, p] of [["RBP", "p2"], ["RSOM", "p3"], ["RSA", "p4"], ["RSO", "p5"]]) {

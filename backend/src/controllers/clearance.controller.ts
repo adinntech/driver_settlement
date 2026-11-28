@@ -24,7 +24,7 @@ export const summary = wrap(async (req, res) => {
 });
 
 export const detail = wrap(async (req, res) => {
-  res.status(200).json(sendResponse(true, "Clearance details fetched successfully", await clearanceDetail(id(req))));
+  res.status(200).json(sendResponse(true, "Clearance details fetched successfully", await clearanceDetail(id(req), { fullAccount: req.user!.role === "RSA" })));
 });
 
 export const approve = wrap(async (req, res) => {

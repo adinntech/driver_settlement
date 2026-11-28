@@ -1,5 +1,6 @@
 "use client";
 
+import ReadMore from "@/components/ui/ReadMore";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
@@ -23,7 +24,7 @@ export default function VehicleViewPage() {
   );
 }
 
-const KV = ({ k, v }: { k: string; v: string | number | null | undefined }) => (
+const KV = ({ k, v }: { k: string; v: React.ReactNode }) => (
   <div>
     <dt>{k}</dt>
     <dd>{v === null || v === undefined || v === "" ? "—" : v}</dd>
@@ -90,7 +91,7 @@ function View() {
             <KV k="Expected Release" v={formatAt(v.availability.expectedReleaseDate, v.availability.expectedReleaseTime)} />
             <KV k="Next Available" v={formatAt(v.availability.nextAvailableDate, v.availability.nextAvailableTime)} />
             <KV k="Location" v={v.availability.project?.location} />
-            <KV k="Additional Remarks" v={v.availability.project?.remarks} />
+            <KV k="Additional Remarks" v={v.availability.project?.remarks && <ReadMore>{v.availability.project.remarks}</ReadMore>} />
           </dl>
         ) : (
           <dl className="kv">
@@ -181,8 +182,8 @@ function View() {
                   </p>
                 )}
                 {h.project?.projectName && <p className="muted">Project: {h.project.projectName}{h.project.clientName ? ` · ${h.project.clientName}` : ""}{h.project.trackupNumber ? ` · ${h.project.trackupNumber}` : ""}</p>}
-                {h.reason && <p className="muted">{h.reason}</p>}
-                {h.issueReason && <p className="muted">Issue reason: {h.issueReason}</p>}
+                {h.reason && <p className="muted"><ReadMore>{h.reason}</ReadMore></p>}
+                {h.issueReason && <p className="muted"><ReadMore>Issue reason: {h.issueReason}</ReadMore></p>}
                 {h.changes.length === 0 ? (
                   <p className="muted">No field values recorded.</p>
                 ) : (

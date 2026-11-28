@@ -1,3 +1,4 @@
+process.env.NEXT_PUBLIC_ROADSHOW = "on";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -16,4 +17,13 @@ test("closing the success modal returns to project selection so a second project
     'onReset(); router.push("/rsop");',
   ])
     assert.ok(page.includes(wiring), wiring);
+});
+
+test("ROADSHOW off opens the Signage form directly; on keeps the type selection", () => {
+  assert.ok(page.includes("{roadshowOn() ? <Wizard /> : <SignageOnly />}"));
+  const only = page.slice(page.indexOf("function SignageOnly"), page.indexOf("function Wizard"));
+  // the same form, no selection cards, and a finished form is discarded by remounting it
+  assert.ok(only.includes("<SignageForm onReset={() => setRound((n) => n + 1)} />") && only.includes("key={round}"));
+  assert.ok(!only.includes("type-pick") && !only.includes("RoadshowForm"));
+  assert.ok(page.slice(page.indexOf("function Wizard")).includes('(["ROADSHOW", "SIGNAGE"] as ProjectType[])'));
 });

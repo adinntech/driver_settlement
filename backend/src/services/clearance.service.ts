@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { countedHistorical } from "../models/HistoricalSuspense.js";
 import { asVertical } from "../utils/vertical.js";
 import mongoose from "mongoose";
 import { Budget, BudgetVersion } from "../models/Budget.js";
@@ -256,7 +257,7 @@ export async function loadOne(id: string) {
 }
 
 /** Everything the review / detail pages show, read from the real records. Financials are recomputed on every call. */
-export async function clearanceDetail(id: string) {
+export async function clearanceDetail(id: string, opts: { fullAccount?: boolean } = {}) { // true only for the RSA review
   const c0 = await loadOne(id);
   await syncClearances({ trackingVehicle: c0.trackingVehicle }).catch(() => 0);
   const c: any = await Clearance.findById(id).lean();
@@ -299,9 +300,9 @@ export async function clearanceDetail(id: string) {
       _id: String(c.driver), driverNumber: c.driverNumber, driverName: c.driverName, driverType: drv?.driverType ?? a?.driverType ?? null, mobileNumber: drv?.mobileNumber ?? a?.driverMobile ?? null,
       licenceNumber: drv?.licenceNumber ?? null, licenceType: drv?.licenceType ?? null, licenceExpiryDate: drv?.licenceExpiryDate ?? null,
       availabilityStatus: drv?.availability?.status ?? null, assignedAt: a?.driverAssignedAt ?? null, assignedBy: a?.driverAssignedBy ?? null, remarks: drvEvent?.details?.remarks ?? null,
-      bank: { accountName: drv?.accountName ?? null, bankName: drv?.bankName ?? null, accountNumberMasked: maskAccount(drv?.accountNumber), ifscCode: drv?.ifscCode ?? null },
+      bank: { accountName: drv?.accountName ?? null, bankName: drv?.bankName ?? null, accountNumberMasked: maskAccount(drv?.accountNumber), ifscCode: drv?.ifscCode ?? null, ...(opts.fullAccount ? { accountNumber: drv?.accountNumber ?? null } : {}) },
     },
-    financial: fin,
+    financial: { ...fin, previousData: await countedHistorical(c.trackingVehicle, c.driver) }, // shown only: clearance rules are unchanged
     rejection: c.status === "REJECTED" ? { reason: c.rejectionReason ?? null, remarks: c.rejectionRemarks ?? null, rejectedBy: c.reviewedBy ?? null, rejectedAt: c.reviewedAt ?? null } : null,
     // the vehicle / driver currently allotted, so RBP can see whether a rejected allocation was already corrected
     current: curAllot ? { allotmentId: String(curAllot._id), vehicleNo: curAllot.vehicleNo, driverNumber: curAllot.driverNumber ?? null, driverName: curAllot.driverName ?? null, hasDriver: !!curAllot.activeDriver } : null,

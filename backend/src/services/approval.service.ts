@@ -94,6 +94,23 @@ export async function submitBudget(budgetId: string, username: string, comment: 
   return updated;
 }
 
+/** A self-corrected version goes straight back to RSOM: history entry and notification. */
+export async function announceSelfCorrection(updated: { _id: unknown; currentVersion: number; total: number }, username: string, reason: string) {
+  const budgetId = String(updated._id);
+  const version = updated.currentVersion;
+  const { vehicle, project } = await loadFull(budgetId);
+  const now = new Date();
+  await recordEvent(budgetId, version, "RESUBMITTED", username, "RBP", { total: updated.total, revisionReason: reason, revisedBy: username, revisedAt: now });
+  await notifyRole("RSOM", {
+    type: "BUDGET_RESUBMITTED",
+    title: "Revised budget ready for review",
+    message: `${project.clientName} · ${vehicle.trackupNumber} · PIF ${vehicle.pifNumber} · ${inr(updated.total)} · V${version} · corrected by ${username} on ${ist(now)} · Reason: ${reason}`,
+    link: `/rsom/review?budget=${budgetId}`,
+    meta: { budgetId, version, trackupNumber: vehicle.trackupNumber, total: updated.total },
+    dedupeKey: `RESUB:${budgetId}:${version}`,
+  });
+}
+
 /** The newest edit reason given after the rejected version, with who edited and when. */
 async function latestRevision(budgetId: string, after: number | undefined, upTo: number) {
   if (!after) return null;
@@ -260,6 +277,7 @@ export async function approvalStats(projectType?: string) {
 /** Oldest first by default (existing contract); `desc` returns the latest action first. */
 export async function listEvents(budgetId: string, desc = false) {
   if (!validId(budgetId)) throw new AppError("Invalid budget id", 400);
+  if (!(await Budget.exists({ _id: budgetId }))) throw new AppError("Budget not found", 404);
   const dir = desc ? -1 : 1;
   return BudgetEvent.find({ budget: budgetId }).sort({ createdAt: dir, _id: dir }).lean();
 }
@@ -283,6 +301,14 @@ export async function reviewDetail(budgetId: string, desc = false) {
         revision: await latestRevision(budgetId, prev.version, cur.version),
       };
   }
+  // Pending self-correction (before any rejection): why RBP changed it and what changed.
+  let selfCorrection: unknown = null;
+  if (budget.selfRevisedVersion && budget.selfRevisedVersion === budget.currentVersion) {
+    const prev: any = versions.find((x: any) => x.version === budget.currentVersion - 1);
+    const cur: any = versions.find((x: any) => x.version === budget.currentVersion);
+    if (prev && cur?.revisionReason)
+      selfCorrection = { fromVersion: prev.version, toVersion: cur.version, changes: comparable(prev.data, cur.data), reason: cur.revisionReason, by: cur.updatedBy, at: cur.createdAt };
+  }
   const activity = await buildActivity(budget);
-  return { context, projectDetails: project.details, vehicleId: String(vehicle._id), budget, versions, events, comparison, activity };
+  return { selfCorrection, context, projectDetails: project.details, vehicleId: String(vehicle._id), budget, versions, events, comparison, activity };
 }
