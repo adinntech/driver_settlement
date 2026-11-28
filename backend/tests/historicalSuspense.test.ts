@@ -33,7 +33,7 @@ let server: Server;
 let base = "";
 const tok: Record<string, string> = {};
 let tv = "";
-let spare: string[] = []; // further project vehicles with no records: each can take one submission
+let spare: string[] = []; // further project vehicles with no settlement payment: each can take one submission
 
 const api = async (role: string, method: string, url: string, body?: unknown) => {
   const res = await fetch(`${base}${url}`, { method, headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok[role]}` }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -58,12 +58,13 @@ before(async () => {
   for (const [role, password] of [["RBP", "p2"], ["RSOM", "p3"], ["RSA", "p4"], ["RSO", "p5"], ["RSOP", "p1"]]) await login(role, password);
   const used = new Set((await SettlementPayment.distinct("trackingVehicle")).map(String));
   const free = (await api("RBP", "GET", "/settlements/projects?limit=100&kind=final")).body.data.items.map((x: any) => x.trackingVehicle).filter((x: string) => !used.has(x));
-  const empty: string[] = [];
+  // The seed chooses which vehicles get settlement payments by their random Trackup / PIF numbers, so which ones are left over
+  // differs on every run. Only the first combination must start without any suspense record; the others just need no payment.
   for (const candidate of free) {
     tv = candidate;
-    if (!(await context()).suspense.rows.length) empty.push(candidate);
+    if (!(await context()).suspense.rows.length) break;
   }
-  [tv, ...spare] = empty;
+  spare = free.filter((x: string) => x !== tv);
 });
 after(async () => {
   server.close();
@@ -180,14 +181,15 @@ test("completed payment is listed and reported; every reader shows it once", asy
 
 test("duplicates of a live daily payment are refused; another combination can still submit once, without Source Details", async () => {
   const today = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
-  let from = "";
-  for (const candidate of spare) { // a campaign that has already started: previous data cannot be dated in the future
-    tv = candidate;
-    from = (await context()).campaign.fromDate;
-    if (from <= today) break;
+  tv = spare.shift()!;
+  // previous data cannot be dated in the future: this fixture campaign is moved to have started, whatever the seed gave it
+  if ((await context()).campaign.fromDate > today) {
+    const vehicle: any = await mongoose.connection.collection("trackingvehicles").findOne({ _id: new mongoose.Types.ObjectId(tv) });
+    const started = new Date(Date.parse(`${today}T00:00:00Z`) - 2 * 86_400_000).toISOString().slice(0, 10);
+    await mongoose.connection.collection("trackingprojects").updateOne({ _id: vehicle.project }, { $set: { "details.fromDate": started, "details.startDate": started } });
   }
+  const from: string = (await context()).campaign.fromDate;
   assert.ok(from && from <= today, "a second empty project vehicle with a started campaign is needed");
-  spare = spare.filter((x) => x !== tv);
   const daily = await api("RBP", "POST", `/settlements/projects/${tv}/daily`, { fromDate: from, toDate: from, foodAmount: "777", idempotencyKey: "previous-daily-1" });
   assert.equal(daily.status, 201, JSON.stringify(daily.body));
   const clash = await api("RSA", "POST", url(), entry({ fromDate: from, toDate: from, paymentDate: from, salaryAdvance: "", dieselEntries: [], foodAmount: "777", submit: true }));

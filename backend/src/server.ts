@@ -15,6 +15,7 @@ import { Counter, RsaPayment } from "./models/RsaPayment.js";
 import { DeletedProject } from "./models/DeletedProject.js";
 import { HistoricalSuspense } from "./models/HistoricalSuspense.js";
 import { startAvailabilityScheduler } from "./jobs/availabilityScheduler.js";
+import { startOpsScheduler } from "./jobs/opsScheduler.js";
 
 if (!config.jwtSecret) {
   console.error("JWT_SECRET is not set. Add it to .env");
@@ -53,4 +54,5 @@ try {
 app.listen(config.port, () => {
   console.log(`Backend running on port ${config.port} (${config.env})`);
   startAvailabilityScheduler(); // releases vehicles whose next-available time has been reached (IST)
+  startOpsScheduler(); // DB backup + health report at 00/06/12/18 IST, health alerts (only when enabled in .env)
 });

@@ -45,4 +45,17 @@ export const config = {
       cdnBase: process.env.DO_SPACES_CDN_BASE ?? "",
     },
   },
+  // Scheduled MongoDB backup to the Space above (06:00, 12:00, 18:00, 00:00 IST) and server health monitoring, both reported to
+  // Google Chat. Off unless enabled, so local development and tests never back up or post anything.
+  ops: {
+    backupEnabled: process.env.BACKUP_ENABLED === "true",
+    healthMonitorEnabled: process.env.HEALTH_MONITOR_ENABLED === "true",
+    googleChatWebhook: process.env.GOOGLE_CHAT_WEBHOOK_URL ?? "",
+    serverName: process.env.SERVER_NAME || "driver-settlement",
+    backupLocalDir: process.env.BACKUP_LOCAL_DIR ?? fileURLToPath(new URL("../../backups", import.meta.url)),
+    backupRetentionDays: Number(process.env.BACKUP_RETENTION_DAYS) || 7,
+    healthCheckUrls: (process.env.HEALTH_CHECK_URLS ?? "").split(",").map((u) => u.trim()).filter(Boolean),
+    healthIntervalMs: (Number(process.env.HEALTH_CHECK_INTERVAL_MINUTES) || 5) * 60_000,
+    alertRepeatMs: (Number(process.env.HEALTH_ALERT_REPEAT_MINUTES) || 60) * 60_000,
+  },
 };
