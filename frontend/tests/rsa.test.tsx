@@ -1,6 +1,8 @@
 process.env.NEXT_PUBLIC_ROADSHOW = "on";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { salaryLabel } from "../src/utils/driverForm";
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { NAV } from "../src/components/AppShell";
 import { RSA_COLUMNS, RsaFilters, RsaProjectTable, emptyRsaFilters, rsaFiltersActive, rsaQuery } from "../src/components/RsaDashboard";
@@ -267,4 +269,18 @@ test("View Driver: details, masked bank number, availability, allotment and adva
 test("Check Advance Eligibility result shows days, salary, eligible, half and the rounded-down advance", () => {
   const html = renderToStaticMarkup(<EligibilityResult r={{ driverNumber: "DR-4821", driverName: "SAMPATH M", workingDays: 10, perDaySalary: 370, eligibleAdvanceAmount: 3700, halfEligibleAmount: 1850, finalAdvanceAmount: 1500 }} />);
   for (const v of ["DR-4821 · SAMPATH M", "Overall Working Days", ">10<", "₹370.00", "Eligible Advance Amount", "₹3,700.00", "Half Eligible Amount", "₹1,850.00", "Final Rounded Advance Amount", "₹1,500.00"]) assert.ok(html.includes(v), v);
+});
+
+test("View Driver names the saved salary by driver type: monthly for company, per day for acting; same value", () => {
+  const view = (driverType: string) => renderToStaticMarkup(<DriverBody d={{
+    driverNumber: "DR-1", driverName: "A", driverType, mobileNumber: "+91 9000000000", perDaySalary: 18000,
+    bank: { accountName: null, bankName: null, accountNumberMasked: null, ifscCode: null }, availability: null, advances: [],
+    allotment: { vehicleNo: null, trackupNumber: "T", allottedAt: null, driverAssignedAt: null, driverAssignedBy: null, driverActive: true, driverReleasedAt: null },
+  }} />);
+  const company = view("COMPANY_DRIVER");
+  assert.ok(company.includes("Monthly Salary") && company.includes("18,000.00") && !company.includes("<dt>Per Day Salary</dt>"));
+  const acting = view("ACTING_DRIVER");
+  assert.ok(acting.includes("Per Day Salary") && acting.includes("18,000.00") && !acting.includes("Monthly Salary"));
+  assert.deepEqual([salaryLabel("COMPANY_DRIVER"), salaryLabel("ACTING_DRIVER")], ["Monthly Salary", "Per Day Salary"]);
+  assert.ok(readFileSync(new URL("../src/components/settlement/PaymentForms.tsx", import.meta.url), "utf8").includes("<Row k={salaryLabel(r.data.driverType)}"));
 });
