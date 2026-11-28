@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+process.env.ROADSHOW = "on";
 process.env.MONGO_URI = "mongodb://127.0.0.1:27017/driver_settlement_test_budget";
 process.env.JWT_SECRET = "test-secret";
 process.env.RSOP_USERNAME = "RSOP";
@@ -44,11 +45,23 @@ test("budget validation rejects bad dates, days, negative/invalid amounts", () =
   assert.ok(validateBudget({ ...valid, completionDate: "2026-10-01" }).errors.some((e) => /Completion/.test(e)));
   assert.ok(validateBudget({ ...valid, numberOfDays: 0 }).errors.length > 0);
   assert.ok(validateBudget({ ...valid, numberOfDays: 1.5 }).errors.length > 0);
-  for (const k of ["mileage", "dieselAmount", "salaryAmount", "foodAmount", "haltFood", "othersAmount", "totalKm", "fuelRate"]) {
+  for (const k of ["mileage", "estimatedKmPerDay", "salaryAmount", "foodAmount", "haltFood", "othersAmount", "totalKm", "fuelRate"]) {
     assert.ok(validateBudget({ ...valid, [k]: -1 }).errors.length > 0, `${k} negative`);
     assert.ok(validateBudget({ ...valid, [k]: "abc" }).errors.length > 0, `${k} text`);
   }
   assert.ok(validateBudget({ ...valid, salaryUnit: "PER_YEAR" }).errors.length > 0);
+});
+
+test("fuel cost: calculated from KM per day, mileage, fuel rate and days; inputs required", () => {
+  const cost = (patch: object) => validateBudget({ ...valid, estimatedKmPerDay: 60, mileage: 15, fuelRate: 110, numberOfDays: 3, ...patch }).data.dieselAmount;
+  assert.equal(cost({}), 1320);
+  assert.equal(cost({ estimatedKmPerDay: 90 }), 1980);
+  assert.equal(cost({ mileage: 10 }), 1980);
+  assert.equal(cost({ fuelRate: 100 }), 1200);
+  assert.equal(cost({ numberOfDays: 5 }), 2200);
+  assert.equal(cost({ estimatedKmPerDay: 100, mileage: 3, fuelRate: 100 }), 10000); // rounded once, on the total
+  for (const patch of [{ mileage: 0 }, { fuelRate: "" }])
+    assert.ok(validateBudget({ ...valid, ...patch }).errors.includes("Mileage and Fuel Rate are required to calculate the Fuel Cost"));
 });
 
 test("toll entries: multiple kept in order, empty rows dropped, invalid rejected", () => {
@@ -65,12 +78,12 @@ test("toll entries: multiple kept in order, empty rows dropped, invalid rejected
 test("calculation: per-day items x days, per-campaign as is, tolls summed, total adds all", () => {
   const d = validateBudget(valid).data;
   const c = computeBudget(d);
-  assert.equal(c.dieselValue, 5000);
+  assert.equal(c.dieselValue, 2400); // 150 km / 12 x Rs 96 x 2 days; the sent 5000 is ignored
   assert.equal(c.salaryValue, 1600);
   assert.equal(c.foodValue, 600);
   assert.equal(c.tollAmount, 200.5);
   assert.equal(d.upDownValue, 7400.5); // (900 km / 12 km per litre x Rs 96) + Rs 200.5 tolls, never the browser's 50
-  assert.equal(c.totalValue, 5000 + 1600 + 600 + 200 + 200.5 + 100 + 7400.5);
+  assert.equal(c.totalValue, 2400 + 1600 + 600 + 200 + 200.5 + 100 + 7400.5);
   assert.equal(budgetTotal(d), c.totalValue);
   const camp = validateBudget({ ...valid, salaryUnit: "PER_CAMPAIGN" }).data;
   assert.equal(computeBudget(camp).salaryValue, 800);
@@ -120,7 +133,7 @@ test("others: multiple description+amount rows, summed in total, empty dropped, 
   // legacy payload (one pair) still works and gives the same total as before
   const legacy = validateBudget(valid).data;
   assert.deepEqual(legacy.others, [{ description: "Parking", amount: 100 }]);
-  assert.equal(budgetTotal(legacy), 15101);
+  assert.equal(budgetTotal(legacy), 12501);
   assert.ok(validateBudget({ ...valid, others: [{ description: "x", amount: -1 }] }).errors.length > 0);
   assert.ok(validateBudget({ ...valid, others: [{ description: "x", amount: "abc" }] }).errors.length > 0);
   assert.ok(validateBudget({ ...valid, others: [{ description: "", amount: 10 }] }).errors.some((e) => /description is required/.test(e)));

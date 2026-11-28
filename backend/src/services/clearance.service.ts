@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { countedHistorical } from "../models/HistoricalSuspense.js";
 import { asVertical } from "../utils/vertical.js";
 import mongoose from "mongoose";
 import { Budget, BudgetVersion } from "../models/Budget.js";
@@ -301,7 +302,7 @@ export async function clearanceDetail(id: string) {
       availabilityStatus: drv?.availability?.status ?? null, assignedAt: a?.driverAssignedAt ?? null, assignedBy: a?.driverAssignedBy ?? null, remarks: drvEvent?.details?.remarks ?? null,
       bank: { accountName: drv?.accountName ?? null, bankName: drv?.bankName ?? null, accountNumberMasked: maskAccount(drv?.accountNumber), ifscCode: drv?.ifscCode ?? null },
     },
-    financial: fin,
+    financial: { ...fin, previousData: await countedHistorical(c.trackingVehicle, c.driver) }, // shown only: clearance rules are unchanged
     rejection: c.status === "REJECTED" ? { reason: c.rejectionReason ?? null, remarks: c.rejectionRemarks ?? null, rejectedBy: c.reviewedBy ?? null, rejectedAt: c.reviewedAt ?? null } : null,
     // the vehicle / driver currently allotted, so RBP can see whether a rejected allocation was already corrected
     current: curAllot ? { allotmentId: String(curAllot._id), vehicleNo: curAllot.vehicleNo, driverNumber: curAllot.driverNumber ?? null, driverName: curAllot.driverName ?? null, hasDriver: !!curAllot.activeDriver } : null,

@@ -8,6 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import type { RoleKey } from "@/types/domain";
 import { homeFor } from "@/utils/budgetDescribe";
 import NotificationBell from "@/components/NotificationBell";
+import RejectedBadge from "@/components/RejectedBadge";
 import { Skeleton } from "@/components/ui/Ui";
 import { useNetworkActivity } from "@/hooks/useApi";
 
@@ -91,6 +92,7 @@ export default function AppShell({ role, children }: { role: RoleKey; children: 
               onClick={() => setOpen(false)}
             >
               {n.label}
+              {role === "RBP" && n.href === "/rbp" && <RejectedBadge />}
             </Link>
           ))}
         </nav>

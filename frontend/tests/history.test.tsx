@@ -81,6 +81,14 @@ test("version history: V4 first, latest expanded, older collapsed, no undefined"
   assert.ok(html.includes("Submitted")); // V1/V2 show a submitted time when it exists
 });
 
+test("version history: a new latest version resets which cards are expanded", () => {
+  // VersionHistory has no hooks, so its element can be inspected directly. A changed list key remounts every card.
+  const listKey = (v: BudgetVersion[]) => VersionHistory({ versions: v, events, currentVersion: 4 }).key;
+  const before = versions.filter((v) => v.version < 4);
+  assert.notEqual(listKey(before), listKey(versions));
+  assert.equal(listKey(versions), listKey([...versions].reverse())); // a plain refetch keeps what the user opened
+});
+
 test("approval history: latest action first and expanded; older ones collapsed", () => {
   const html = renderToStaticMarkup(<ApprovalHistory events={events} />);
   const titles = [...html.matchAll(/hist-title">([^<]+)</g)].map((m) => m[1]);

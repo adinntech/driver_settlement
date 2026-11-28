@@ -1,6 +1,6 @@
 "use client";
 
-import DateInput from "@/components/ui/DateInput";
+import DateTimePicker from "@/components/ui/DateTimePicker";
 import { laterOf, todayIst } from "@/utils/dates";
 import { useRef, useState, type ReactNode } from "react";
 import DriverBankSection from "@/components/DriverBank";
@@ -24,12 +24,6 @@ export const Field = ({ label, req, children }: { label: string; req?: boolean; 
   <div className="b-row">
     <label>{label}{req && <span className="req"> *</span>}</label>
     <div className="b-ctl">{children}</div>
-  </div>
-);
-const DT = ({ d, t, onD, onT, label, min, max }: { d: string; t: string; onD: (v: string) => void; onT: (v: string) => void; label: string; min?: string; max?: string }) => (
-  <div className="dt-pair">
-    <DateInput value={d} min={min} max={max} onChange={(e) => onD(e.target.value)} aria-label={`${label} date`} />
-    <input type="time" value={t} onChange={(e) => onT(e.target.value)} aria-label={`${label} time`} />
   </div>
 );
 const Errors = ({ list }: { list: string[] }) =>
@@ -137,10 +131,12 @@ export function AllotModal({ project, onClose, onDone }: { project: AllotmentPro
     );
 
   return (
-    <Modal title={`Allot Vehicle · ${project.trackupNumber} · ${project.pifNumber}`} onClose={onClose} wide>
+    <Modal title={`Allot Vehicle · ${project.trackupNumber} · ${project.pifNumber}`} onClose={onClose} wide className="modal-allot">
       <Errors list={errors} />
       <h4 className="sub">Project</h4>
       <ProjectSummary p={project} />
+      <div className="allot-cols">
+      <section>
       <h4 className="sub">Vehicle</h4>
       <Field label="Vehicle Number" req>
         <VehiclePicker
@@ -149,6 +145,8 @@ export function AllotModal({ project, onClose, onDone }: { project: AllotmentPro
           onClear={() => { setVeh(null); setF((s) => ({ ...s, vehicleId: "", vehicleNo: "", vehicleLabel: "" })); }}
         />
       </Field>
+      </section>
+      <section>
       <h4 className="sub">Driver Assignment (Optional)</h4>
       <div className="drv-av-radios allot-mode" role="radiogroup" aria-label="Allocation option">
         {(["VEHICLE_ONLY", "VEHICLE_DRIVER"] as AllotMode[]).map((m) => (
@@ -164,20 +162,22 @@ export function AllotModal({ project, onClose, onDone }: { project: AllotmentPro
       ) : (
         <p className="muted" data-note="driver-later">No driver is saved with this allotment. You can use Assign Driver on the allotment later.</p>
       )}
+      </section>
+      </div>
       <h4 className="sub">Schedule (IST)</h4>
       <Field label="Allotment Date & Time" req>
-        <DT d={f.allottedDate} t={f.allottedTime} onD={(v) => set("allottedDate", v)} onT={(v) => set("allottedTime", v)} label="Allotment" max={todayIst()} />
+        <DateTimePicker date={f.allottedDate} time={f.allottedTime} onChange={(d, t) => setF((x) => ({ ...x, allottedDate: d, allottedTime: t }))} label="Allotment" max={todayIst()} />
       </Field>
       <Field label="Expected Release">
-        <DT d={f.expectedReleaseDate} t={f.expectedReleaseTime} onD={(v) => set("expectedReleaseDate", v)} onT={(v) => set("expectedReleaseTime", v)} label="Expected release" min={f.allottedDate || undefined} />
+        <DateTimePicker date={f.expectedReleaseDate} time={f.expectedReleaseTime} onChange={(d, t) => setF((x) => ({ ...x, expectedReleaseDate: d, expectedReleaseTime: t }))} label="Expected release" min={f.allottedDate || undefined} />
       </Field>
       <Field label="Next Available (optional)">
-        <DT d={f.nextAvailableDate} t={f.nextAvailableTime} onD={(v) => set("nextAvailableDate", v)} onT={(v) => set("nextAvailableTime", v)} label="Next available" min={laterOf(todayIst(), f.expectedReleaseDate)} />
+        <DateTimePicker date={f.nextAvailableDate} time={f.nextAvailableTime} onChange={(d, t) => setF((x) => ({ ...x, nextAvailableDate: d, nextAvailableTime: t }))} label="Next available" min={laterOf(todayIst(), f.expectedReleaseDate)} />
       </Field>
       <Field label="Remarks">
         <textarea rows={3} value={f.remarks} maxLength={300} onChange={(e) => set("remarks", e.target.value)} placeholder="Optional allotment instructions" />
       </Field>
-      <div className="actions-row">
+      <div className="actions-row allot-actions">
         <button className="btn btn-outline" onClick={onClose}>Cancel</button>
         <button className="btn btn-primary" onClick={review}>Confirm Vehicle Allotment</button>
       </div>
@@ -520,10 +520,10 @@ export function ExtendModal({ project, onClose, onDone }: { project: AllotmentPr
     <Modal title={`Extend Allotment · ${a.vehicleNo}`} onClose={onClose}>
       <Errors list={errors} />
       <Field label="Expected Release">
-        <DT d={s.expectedReleaseDate} t={s.expectedReleaseTime} onD={(v) => setS({ ...s, expectedReleaseDate: v })} onT={(v) => setS({ ...s, expectedReleaseTime: v })} label="Expected release" />
+        <DateTimePicker date={s.expectedReleaseDate} time={s.expectedReleaseTime} onChange={(d, t) => setS({ ...s, expectedReleaseDate: d, expectedReleaseTime: t })} label="Expected release" />
       </Field>
       <Field label="Next Available (optional)">
-        <DT d={s.nextAvailableDate} t={s.nextAvailableTime} onD={(v) => setS({ ...s, nextAvailableDate: v })} onT={(v) => setS({ ...s, nextAvailableTime: v })} label="Next available" />
+        <DateTimePicker date={s.nextAvailableDate} time={s.nextAvailableTime} onChange={(d, t) => setS({ ...s, nextAvailableDate: d, nextAvailableTime: t })} label="Next available" />
       </Field>
       <Field label="Reason">
         <input value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} placeholder="Optional, e.g. project extended by client" />

@@ -1,4 +1,5 @@
 import mongoose, { Schema } from "mongoose";
+import { hideDeleted } from "./DeletedProject.js";
 
 const projectSchema = new Schema(
   {
@@ -18,5 +19,6 @@ const projectSchema = new Schema(
 );
 projectSchema.index({ projectType: 1, projectCode: 1 });
 
+hideDeleted(projectSchema, "_id");
 export const TrackingProject =
   mongoose.models.TrackingProject ?? mongoose.model("TrackingProject", projectSchema);

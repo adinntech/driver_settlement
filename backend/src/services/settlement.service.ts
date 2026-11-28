@@ -12,6 +12,7 @@ import { TrackingProject } from "../models/TrackingProject.js";
 import { AppError } from "../utils/AppError.js";
 import { pendingDriverChange } from "./driverChangeDeduction.js";
 import { suspenseFor } from "./paymentDetailsPdf.service.js";
+import { countedHistorical, describeHistorical } from "../models/HistoricalSuspense.js";
 import { financialYear } from "../utils/numbers.js";
 import { kmAllowanceOf } from "../utils/kmAllowance.js";
 import { parseAmountPaise } from "../utils/rsaPayment.js";
@@ -163,7 +164,7 @@ const shape = (p: any) => ({
   vehicleNo: p.vehicleNo ?? null, driverNumber: p.driverNumber ?? null, driverName: p.driverName ?? null, fromDate: p.fromDate, toDate: p.toDate, amount: p.amount,
   bank: p.bank ? { accountName: p.bank.accountName ?? null, bankName: p.bank.bankName ?? null, ifscCode: p.bank.ifscCode ?? null, accountMasked: p.bank.accountMasked ?? null } : null,
   submittedBy: p.submittedBy, submittedRole: p.submittedRole ?? "RBP", submittedAt: p.submittedAt, reviewedBy: p.reviewedBy ?? null, reviewedRole: p.reviewedRole ?? null, reviewedAt: p.reviewedAt ?? null,
-  rejectionReason: p.rejectionReason ?? null, approver: APPROVER[p.category as PaymentCategory], exportedAt: p.exportedAt ?? null, exportCount: p.exportCount ?? 0,
+  rejectionReason: p.rejectionReason ?? null, previousData: !!p.previousDataEntry, approver: APPROVER[p.category as PaymentCategory], exportedAt: p.exportedAt ?? null, exportCount: p.exportCount ?? 0,
   completion: p.completion ? { referenceNumber: p.completion.referenceNumber, referenceDate: p.completion.referenceDate ?? null, paymentDate: p.completion.paymentDate, paymentMode: p.completion.paymentMode, bankName: p.completion.bankName ?? null, transactionMasked: p.completion.transactionMasked ?? null, remarks: p.completion.remarks ?? null, completedBy: p.completion.completedBy, completedAt: p.completion.completedAt } : null,
 });
 export type SettlementView = ReturnType<typeof shape>;
@@ -250,6 +251,41 @@ async function snapshotRefs(tvId: string) {
   };
 }
 
+/**
+ * The COMPLETED daily payment of a submitted Previous Data entry: no approval workflow, because the money was paid before it was
+ * recorded here. One payment per entry: repeating it changes nothing, a newer revision updates it (the old values stay in the
+ * payment history and in the entry's revisions). Nothing about an approval or a bank account is made up. The caller holds the locks.
+ */
+export async function recordPreviousData(h: any, username: string, now = new Date()) {
+  const completion = {
+    referenceNumber: h.referenceNumber, paymentDate: h.paymentDate, paymentMode: h.paymentMode, bankName: h.bankName || undefined, remarks: h.remarks || undefined,
+    completedBy: h.submittedBy ?? username, completedAt: now,
+  };
+  const note = `Previous Data${h.revision > 1 ? ` revision ${h.revision}: ${h.correctionReason}` : ""} · Ref ${h.referenceNumber}`;
+  const existing: any = await SettlementPayment.findOne({ previousDataEntry: h.entryId }).lean();
+  if (existing) {
+    if (existing.version >= h.revision) return existing;
+    const data = { ...h.data, paymentFor: existing.projectType };
+    const u: any = await SettlementPayment.findOneAndUpdate(
+      { _id: existing._id, version: existing.version },
+      { $set: { version: h.revision, fromDate: h.fromDate, toDate: h.toDate, amount: h.amount, data, completion } }, { returnDocument: "after" },
+    ).lean();
+    if (!u) throw new AppError("This payment was just changed by someone else; reload", 409);
+    await logEvent(u, "CORRECTED", username, "RSA", { fromStatus: "COMPLETED", comment: note, snapshot: data });
+    return u;
+  }
+  const { ctx, camp, refs } = await snapshotRefs(String(h.trackingVehicle));
+  const data = { ...h.data, paymentFor: ctx.projectType };
+  const [doc]: any[] = await SettlementPayment.create([{
+    ...refs, bank: undefined, allotment: h.allotment, vehicle: h.vehicle, driver: h.driver, vehicleNo: h.vehicleNo, driverNumber: h.driverNumber, driverName: h.driverName,
+    paymentNumber: await nextNumber("DAILY", now), category: "DAILY", status: "COMPLETED", version: h.revision, jsNumber: camp.jsNumber,
+    fromDate: h.fromDate, toDate: h.toDate, amount: h.amount, data, completion, submittedBy: username, submittedRole: "RSA", submittedAt: now,
+    idempotencyKey: `previous:${h.entryId}`, previousDataEntry: h.entryId,
+  }]);
+  await logEvent(doc, "COMPLETED", username, "RSA", { comment: note, snapshot: data });
+  return doc.toObject();
+}
+
 function buildDaily(input: unknown, projectType: string, camp: { fromDate: string | null; toDate: string | null }, previous?: { fromDate?: string; toDate?: string }) {
   const v = validateDailyInput(input, { campaignFrom: camp.fromDate, campaignTo: camp.toDate, previous });
   if (v.errors.length || !v.data) throw new AppError(v.errors.join("; "), 400);
@@ -275,17 +311,25 @@ function buildFinal(input: unknown, camp: ReturnType<typeof campaignOf>) {
  * A payment reference identifies one payment of a category: it may not be recorded on another record of that category.
  * Compared without case ("utr1" = "UTR1"). Callers hold `refLock(category, ref)` so two simultaneous saves cannot both pass.
  */
-async function assertReferenceFree(category: PaymentCategory, ref: string, exceptId?: unknown) {
+export async function assertReferenceFree(category: PaymentCategory, ref: string, exceptId?: unknown) {
   const rx = new RegExp(`^${esc(ref)}$`, "i");
-  const clash: any = await SettlementPayment.findOne({ category, "completion.referenceNumber": rx, ...(exceptId ? { _id: { $ne: exceptId } } : {}) }).select("paymentNumber").lean();
+  const clash: any = await SettlementPayment.findOne({ category, "completion.referenceNumber": rx, ...(exceptId ? { _id: { $ne: exceptId } } : {}) }).select("paymentNumber").setOptions({ withDeleted: true }).lean();
   if (clash) throw new AppError(`Reference number ${ref} is already recorded on ${clash.paymentNumber}`, 409);
 }
-const refLock = (category: PaymentCategory, ref: string) => `ref:${category}:${ref.toUpperCase()}`;
+export const refLock = (category: PaymentCategory, ref: string) => `ref:${category}:${ref.toUpperCase()}`;
+
+/** Money already entered as Previous Data may not be paid again as a live daily payment of the same driver and vehicle. */
+async function assertNotInPreviousData(tvId: string, driver: string, same: (h: any) => boolean) {
+  const hit = (await countedHistorical(tvId, driver)).find(same);
+  if (hit) throw new AppError(`Possible duplicate of a ${describeHistorical(hit)}`, 409);
+}
+const samePayment = (b: { amount: number; fromDate: string; toDate: string }) => (h: any) =>
+  Math.round(h.amount * 100) === Math.round(b.amount * 100) && h.fromDate === b.fromDate && h.toDate === b.toDate;
 
 /** No two non-rejected daily payments of the same project vehicle and driver may cover the same day. */
 async function assertNoDailyOverlap(tvId: string, driver: string, from: string, to: string, exceptId?: string) {
   const clash: any = await SettlementPayment.findOne({
-    trackingVehicle: tvId, driver, category: "DAILY", status: { $ne: "REJECTED" }, fromDate: { $lte: to }, toDate: { $gte: from }, ...(exceptId ? { _id: { $ne: exceptId } } : {}),
+    trackingVehicle: tvId, driver, category: "DAILY", status: { $ne: "REJECTED" }, previousDataEntry: null /* overlapping dates alone are not a duplicate of Previous Data */, fromDate: { $lte: to }, toDate: { $gte: from }, ...(exceptId ? { _id: { $ne: exceptId } } : {}),
   }).select("paymentNumber fromDate toDate").lean();
   if (clash) throw new AppError(`A daily payment (${clash.paymentNumber}, ${clash.fromDate} to ${clash.toDate}) already covers part of this period`, 409);
 }
@@ -369,8 +413,10 @@ export async function submitSettlement(category: PaymentCategory, tvId: string, 
     saved = await withLock(payLock(category, tvId, refs.driver), async () => {
     const again: any = await SettlementPayment.findOne({ idempotencyKey: built.key }).lean(); // a retry that waited for the lock
     if (again) return { replayOf: again };
-    if (category === "DAILY") await assertNoDailyOverlap(tvId, refs.driver, built.fromDate, built.toDate);
-    else {
+    if (category === "DAILY") {
+      await assertNoDailyOverlap(tvId, refs.driver, built.fromDate, built.toDate);
+      await assertNotInPreviousData(tvId, refs.driver, samePayment(built));
+    } else {
       // any status counts, whatever allotment it was raised on: a rejected one is corrected and resubmitted, not entered again
       const dup: any = await SettlementPayment.findOne({ category: "FINAL", trackingVehicle: tvId, driver: refs.driver }).select("paymentNumber status").lean();
       if (dup) throw new AppError(`A final settlement (${dup.paymentNumber}, ${dup.status.toLowerCase()}) already exists for this driver on this vehicle${dup.status === "REJECTED" ? "; correct and resubmit it" : ""}`, 409);
@@ -421,6 +467,7 @@ export async function resubmitSettlement(id: string, input: unknown, username: s
   try {
     upd = await withLock(payLock(p.category, String(p.trackingVehicle), String(p.driver)), async () => {
     if (p.category === "DAILY") await assertNoDailyOverlap(String(p.trackingVehicle), String(p.driver), built.fromDate, built.toDate, id);
+    if (p.category === "DAILY") await assertNotInPreviousData(String(p.trackingVehicle), String(p.driver), samePayment(built));
     else {
       await applyDriverChange(built.data, input, String(p.driver), id);
       await applySuspense(built.data, String(p.trackingVehicle), String(p.driver), camp.fromDate);
@@ -598,6 +645,7 @@ export async function completeSettlement(id: string, input: CompletionInput, use
   // is fine). Checked under a lock on the reference, so two RSA users cannot record the same one at the same moment.
   await withLock(refLock(p.category, v.data.referenceNumber), async () => {
   await assertReferenceFree(p.category, v.data.referenceNumber, p._id);
+  if (p.category === "DAILY") await assertNotInPreviousData(String(p.trackingVehicle), String(p.driver), (h) => h.referenceNumber.toUpperCase() === v.data!.referenceNumber.toUpperCase());
   await inTxn(async (session) => {
     const u: any = await SettlementPayment.findOneAndUpdate(
       { _id: id, status: "APPROVED" },

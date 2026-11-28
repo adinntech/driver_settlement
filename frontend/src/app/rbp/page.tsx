@@ -1,6 +1,8 @@
 "use client";
 
 import VerticalSelect from "@/components/ui/VerticalSelect";
+import Select from "@/components/ui/Select";
+import { matchesStatus, overallStatus, STATUS_FILTERS } from "@/utils/projectStatus";
 import Link from "next/link";
 import { useState } from "react";
 import AppShell from "@/components/AppShell";
@@ -22,17 +24,15 @@ export default function RbpPage() {
   );
 }
 
-export function overallStatus(p: Project): "PENDING" | "CREATED" | "PARTIAL" {
-  const done = p.vehicles.filter((v) => v.budgetStatus === "CREATED").length;
-  return done === 0 ? "PENDING" : done === p.vehicles.length ? "CREATED" : "PARTIAL";
-}
-
 function Projects() {
   const [q, setQ] = useState("");
   const [vertical, setVertical] = useState("");
+  const [status, setStatus] = useState("");
   const [open, setOpen] = useState<string | null>(null);
   const dq = useDebounce(q); // one request after typing pauses, not one per keystroke
   const list = useApi<Project[]>(`/tracking?${new URLSearchParams({ ...(dq.trim() ? { q: dq.trim() } : {}), ...(vertical ? { projectType: vertical } : {}) })}`);
+
+  const shown = (list.data ?? []).filter((p) => matchesStatus(p, status));
 
   return (
     <>
@@ -45,17 +45,20 @@ function Projects() {
       <div className="card">
         <div className="filters">
           <VerticalSelect value={vertical} onChange={setVertical} />
+          <Select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">
+            {STATUS_FILTERS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </Select>
           <input placeholder="Search client, Trackup or PIF number" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         {list.loading ? (
           <Skeleton rows={5} />
         ) : list.error ? (
           <ErrorState message={list.error} onRetry={list.reload} />
-        ) : !list.data || list.data.length === 0 ? (
-          <EmptyState title="No tracking requests yet" hint="Requests created by RSOP will appear here." />
+        ) : shown.length === 0 ? (
+          list.data?.length ? <EmptyState title="No projects with this status" hint="Choose All to see every project." /> : <EmptyState title="No tracking requests yet" hint="Requests created by RSOP will appear here." />
         ) : (
           <div className="project-list">
-            {list.data.map((p) => (
+            {shown.map((p) => (
               <ProjectBlock key={p._id} p={p} open={open === p._id} onToggle={() => setOpen(open === p._id ? null : p._id)} />
             ))}
           </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { roadshowOn } from "@/utils/features";
 import VerticalSelect from "@/components/ui/VerticalSelect";
 import TableWrap from "@/components/ui/TableWrap";
 import StatCard from "@/components/ui/StatCard";
@@ -27,7 +28,7 @@ export function RsaSummaryCards({ s, paymentFor, onPick }: { s: RsaSummary; paym
   ];
   return (
     <div className="stat-row" data-section="summary-cards">
-      {cards.map(([label, value, sub]) => (
+      {cards.filter(([label]) => roadshowOn() || label !== "Roadshow Payments").map(([label, value, sub]) => (
         <StatCard key={label} label={label} value={value} sub={sub} valueClassName="rsa-stat-value" tone={label === "Total Payment Amount" ? "accent" : undefined}
           active={onPick ? (label === "Roadshow Payments" ? paymentFor === "ROADSHOW" : label === "Signage Payments" ? paymentFor === "SIGNAGE" : label === "Total Payment Entries" ? !paymentFor : false) : undefined}
           onClick={onPick && ["Total Payment Entries", "Roadshow Payments", "Signage Payments"].includes(label)

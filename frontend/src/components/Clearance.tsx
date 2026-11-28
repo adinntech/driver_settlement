@@ -1,5 +1,6 @@
 "use client";
 
+import ReadMore from "@/components/ui/ReadMore";
 import VerticalSelect from "@/components/ui/VerticalSelect";
 import TableWrap from "@/components/ui/TableWrap";
 import Select from "@/components/ui/Select";
@@ -185,6 +186,15 @@ export function FinancialPanel({ fin }: { fin: ClearanceFinancial }) {
           </table>
         </TableWrap>
       )}
+      {!!fin.previousData?.length && (
+        <>
+          <h4>Previous Data (historical payments on this vehicle)</h4>
+          <table className="table" data-section="previous-data"><thead><tr><th>Type</th><th>Period</th><th>Reference No. / UTR</th><th>Amount</th></tr></thead>
+            <tbody>{fin.previousData.map((r) => (<tr key={r.entryId}><td><span className="badge badge-created">Historical</span></td><td>{formatDate(r.fromDate)} – {formatDate(r.toDate)}</td><td>{r.referenceNumber}</td><td>{formatInr(r.amount)}</td></tr>))}</tbody>
+          </table>
+          <p className="muted">Total previous data: {formatInr(fin.previousData.reduce((s, r) => s + Math.round(r.amount * 100), 0) / 100)}</p>
+        </>
+      )}
       <h4>Settlement Details</h4>
       {fin.settlementDataAvailable
         ? (fin.settlements.length === 0 ? <p className="muted">No settlements recorded.</p> : <p>{fin.settlements.length} settlement(s) totalling {formatInr(fin.totalSettled)}.</p>)
@@ -223,7 +233,7 @@ export function DetailSections({ d }: { d: ClearanceDetail }) {
         <dl className="kv">
           <KV k="Driver Number" v={dr.driverNumber} /><KV k="Driver Name" v={dr.driverName} /><KV k="Driver Type" v={dr.driverType ? DRIVER_TYPE[dr.driverType] ?? dr.driverType : null} />
           <KV k="Mobile Number" v={dr.mobileNumber} /><KV k="Driving Licence" v={[dr.licenceNumber, dr.licenceType].filter(Boolean).join(" · ") || null} /><KV k="Licence Expiry" v={formatDate(dr.licenceExpiryDate)} />
-          <KV k="Driver Availability Status" v={dr.availabilityStatus} /><KV k="Driver Assigned Date & Time" v={formatDateTime(dr.assignedAt)} /><KV k="Driver Remarks" v={dr.remarks} />
+          <KV k="Driver Availability Status" v={dr.availabilityStatus} /><KV k="Driver Assigned Date & Time" v={formatDateTime(dr.assignedAt)} /><KV k="Driver Remarks" v={dr.remarks && <ReadMore>{dr.remarks}</ReadMore>} />
           <KV k="Bank" v={[dr.bank.bankName, dr.bank.accountNumberMasked, dr.bank.ifscCode].filter(Boolean).join(" · ") || null} />
         </dl>
       </section>
@@ -248,7 +258,7 @@ export function ClearanceHistory({ rows }: { rows: ClearanceHistoryRow[] }) {
       <h3>Approval History</h3>
       <TableWrap>
         <table className="table"><thead><tr><th>Version</th><th>Action</th><th>User</th><th>Date &amp; Time</th><th>Details</th></tr></thead>
-          <tbody>{rows.map((h) => (<tr key={h._id}><td>V{h.version}</td><td>{ACTION_LABEL[h.action] ?? h.action}</td><td>{h.username} ({h.role})</td><td>{formatDateTime(h.at)}</td><td>{historyText(h)}</td></tr>))}</tbody>
+          <tbody>{rows.map((h) => (<tr key={h._id}><td>V{h.version}</td><td>{ACTION_LABEL[h.action] ?? h.action}</td><td>{h.username} ({h.role})</td><td>{formatDateTime(h.at)}</td><td><ReadMore>{historyText(h)}</ReadMore></td></tr>))}</tbody>
         </table>
       </TableWrap>
     </section>

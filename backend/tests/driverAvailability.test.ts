@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+process.env.ROADSHOW = "on";
 process.env.MONGO_URI = "mongodb://127.0.0.1:27017/driver_settlement_test_driver_availability";
 process.env.JWT_SECRET = "test-secret";
 process.env.RSOP_USERNAME = "RSOP";

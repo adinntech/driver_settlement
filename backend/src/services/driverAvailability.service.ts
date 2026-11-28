@@ -6,6 +6,7 @@ import { diffVehicle, type Change } from "../validators/vehicle.validator.js";
 import { joinLabel } from "../validators/availability.validator.js";
 import { istToday, nextDay, type DriverAvailabilityData } from "../validators/driverAvailability.validator.js";
 import { projectFromTracking, resolveApprovedProject } from "./availability.service.js";
+import { roadshowAllocation } from "../utils/features.js";
 
 // ---- history: flat, human-friendly view of the availability block ---------------------------------
 
@@ -78,7 +79,9 @@ export function driverAvailabilityHistory(prev: any, next: DriverAvailabilityDat
  * Resolves the approved project for "In Use – Another Project": project details come from the tracking / budget records
  * (never from the client); the From / To dates are RBP's own entry and default to the project's dates when left blank.
  */
-export async function linkDriverProject(input: any): Promise<{ input: any; error?: string }> {
+export async function linkDriverProject(input: any, prev?: unknown): Promise<{ input: any; error?: string }> {
+  const off = roadshowAllocation(input, prev);
+  if (off) return off;
   if (!input || typeof input !== "object" || input.status !== "IN_USE") return { input };
   const p = input.project && typeof input.project === "object" ? input.project : {};
   const hasT = typeof p.trackupNumber === "string" && p.trackupNumber.trim();

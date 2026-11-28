@@ -1,3 +1,4 @@
+process.env.ROADSHOW = "on";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { addDaysYmd, istDateOf, isYmd, todayIst } from "../src/utils/dates.js";

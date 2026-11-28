@@ -25,6 +25,8 @@ export interface DeliverySummary { total: number; approved: number; yetToApprove
 export interface DeliveryHistoryRow { _id: string; version: number; action: string; username: string; role: string; at: string; details: Record<string, unknown> | null }
 export interface ClearanceSummary { total: number; yetToApprove: number; approved: number; rejected: number }
 export interface ClearanceFinancial {
+  /** Previous Data (historical payments) of this driver on this vehicle; informational only. */
+  previousData?: { entryId: string; revision: number; fromDate: string; toDate: string; referenceNumber: string; amount: number }[];
   status: FinancialStatus; totalAdvance: number; totalSettled: number | null; outstanding: number | null; canApprove: boolean; message: string; settlementDataAvailable: boolean;
   advances: { _id: string; submittedAt: string; workingDays: number; finalAdvanceAmount: number; submittedBy: string }[]; settlements: { amount: number }[];
 }

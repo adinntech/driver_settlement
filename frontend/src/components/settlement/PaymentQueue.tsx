@@ -1,5 +1,6 @@
 "use client";
 
+import ReadMore from "@/components/ui/ReadMore";
 import VerticalSelect from "@/components/ui/VerticalSelect";
 import { verticalLabel } from "@/utils/vertical";
 import TableWrap from "@/components/ui/TableWrap";
@@ -193,7 +194,7 @@ export function PaymentQueue({ mode, defaultCategory = "", toolbar, reloadKey = 
                   {list.data.items.map((p) => (
                     <tr key={p._id}>
                       {bulk && <td>{canBulkApprove(user?.role, p) && <input type="checkbox" aria-label={`Select ${p.paymentNumber}`} checked={picked.has(p._id)} onChange={() => toggle(p._id)} />}</td>}
-                      <td><strong className="num">{p.paymentNumber}</strong>{p.version > 1 && <small className="muted"> v{p.version}</small>}{mode === "completed" && <div className="ds-cat-under"><CategoryTag c={p.category} /></div>}</td>
+                      <td><strong className="num">{p.paymentNumber}</strong>{p.version > 1 && <small className="muted"> v{p.version}</small>}{p.previousData && <div><span className="badge badge-created">Previous Data</span></div>}{mode === "completed" && <div className="ds-cat-under"><CategoryTag c={p.category} /></div>}</td>
                       <td>{verticalLabel(p.projectType)}</td>
                       {mode !== "completed" && <td><CategoryTag c={p.category} /></td>}
                       <td><div>{d(p.clientName)}</div><small className="muted">{[p.trackupNumber, p.pifNumber].filter(Boolean).join(" · ")}</small></td>
@@ -327,7 +328,7 @@ export function PaymentDetailModal({ id, onClose, onChanged }: { id: string; onC
               )}
             </section>
           )}
-          {p.status === "REJECTED" && p.rejectionReason && <div className="alert">Rejected by {p.reviewedBy}: {p.rejectionReason}</div>}
+          {p.status === "REJECTED" && p.rejectionReason && <div className="alert"><ReadMore>Rejected by {p.reviewedBy}: {p.rejectionReason}</ReadMore></div>}
 
           <section className="ds-sec">
             <h4>Project, vehicle &amp; driver</h4>
@@ -365,7 +366,7 @@ export function PaymentDetailModal({ id, onClose, onChanged }: { id: string; onC
                 ["Reference No.", p.completion.referenceNumber], ["Reference Date", p.completion.referenceDate ? formatDate(p.completion.referenceDate) : "-"],
                 ["Payment Mode", modeLabel(p.completion.paymentMode)], ["Payment Date", formatDate(p.completion.paymentDate)], ["Mode of Payment", d(p.completion.bankName)],
                 ...(p.completion.transactionMasked ? [["Transaction", p.completion.transactionMasked] as [string, string]] : []),
-                ...(p.completion.remarks ? [["Remarks", p.completion.remarks] as [string, string]] : []),
+                ...(p.completion.remarks ? [["Remarks", <ReadMore key="r">{p.completion.remarks}</ReadMore>] as [string, ReactNode]] : []),
                 ["Recorded by", `${p.completion.completedBy} · ${formatDateTime(p.completion.completedAt)}`],
               ]} />
             </section>
@@ -378,7 +379,7 @@ export function PaymentDetailModal({ id, onClose, onChanged }: { id: string; onC
                 <li key={i} className={`ds-tl-${h.action.toLowerCase()}`}>
                   <strong>{ACTION_LABEL[h.action] ?? h.action}</strong> <span className="muted">v{h.version} · {h.username} ({h.role}) · {formatDateTime(h.createdAt)}</span>
                   {h.amount !== null && (h.action === "SUBMITTED" || h.action === "RESUBMITTED") && <span className="muted"> · {formatInr(h.amount)}</span>}
-                  {h.comment && <div className="ds-tl-note">{h.comment}</div>}
+                  {h.comment && <div className="ds-tl-note"><ReadMore>{h.comment}</ReadMore></div>}
                 </li>
               ))}
             </ol>

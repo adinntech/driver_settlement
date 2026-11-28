@@ -1,4 +1,5 @@
 import mongoose, { Schema } from "mongoose";
+import { hideDeleted } from "./DeletedProject.js";
 
 /**
  * One row per saved RSA payment entry. Entries are immutable: a new payment always creates a new row, so the history of a
@@ -61,5 +62,6 @@ for (const op of ["updateOne", "findOneAndUpdate", "updateMany", "deleteOne", "d
 // Atomic counters (one document per key, e.g. "rsaPayment:2026-27").
 const counterSchema = new Schema({ _id: String, seq: { type: Number, default: 0 } });
 
+hideDeleted(paymentSchema, "project");
 export const RsaPayment = mongoose.models.RsaPayment ?? mongoose.model("RsaPayment", paymentSchema);
 export const Counter = mongoose.models.Counter ?? mongoose.model("Counter", counterSchema);

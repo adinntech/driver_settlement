@@ -1,3 +1,4 @@
+process.env.NEXT_PUBLIC_ROADSHOW = "on";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { ENTRY_MODES, actionsFor, cleanReference, emptyQueueFilters, modeLabel, validatePaymentEntry, finalFormFrom, finalPayload, finalTotals, queueQuery, exportQuery, validateFinalForm, type FinalForm, type SettlementContext } from "../src/utils/settlement";

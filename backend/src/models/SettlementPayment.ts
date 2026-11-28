@@ -1,4 +1,5 @@
 import mongoose, { Schema } from "mongoose";
+import { hideDeleted } from "./DeletedProject.js";
 
 /**
  * Driver settlement payments raised by RBP. Two separate categories share one approval queue:
@@ -12,7 +13,7 @@ export const PAYMENT_CATEGORIES = ["DAILY", "FINAL"] as const;
 export type PaymentCategory = (typeof PAYMENT_CATEGORIES)[number];
 export const SETTLEMENT_STATUSES = ["PENDING", "APPROVED", "REJECTED", "COMPLETED"] as const;
 export type SettlementStatus = (typeof SETTLEMENT_STATUSES)[number];
-export const SETTLEMENT_ACTIONS = ["SUBMITTED", "RESUBMITTED", "APPROVED", "REJECTED", "EXPORTED", "COMPLETED", "MILEAGE_EDITED"] as const;
+export const SETTLEMENT_ACTIONS = ["SUBMITTED", "RESUBMITTED", "APPROVED", "REJECTED", "EXPORTED", "COMPLETED", "MILEAGE_EDITED", "CORRECTED"] as const;
 /** Modes RSA chooses in the payment Entry popup. */
 export const ENTRY_PAYMENT_MODES = ["CASH", "CHEQUE", "DD", "EPAYMENT"] as const;
 export const PAYMENT_MODE_LABEL: Record<string, string> = { CASH: "Cash", CHEQUE: "Cheque", DD: "DD", EPAYMENT: "ePayment", NEFT: "NEFT", RTGS: "RTGS", IMPS: "IMPS", UPI: "UPI" };
@@ -76,6 +77,8 @@ const paymentSchema = new Schema(
     exportedAt: Date,
     exportCount: { type: Number, default: 0 },
     idempotencyKey: { type: String, required: true },
+    // set on the COMPLETED daily payment created from a submitted Previous Data entry (one per entry)
+    previousDataEntry: Schema.Types.ObjectId,
     // set while a FINAL settlement is pending / approved / completed: the duplicate-final lock (one per allotment + driver)
     finalLock: String,
     dseNumber: Number, // FINAL only: sequential DSE No. printed on the salary statement, assigned once at approval
@@ -83,6 +86,7 @@ const paymentSchema = new Schema(
   { timestamps: true },
 );
 paymentSchema.index({ idempotencyKey: 1 }, { unique: true });
+paymentSchema.index({ previousDataEntry: 1 }, { unique: true, partialFilterExpression: { previousDataEntry: { $type: "objectId" } } });
 paymentSchema.index({ finalLock: 1 }, { unique: true, partialFilterExpression: { finalLock: { $type: "string" } } });
 paymentSchema.index({ status: 1, category: 1, submittedAt: -1 });
 paymentSchema.index({ dseNumber: 1 }, { unique: true, partialFilterExpression: { dseNumber: { $type: "number" } } });
@@ -117,5 +121,6 @@ for (const op of ["updateOne", "findOneAndUpdate", "updateMany", "deleteOne", "d
     throw new Error("Settlement payment history is immutable");
   });
 
+hideDeleted(paymentSchema, "project");
 export const SettlementPayment = mongoose.models.SettlementPayment ?? mongoose.model("SettlementPayment", paymentSchema);
 export const SettlementPaymentEvent = mongoose.models.SettlementPaymentEvent ?? mongoose.model("SettlementPaymentEvent", eventSchema);

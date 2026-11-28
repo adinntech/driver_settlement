@@ -24,6 +24,7 @@ export interface Draft {
   completionDate: string;
   sundayHalt: boolean;
   numberOfDays: string;
+  /** Read-only: kept for the saved value; the form always shows computeValues().dieselValue. */
   dieselAmount: string;
   salaryAmount: string;
   salaryUnit: Unit;
@@ -36,7 +37,7 @@ export interface Draft {
   fromLocation: string;
   toLocation: string;
   totalKm: string;
-  /** Fuel price in Rs per litre: used only for the Up/Down value. */
+  /** Fuel price in Rs per litre: used for the Fuel Cost and the Up/Down value. */
   fuelRate: string;
   /** Read-only: kept for the saved value; the form always shows computeValues().upDownValue. */
   upDownValue: string;
@@ -147,16 +148,23 @@ export function upDownOf(d: Pick<Draft, "totalKm" | "mileage" | "fuelRate">, tol
   return r2((mileage > 0 ? (n(d.totalKm) / mileage) * n(d.fuelRate) : 0) + tollAmount);
 }
 
+/** Fuel Cost (same as the server): daily = Estimated KM per day / Mileage x Fuel Rate; campaign = daily x Number of days. */
+export function fuelCostOf(d: Pick<Draft, "estimatedKmPerDay" | "mileage" | "fuelRate" | "numberOfDays">) {
+  const mileage = n(d.mileage);
+  const perDay = (days: number) => (mileage > 0 ? r2((n(d.estimatedKmPerDay) * n(d.fuelRate) * days) / mileage) : 0);
+  return { daily: perDay(1), total: perDay(n(d.numberOfDays)) };
+}
+
 export function computeValues(d: Draft) {
   const days = Number(d.numberOfDays) || 0;
   const by = (amt: string, u: Unit) => r2(u === "PER_DAY" ? n(amt) * days : n(amt));
-  const dieselValue = r2(n(d.dieselAmount));
+  const { daily: dailyFuelCost, total: dieselValue } = fuelCostOf(d);
   const salaryValue = by(d.salaryAmount, d.salaryUnit);
   const foodValue = by(d.foodAmount, d.foodUnit);
   const tollAmount = r2(filledTolls(d).reduce((sum, t) => sum + n(t.rate), 0));
   const upDownValue = upDownOf(d, tollAmount);
   const totalValue = r2(dieselValue + salaryValue + foodValue + (haltFoodApplies(d) ? n(d.haltFood) : 0) + tollAmount + r2(filledCharges(d).reduce((sum, c) => sum + n(c.amount), 0)) + upDownValue);
-  return { dieselValue, salaryValue, foodValue, tollAmount, upDownValue, totalValue };
+  return { dailyFuelCost, dieselValue, salaryValue, foodValue, tollAmount, upDownValue, totalValue };
 }
 
 export interface DraftDateBounds {
@@ -183,12 +191,13 @@ export function validateDraft(d: Draft, bounds: DraftDateBounds = {}): string[] 
   if (d.onRoadDate && d.completionDate && d.completionDate < d.onRoadDate) e.push("Completion date cannot be before on road date");
   if (!(Number.isInteger(Number(d.numberOfDays)) && Number(d.numberOfDays) >= 1)) e.push("Number of days must be at least 1");
   const amounts: [string, string][] = [
-    [d.mileage, "Mileage"], [d.estimatedKmPerDay, "Estimated KM per day"], [d.dieselAmount, "Fuel cost"],
+    [d.mileage, "Mileage"], [d.estimatedKmPerDay, "Estimated KM per day"],
     [d.salaryAmount, "Salary"], [d.foodAmount, "Food"], ...(haltFoodApplies(d) ? [[d.haltFood, "Halt food"] as [string, string]] : []),
     [d.totalKm, "Total km"], [d.fuelRate, "Fuel rate"],
   ];
   for (const [v, label] of amounts) if (v !== "" && !(Number(v) >= 0)) e.push(`${label} must be a valid amount`);
   if (n(d.totalKm) > 0 && n(d.fuelRate) > 0 && !(n(d.mileage) > 0)) e.push("Mileage is required to calculate the Up/Down value");
+  if (n(d.estimatedKmPerDay) > 0 && !(n(d.mileage) > 0 && n(d.fuelRate) > 0)) e.push("Mileage and Fuel Rate are required to calculate the Fuel Cost");
   filledTolls(d).forEach((t, i) => {
     if (!t.location.trim()) e.push(`Toll entry ${i + 1}: location is required`);
     if (t.rate === "" || !(Number(t.rate) >= 0))
@@ -208,7 +217,7 @@ export function toPayload(d: Draft) {
     mileage: num(d.mileage), estimatedKmPerDay: num(d.estimatedKmPerDay),
     onRoadDate: d.onRoadDate, completionDate: d.completionDate, sundayHalt: d.sundayHalt,
     numberOfDays: Number(d.numberOfDays),
-    dieselAmount: num(d.dieselAmount),
+    dieselAmount: computeValues(d).dieselValue, // the server recalculates it
     salaryAmount: num(d.salaryAmount), salaryUnit: d.salaryUnit,
     foodAmount: num(d.foodAmount), foodUnit: d.foodUnit,
     haltFood: haltFoodApplies(d) ? num(d.haltFood) : 0,

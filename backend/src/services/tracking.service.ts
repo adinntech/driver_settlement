@@ -7,6 +7,7 @@ import { allocatePif, sharedTrackup } from "./numberAllocator.js";
 import { TrackupGroup } from "../models/TrackupGroup.js";
 import { Budget } from "../models/Budget.js";
 import { AppError } from "../utils/AppError.js";
+import { ROADSHOW_DISABLED, roadshowOn } from "../utils/features.js";
 
 interface Actor {
   id: string;
@@ -24,7 +25,7 @@ export async function assertProjectCodeFits(projectType: string, projectCode: st
   const clash = (owner: string) =>
     new AppError(`Project Code ${projectCode} is already used by the ${projectType === "ROADSHOW" ? "Roadshow" : "Signage"} project of ${owner}. Use that client's name to add vehicles to it, or enter a different Project Code.`, 409);
   // Requests saved before the claim below existed (or by older code paths) are checked directly.
-  const used = await TrackingProject.find({ projectType, projectCode }).select("clientName").limit(50).lean();
+  const used = await TrackingProject.find({ projectType, projectCode }).select("clientName").limit(50).setOptions({ withDeleted: true }).lean();
   const other = used.find((p) => !sameClient(String(p.clientName), clientName));
   if (other) throw clash(String(other.clientName));
   // Atomic claim (unique _id per type + code): of two simultaneous requests by different clients only the first owns the code.
@@ -46,7 +47,7 @@ export async function assertProjectCodeFits(projectType: string, projectCode: st
 const trackupFor = (key: string) =>
   sharedTrackup({
     find: async () => ((await TrackupGroup.findById(key).lean()) as { trackupNumber: string } | null)?.trackupNumber ?? null,
-    used: async (trackupNumber) => !!(await TrackingVehicle.exists({ trackupNumber })),
+    used: async (trackupNumber) => !!(await TrackingVehicle.exists({ trackupNumber }).setOptions({ withDeleted: true })),
     claim: async (trackupNumber) => {
       await TrackupGroup.create({ _id: key, trackupNumber });
     },
@@ -57,6 +58,7 @@ export async function createTracking(
   body: { projectType?: unknown; details?: unknown; requestId?: unknown },
   opts: Pick<TrackingValidationOptions, "allowPastStart"> = {}, // internal callers only (dev seed); the API never passes it
 ) {
+  if (body.projectType === "ROADSHOW" && !roadshowOn()) throw new AppError(ROADSHOW_DISABLED, 403);
   const v = validateTracking(body.projectType, body.details, opts);
   if (v.errors.length) throw new AppError(v.errors.join("; "), 400);
 
@@ -97,7 +99,7 @@ export async function createTracking(
         trackups.set(type.code, trackupNumber);
       }
       await allocatePif({
-        exists: async (pifNumber) => !!(await TrackingVehicle.exists({ pifNumber })),
+        exists: async (pifNumber) => !!(await TrackingVehicle.exists({ pifNumber }).setOptions({ withDeleted: true })),
         insert: async (pifNumber) => {
           await TrackingVehicle.create({ project: project._id, vehicleIndex: i + 1, vehicleTypeCode: type.code, vehicleType: type.name, trackupNumber, pifNumber });
         },

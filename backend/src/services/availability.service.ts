@@ -8,6 +8,7 @@ import { releaseActiveAllotments } from "./allotment.core.js";
 import { istNowAt, joinLabel, type AvailabilityData } from "../validators/availability.validator.js";
 import { diffVehicle, type Change } from "../validators/vehicle.validator.js";
 import { kmAllowanceOf } from "../utils/kmAllowance.js";
+import { roadshowAllocation } from "../utils/features.js";
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -156,7 +157,9 @@ export async function resolveApprovedProject(trackupIn: unknown, pifIn: unknown)
  * Returns an error when the entered Trackup / PIF cannot be linked. Nothing entered => the block passes through unlinked
  * (a draft may be incomplete; a final save is rejected by the validator).
  */
-export async function linkProject(input: any): Promise<{ input: any; error?: string }> {
+export async function linkProject(input: any, prev?: unknown): Promise<{ input: any; error?: string }> {
+  const off = roadshowAllocation(input, prev);
+  if (off) return off;
   if (!input || typeof input !== "object" || input.status !== "IN_USE") return { input };
   const p = input.project && typeof input.project === "object" ? input.project : {};
   const hasT = typeof p.trackupNumber === "string" && p.trackupNumber.trim();

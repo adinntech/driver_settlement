@@ -2,6 +2,7 @@
 
 import Select from "@/components/ui/Select";
 import DateInput from "@/components/ui/DateInput";
+import DateTimePicker from "@/components/ui/DateTimePicker";
 import { useState, type ReactNode } from "react";
 import { useApi } from "@/hooks/useApi";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -128,11 +129,8 @@ export default function DriverAvailability({ value: a, onChange }: { value: Driv
 
       {a.status === "AVAILABLE" && (
         <div className="av-panel av-green" data-panel="available">
-          <Row label="Available From Date">
-            <DateInput value={a.availableFromDate} onChange={(e) => set("availableFromDate", e.target.value)} aria-label="Available From Date" />
-          </Row>
-          <Row label="Available From Time">
-            <input type="time" value={a.availableFromTime} onChange={(e) => set("availableFromTime", e.target.value)} aria-label="Available From Time" />
+          <Row label="Available From Date & Time">
+            <DateTimePicker date={a.availableFromDate} time={a.availableFromTime} label="Available From" onChange={(d, t) => onChange({ ...a, availableFromDate: d, availableFromTime: t })} />
           </Row>
         </div>
       )}

@@ -1,5 +1,6 @@
 "use client";
 
+import ReadMore from "@/components/ui/ReadMore";
 import { ApprovalBadge } from "@/components/ApprovalTimeline";
 import type { Budget } from "@/types/domain";
 import { canSubmit, fieldLabel, statusOf } from "@/utils/budgetDescribe";
@@ -36,7 +37,7 @@ export default function RbpApprovalPanel({ budget }: { budget: Budget; onChanged
       {status === "REJECTED" && rej && (
         <div className="rejection fade-in">
           <h4>Rejected by {rej.rejectedBy} · V{rej.version} · {formatDateTime(rej.rejectedAt)}</h4>
-          {rej.reason && <p><strong>Reason:</strong> {rej.reason}</p>}
+          {rej.reason && <p><ReadMore><strong>Reason:</strong> {rej.reason}</ReadMore></p>}
           <table className="table">
             <thead>
               <tr><th>Budget Field</th><th>Rejection Reason</th></tr>
@@ -45,7 +46,7 @@ export default function RbpApprovalPanel({ budget }: { budget: Budget; onChanged
               {rej.fields.map((f) => (
                 <tr key={f.field} className="rej-row">
                   <td><strong>{fieldLabel(f.field)}</strong></td>
-                  <td>{f.comment}</td>
+                  <td><ReadMore>{f.comment}</ReadMore></td>
                 </tr>
               ))}
             </tbody>

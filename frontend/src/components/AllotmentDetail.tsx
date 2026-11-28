@@ -1,5 +1,6 @@
 "use client";
 
+import ReadMore from "@/components/ui/ReadMore";
 import { useState } from "react";
 import { AllotmentDriverSection } from "@/components/AllotmentDriver";
 import { AssignDriverModal, ChangeDriverModal } from "@/components/AllotmentModals";
@@ -91,7 +92,7 @@ export function DriverChanges({ events }: { events: AllotmentDetailData["events"
                 <td>{fmtInstant(e.createdAt)}</td>
                 <td>{[x.from?.driverNumber, x.from?.driverName].filter(Boolean).join(" · ") || "—"}</td>
                 <td>{[x.to?.driverNumber, x.to?.driverName].filter(Boolean).join(" · ") || "—"}</td>
-                <td>{x.reason}{x.remarks ? ` — ${x.remarks}` : ""}</td>
+                <td><ReadMore>{x.reason}{x.remarks ? ` — ${x.remarks}` : ""}</ReadMore></td>
                 <td data-deduction>{formatDeduction(Number(x.travelAmountDeduction ?? 0))}</td>
                 <td>{who(e.username)}</td>
                 <td>{atts.length === 0 ? "—" : atts.map((a) => <div key={a.key}>{a.name}</div>)}</td>
@@ -134,8 +135,8 @@ export function Body({ d, onAssign, onChangeDriver }: { d: AllotmentDetailData; 
         <KV k="Next Available" v={fmtInstant(a.nextAvailableAt)} />
         <KV k="Allotted By" v={who(a.createdBy)} />
         <KV k="Updated By" v={`${who(a.updatedBy)} · ${fmtInstant(a.updatedAt)}`} />
-        <KV k="Remarks" v={a.remarks} />
-        {a.releasedAt && <KV k="Released" v={`${fmtInstant(a.releasedAt)} · ${a.releaseReason ?? ""}`} />}
+        <KV k="Remarks" v={a.remarks && <ReadMore>{a.remarks}</ReadMore>} />
+        {a.releasedAt && <KV k="Released" v={<ReadMore>{fmtInstant(a.releasedAt)} · {a.releaseReason ?? ""}</ReadMore>} />}
       </dl>
 
       <h4 className="sub">Vehicle changes</h4>
@@ -150,7 +151,7 @@ export function Body({ d, onAssign, onChangeDriver }: { d: AllotmentDetailData; 
                 <td>{fmtInstant(c.changedAt)}</td>
                 <td>{c.changedFromVehicleNo}</td>
                 <td>{c.vehicleNo}</td>
-                <td>{c.changeReason}{c.changeRemarks ? ` — ${c.changeRemarks}` : ""}</td>
+                <td><ReadMore>{c.changeReason}{c.changeRemarks ? ` — ${c.changeRemarks}` : ""}</ReadMore></td>
                 <td>{who(c.createdBy)}</td>
                 <td>
                   {c.changeAttachments.length === 0 ? "—" : c.changeAttachments.map((x) => (
@@ -170,7 +171,7 @@ export function Body({ d, onAssign, onChangeDriver }: { d: AllotmentDetailData; 
         {d.events.map((e) => (
           <li key={e._id}>
             <strong>{EVENT_LABEL[e.action] ?? e.action}</strong>
-            <span>{eventText(e.action, e.details)}</span>
+            <span><ReadMore>{eventText(e.action, e.details)}</ReadMore></span>
             <small className="muted">{who(e.username)} · {fmtInstant(e.createdAt)}</small>
           </li>
         ))}

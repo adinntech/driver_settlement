@@ -1,4 +1,5 @@
 import mongoose, { Schema } from "mongoose";
+import { hideDeleted } from "./DeletedProject.js";
 
 export const DELIVERY_STATUSES = ["YET_TO_DELIVER", "DELIVERED"] as const;
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
@@ -64,5 +65,6 @@ for (const op of ["updateOne", "findOneAndUpdate", "updateMany", "deleteOne", "d
     throw new Error("Delivery history is immutable");
   });
 
+hideDeleted(deliverySchema, "project");
 export const VehicleDelivery = mongoose.models.VehicleDelivery ?? mongoose.model("VehicleDelivery", deliverySchema);
 export const DeliveryEvent = mongoose.models.DeliveryEvent ?? mongoose.model("DeliveryEvent", eventSchema);

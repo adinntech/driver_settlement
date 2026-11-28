@@ -1,5 +1,6 @@
 "use client";
 
+import ReadMore from "@/components/ui/ReadMore";
 import { useState, type ReactNode } from "react";
 import { ApprovalBadge, ACTION_LABEL } from "@/components/ApprovalTimeline";
 import type { Activity, BudgetEvent, BudgetVersion, Stamp } from "@/types/domain";
@@ -64,8 +65,9 @@ export function ActivitySummary({ activity, role }: { activity: Activity | null;
 export function VersionHistory({ versions, events, currentVersion }: { versions: BudgetVersion[]; events: BudgetEvent[]; currentVersion: number }) {
   const list = sortVersionsDesc(versions);
   if (list.length === 0) return <p className="muted">No versions yet.</p>;
+  // Keyed by the latest version: when a new one arrives the cards remount, so it opens and the older ones close.
   return (
-    <div className="hist-list">
+    <div className="hist-list" key={list[0]._id}>
       {list.map((v, i) => {
         const st = versionStatus(v.version, events);
         const sub = versionSubmittedAt(v.version, events);
@@ -173,14 +175,14 @@ function EventBody({ e }: { e: BudgetEvent }) {
       <div><dt>{e.action === "APPROVED" || e.action === "REJECTED" ? "Reviewed by" : "Submitted by"}</dt><dd>{e.username} ({e.role})</dd></div>
       <div><dt>Exact timestamp (IST)</dt><dd>{when(e.createdAt)}</dd></div>
       {total !== null && <div><dt>{e.action === "APPROVED" ? "Approved amount" : e.action === "REJECTED" ? "Rejected amount" : "Total budget"}</dt><dd>{formatInr(total)}</dd></div>}
-      {typeof d.reason === "string" && <div className="wide"><dt>Rejection reason</dt><dd>{d.reason}</dd></div>}
+      {typeof d.reason === "string" && <div className="wide"><dt>Rejection reason</dt><dd><ReadMore>{d.reason}</ReadMore></dd></div>}
       {fields.length > 0 && (
         <div className="wide kv-rej">
           <dt>Rejected fields and comments</dt>
           <dd>
             <ul className="tl-list">
               {fields.map((f) => (
-                <li key={f.field}><strong>{fieldLabel(f.field)}</strong>: {f.comment}</li>
+                <li key={f.field}><ReadMore><strong>{fieldLabel(f.field)}</strong>: {f.comment}</ReadMore></li>
               ))}
             </ul>
           </dd>
@@ -190,12 +192,12 @@ function EventBody({ e }: { e: BudgetEvent }) {
         <div className="wide">
           <dt>Reason for revision</dt>
           <dd>
-            {d.revisionReason}
+            <ReadMore>{d.revisionReason}</ReadMore>
             {typeof d.revisedBy === "string" && <> (edited by {d.revisedBy} on {when(String(d.revisedAt))})</>}
           </dd>
         </div>
       )}
-      {typeof d.comment === "string" && d.comment && <div className="wide"><dt>RBP comment</dt><dd>{d.comment}</dd></div>}
+      {typeof d.comment === "string" && d.comment && <div className="wide"><dt>RBP comment</dt><dd><ReadMore>{d.comment}</ReadMore></dd></div>}
       {changes.length > 0 && (
         <div className="wide">
           <dt>Changes since rejected V{String(d.rejectedVersion ?? "")} (previous → updated)</dt>

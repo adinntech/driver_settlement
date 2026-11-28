@@ -1,13 +1,15 @@
 import type { NextFunction, Request, Response } from "express";
 import { ROLES } from "../config/roles.js";
 import { config } from "../config/index.js";
+import { roadshowOn } from "../utils/features.js";
 import { login } from "../services/auth.service.js";
 import { sendResponse } from "../utils/sendResponse.js";
 
 export const getRoles = (_req: Request, res: Response) => {
   // env-managed logins prefill the username from .env (never the password)
   const rsoName = config.seedUsers.find((s) => s.role === "RSO")?.username?.trim() ?? "";
-  res.status(200).json(sendResponse(true, "Roles fetched successfully", { ...ROLES, RSO: { ...ROLES.RSO, defaultUsername: rsoName } }));
+  const roles = Object.fromEntries(Object.entries(ROLES).map(([key, r]) => [key, { ...r, description: roadshowOn() ? r.description : r.description.replace(/Roadshow (\/|and) /, "") }]));
+  res.status(200).json(sendResponse(true, "Roles fetched successfully", { ...roles, RSO: { ...roles.RSO, defaultUsername: rsoName } }));
 };
 
 /**

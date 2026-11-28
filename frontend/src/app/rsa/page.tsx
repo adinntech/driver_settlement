@@ -1,5 +1,6 @@
 "use client";
 
+import { roadshowOn } from "@/utils/features";
 import Link from "next/link";
 import { useState } from "react";
 import AppShell from "@/components/AppShell";
@@ -38,7 +39,7 @@ function History() {
       <div className="page-head">
         <div>
           <h1>Payment Entries</h1>
-          <p className="muted">Saved payment entries of approved Roadshow and Signage projects.</p>
+          <p className="muted">Saved payment entries of approved {roadshowOn() ? "Roadshow and Signage" : "Signage"} projects.</p>
         </div>
         <Link href="/rsa/new" className="btn btn-primary">+ Enter Payment</Link>
       </div>

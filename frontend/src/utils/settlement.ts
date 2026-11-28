@@ -12,7 +12,7 @@ export interface SettlementRow {
   trackingVehicle: string; trackupNumber: string; pifNumber: string | null; jsNumber: string | null; clientName: string | null; projectType: "ROADSHOW" | "SIGNAGE";
   vehicleNo: string | null; driverNumber: string | null; driverName: string | null; fromDate: string; toDate: string; amount: number;
   bank: { accountName: string | null; bankName: string | null; ifscCode: string | null; accountMasked: string | null } | null;
-  submittedBy: string; submittedAt: string; reviewedBy: string | null; reviewedRole: string | null; reviewedAt: string | null; rejectionReason: string | null;
+  previousData?: boolean; submittedBy: string; submittedAt: string; reviewedBy: string | null; reviewedRole: string | null; reviewedAt: string | null; rejectionReason: string | null;
   approver: "RSOM" | "RSO"; exportedAt: string | null; exportCount: number;
   completion: null | { referenceNumber: string; referenceDate?: string | null; paymentDate: string; paymentMode: string; bankName: string | null; transactionMasked: string | null; remarks: string | null; completedBy: string; completedAt: string };
 }
@@ -69,7 +69,7 @@ export interface SettlementOptions {
 // ---------------------------------------------------------------- labels
 export const STATUS_LABEL: Record<SettlementStatus, string> = { PENDING: "Pending Approval", APPROVED: "Approved", REJECTED: "Rejected", COMPLETED: "Paid" };
 export const CATEGORY_SHORT: Record<PaymentCategory, string> = { DAILY: "Daily", FINAL: "Final" };
-export const ACTION_LABEL: Record<string, string> = { SUBMITTED: "Submitted", RESUBMITTED: "Resubmitted", APPROVED: "Approved", REJECTED: "Rejected", MILEAGE_EDITED: "Mileage edited", EXPORTED: "Exported to accounts", COMPLETED: "Payment completed" };
+export const ACTION_LABEL: Record<string, string> = { CORRECTED: "Corrected", SUBMITTED: "Submitted", RESUBMITTED: "Resubmitted", APPROVED: "Approved", REJECTED: "Rejected", MILEAGE_EDITED: "Mileage edited", EXPORTED: "Exported to accounts", COMPLETED: "Payment completed" };
 
 export interface QueueFilters { projectType?: string; category: "" | PaymentCategory; status: string; q: string; from: string; to: string; sort: string; dir: "asc" | "desc" }
 export const emptyQueueFilters = (category: "" | PaymentCategory = "", status = ""): QueueFilters => ({ category, status, q: "", from: "", to: "", sort: "submittedAt", dir: "desc" });

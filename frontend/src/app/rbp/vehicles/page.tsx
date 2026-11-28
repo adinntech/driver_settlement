@@ -1,5 +1,6 @@
 "use client";
 
+import ReadMore from "@/components/ui/ReadMore";
 import VerticalSelect from "@/components/ui/VerticalSelect";
 import { verticalLabel } from "@/utils/vertical";
 import TableWrap from "@/components/ui/TableWrap";
@@ -182,7 +183,7 @@ function Vehicles() {
                       <td>{v.availability?.status === "IN_USE" ? v.availability.project?.trackupNumber || "—" : "—"}</td>
                       <td>{v.availability?.status === "IN_USE" ? v.availability.project?.pifNumber || "—" : "—"}</td>
                       <td>{v.availability?.status === "IN_USE" ? v.availability.project?.clientName || "—" : "—"}</td>
-                      <td className="cell-remarks" title={inUseRemarks(v)}>{inUseRemarks(v) || "—"}</td>
+                      <td className="cell-remarks"><ReadMore>{inUseRemarks(v) || "—"}</ReadMore></td>
                       <td>{expectedReleaseText(v)}</td>
                       <td><strong>{nextAvailableText(v)}</strong></td>
                       <td title={issueReasonText(v)}>{issueReasonText(v)}</td>

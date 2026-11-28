@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+process.env.ROADSHOW = "on";
 process.env.MONGO_URI = "mongodb://127.0.0.1:27017/driver_settlement_test_clearance";
 process.env.JWT_SECRET = "test-secret";
 process.env.RSOP_USERNAME = "RSOP";
@@ -259,6 +260,7 @@ test("review details: project, vehicle, driver (bank masked), live driver advanc
   assert.ok(x.vehicle.allottedAt && x.vehicle.expectedReleaseAt && x.vehicle.nextAvailableAt);
   assert.equal(x.driver.driverNumber, drvA.driverNumber);
   assert.equal(x.driver.bank.accountNumberMasked.endsWith("9012"), true);
+  assert.equal(x.driver.bank.accountNumber, undefined);
   assert.ok(!JSON.stringify(x).includes("123456789012")); // the full account number never leaves the server
   assert.deepEqual([x.financial.status, x.financial.outstanding, x.canApprove], ["NO_ADVANCE", 0, true]);
   const b = (await rsa(`/${String((await clr(B))._id)}`)).body.data;

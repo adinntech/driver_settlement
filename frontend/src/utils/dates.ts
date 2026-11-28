@@ -47,3 +47,8 @@ export function startDateError(v: string, label: string, today = todayIst()): st
   if (v < earliestStartYmd(today)) return `${label} cannot be more than ${START_DATE_PAST_DAYS} days in the past`;
   return "";
 }
+
+export const isSunday = (v: string): boolean => isYmd(v) && new Date(`${v}T00:00:00Z`).getUTCDay() === 0;
+/** Sunday Halt (same rule as the server): the Reporting Date and the End Date cannot be a Sunday. "" when the date is allowed. */
+export const sundayHaltError = (v: string, label: string, sundayHalt: boolean): string =>
+  sundayHalt && isSunday(v) ? `${label} cannot be a Sunday when Sunday Halt is Yes` : "";

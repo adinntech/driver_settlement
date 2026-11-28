@@ -6,6 +6,7 @@ import {
 } from "../services/settlement.service.js";
 import { accountsExport, approvedPaymentRows, driverListRows, driverSalaryPdf, driverSalaryRows, reportWorkbook, settlementDetailWorkbook, vehicleMisRows } from "../services/settlementReports.service.js";
 import { paymentDetailsPdf, settlementSuspense, settlementSuspensePdf } from "../services/paymentDetailsPdf.service.js";
+import { correctEntry, createHistorical, deleteDraft, listHistorical, submitDraft, updateDraft } from "../services/historicalSuspense.service.js";
 import { listOnRoadVehicles } from "../services/onRoad.service.js";
 import { sendResponse } from "../utils/sendResponse.js";
 import { AppError } from "../utils/AppError.js";
@@ -43,6 +44,19 @@ router.get("/on-road", ENTRY, wrap(async (req, res) => {
   ok(res, "On road vehicles fetched", await listOnRoadVehicles({ q: q(req.query.q), projectType: q(req.query.projectType), page: n(req.query.page), limit: n(req.query.limit) }));
 }));
 router.get("/projects/:tvId", ENTRY, wrap(async (req, res) => void ok(res, "Project fetched", await settlementContext(String(req.params.tvId)))));
+// Previous Data (historical suspense): RBP and RSA read; only RSA writes.
+const RSA_ONLY = requireRole("RSA");
+const tv = (req: Request) => String(req.params.tvId);
+const entry = (req: Request) => String(req.params.entryId);
+router.get("/projects/:tvId/previous-data", ENTRY, wrap(async (req, res) => void ok(res, "Previous data fetched", await listHistorical(tv(req), req.user!.role))));
+router.post("/projects/:tvId/previous-data", RSA_ONLY, wrap(async (req, res) => {
+  const r = await createHistorical(tv(req), req.body ?? {}, req.user!.username, req.user!.role);
+  ok(res, r.replay ? "This entry was already saved" : "Previous data saved", r, r.replay ? 200 : 201);
+}));
+router.put("/projects/:tvId/previous-data/:entryId", RSA_ONLY, wrap(async (req, res) => void ok(res, "Draft updated", await updateDraft(tv(req), entry(req), req.body ?? {}, req.user!.username, req.user!.role))));
+router.delete("/projects/:tvId/previous-data/:entryId", RSA_ONLY, wrap(async (req, res) => void ok(res, "Draft deleted", await deleteDraft(tv(req), entry(req), req.user!.role))));
+router.post("/projects/:tvId/previous-data/:entryId/submit", RSA_ONLY, wrap(async (req, res) => void ok(res, "Previous data submitted", await submitDraft(tv(req), entry(req), req.user!.username, req.user!.role))));
+router.post("/projects/:tvId/previous-data/:entryId/corrections", RSA_ONLY, wrap(async (req, res) => void ok(res, "Correction saved", await correctEntry(tv(req), entry(req), req.body ?? {}, req.user!.username, req.user!.role), 201)));
 router.get("/projects/:tvId/budget", ENTRY, wrap(async (req, res) => void ok(res, "Budget fetched", await viewBudget(String(req.params.tvId)))));
 router.get("/projects/:tvId/driver", ENTRY, wrap(async (req, res) => void ok(res, "Driver fetched", await viewDriver(String(req.params.tvId)))));
 router.get("/projects/:tvId/payments-pdf", ENTRY, wrap(async (req, res) => {

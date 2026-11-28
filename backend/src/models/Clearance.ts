@@ -1,4 +1,5 @@
 import mongoose, { Schema } from "mongoose";
+import { hideDeleted } from "./DeletedProject.js";
 
 export const CLEARANCE_STATUSES = ["YET_TO_APPROVE", "APPROVED", "REJECTED"] as const;
 export type ClearanceStatus = (typeof CLEARANCE_STATUSES)[number];
@@ -80,5 +81,6 @@ for (const op of ["updateOne", "findOneAndUpdate", "updateMany", "deleteOne", "d
     throw new Error("Clearance history is immutable");
   });
 
+hideDeleted(clearanceSchema, "project");
 export const Clearance = mongoose.models.Clearance ?? mongoose.model("Clearance", clearanceSchema);
 export const ClearanceEvent = mongoose.models.ClearanceEvent ?? mongoose.model("ClearanceEvent", eventSchema);

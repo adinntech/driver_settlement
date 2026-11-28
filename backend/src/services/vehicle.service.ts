@@ -60,7 +60,7 @@ const dupMessage = (e: unknown, vehicleNo: string | null) =>
 
 /** Resolves the project link (read-only on RSOP data), then validates the availability block. */
 async function checkAvailability(input: unknown, draft: boolean, prev?: PrevAvailability | null) {
-  const linked = await linkProject(input);
+  const linked = await linkProject(input, prev);
   const r = validateAvailability(linked.input, draft, new Date(), prev);
   if (linked.error) r.errors.unshift(linked.error);
   return r;
