@@ -118,7 +118,7 @@ export function RsaHistoryTable({ items, onView }: { items: RsaPaymentRow[]; onV
 export function HistoryEmpty({ filtered }: { filtered: boolean }) {
   return filtered
     ? <EmptyState title="No payments match your filters" hint="Try a different search or clear the filters." />
-    : <EmptyState title="No payment entries yet" hint="Click + Enter Payment to add the first one." />;
+    : <EmptyState title="No payment entries yet" hint="Saved payment entries will appear here." />;
 }
 
 export function RsaPager({

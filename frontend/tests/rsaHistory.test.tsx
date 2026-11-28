@@ -21,9 +21,9 @@ const pay = (i: number, over: Partial<RsaPaymentRow> = {}): RsaPaymentRow => ({
 const summary: RsaSummary = { totalEntries: 12, totalAmount: 154321.75, roadshowCount: 5, roadshowAmount: 54321.25, signageCount: 7, signageAmount: 100000.5, recentPaymentAt: "2026-11-24T06:30:00.000Z", createdByOptions: ["RSA"] };
 
 // ================================================================== landing page flow
-test("landing page is the payment history; the entry form is not part of it and opens only through + Enter Payment", () => {
+test("landing page is the payment history only: no entry form and no + Enter Payment button", () => {
   const page = src("app/rsa/page.tsx");
-  assert.ok(page.includes('href="/rsa/new"') && page.includes("+ Enter Payment")); // top-right button
+  assert.ok(!page.includes("/rsa/new") && !page.includes("Enter Payment"));
   assert.ok(!page.includes("PaymentFormPanel") && !page.includes("RsaPaymentScreen") && !page.includes("payment-form")); // form is not on the landing page
   assert.ok(page.includes("RsaHistoryTable") && page.includes("RsaSummaryCards") && page.includes("RsaHistoryFilters") && page.includes("RsaPager"));
   assert.ok(page.includes("/rsa/payments?") && page.includes("/rsa/payments/summary")); // server-side list + totals
@@ -107,7 +107,7 @@ test("history table: the twelve requested columns with correct values; order as 
 
 test("empty states: no payments at all vs. no match for the filters; nothing rendered as a table", () => {
   const none = renderToStaticMarkup(<HistoryEmpty filtered={false} />);
-  assert.ok(none.includes("No payment entries yet") && none.includes("+ Enter Payment") && !none.includes("<table"));
+  assert.ok(none.includes("No payment entries yet") && !none.includes("Enter Payment") && !none.includes("<table"));
   const filtered = renderToStaticMarkup(<HistoryEmpty filtered />);
   assert.ok(filtered.includes("No payments match your filters") && filtered.includes("clear the filters"));
 });
