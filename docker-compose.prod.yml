@@ -2,7 +2,7 @@
 # Frontend 127.0.0.1:3016, Backend 127.0.0.1:3017 (verified free on 2026-11-27).
 name: driver-settlement
 # Feature flag, one value for both services. The frontend takes it at build time, the backend at start.
-x-roadshow: &roadshow "on"
+x-roadshow: &roadshow "off"
 services:
   backend:
     build:
