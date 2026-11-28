@@ -1,6 +1,8 @@
 # Driver Settlement production. Only these two services are managed from here.
 # Frontend 127.0.0.1:3016, Backend 127.0.0.1:3017 (verified free on 2026-11-27).
 name: driver-settlement
+# Feature flag, one value for both services. The frontend takes it at build time, the backend at start.
+x-roadshow: &roadshow "on"
 services:
   backend:
     build:
@@ -14,6 +16,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: "5000"
+      ROADSHOW: *roadshow
     ports:
       - "127.0.0.1:3017:5000"
     volumes:
@@ -34,6 +37,7 @@ services:
         NEXT_PUBLIC_ENVIRONMENT: live
         NEXT_PUBLIC_BASE_PATH: /driver-settlement
         NEXT_PUBLIC_API_BASE_URL: https://adinntech.in/driver-settlement/api
+        NEXT_PUBLIC_ROADSHOW: *roadshow
     image: driver-settlement-frontend:latest
     container_name: driver-settlement-frontend
     environment:
